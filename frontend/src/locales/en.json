@@ -1,0 +1,67 @@
+{
+  "common": {
+    "appName": "Cinema Project",
+    "search": "Search",
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "actions": "Actions",
+    "loading": "Loading...",
+    "noData": "No data",
+    "language": "Language",
+    "theme": "Theme",
+    "logout": "Logout",
+    "profile": "Profile",
+    "deleteConfirm": "Are you sure you want to delete this item?",
+    "createSuccess": "Created successfully",
+    "updateSuccess": "Updated successfully",
+    "deleteSuccess": "Deleted successfully",
+    "somethingWrong": "Something went wrong"
+  },
+  "menu": {
+    "dashboard": "Dashboard",
+    "movies": "Movies",
+    "showtimes": "Showtimes",
+    "bookings": "Bookings"
+  },
+  "auth": {
+    "login": "Sign in",
+    "loginTitle": "Sign in to your account",
+    "loginSubtitle": "Cinema management system",
+    "email": "Email",
+    "password": "Password",
+    "emailRequired": "Please enter your email",
+    "emailInvalid": "Invalid email address",
+    "passwordRequired": "Please enter your password",
+    "passwordMin": "Password must be at least 6 characters",
+    "loginSuccess": "Signed in successfully",
+    "loginFailed": "Sign in failed"
+  },
+  "movie": {
+    "title": "Movie management",
+    "name": "Title",
+    "genre": "Genre",
+    "duration": "Duration",
+    "director": "Director",
+    "description": "Description",
+    "posterUrl": "Poster URL",
+    "releaseDate": "Release date",
+    "status": "Status",
+    "createTitle": "New movie",
+    "editTitle": "Edit movie",
+    "searchPlaceholder": "Search by title, director...",
+    "statusDraft": "Draft",
+    "statusShowing": "Showing",
+    "statusEnded": "Ended"
+  },
+  "error": {
+    "notFoundTitle": "404",
+    "notFoundSubtitle": "The page you are looking for does not exist.",
+    "backHome": "Back home",
+    "boundaryTitle": "Application crashed",
+    "reload": "Reload page"
+  }
+}

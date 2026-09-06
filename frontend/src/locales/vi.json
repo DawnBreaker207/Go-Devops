@@ -1,0 +1,67 @@
+{
+  "common": {
+    "appName": "Cinema Project",
+    "search": "Tìm kiếm",
+    "create": "Thêm mới",
+    "edit": "Sửa",
+    "delete": "Xoá",
+    "save": "Lưu",
+    "cancel": "Huỷ",
+    "confirm": "Xác nhận",
+    "actions": "Thao tác",
+    "loading": "Đang tải...",
+    "noData": "Không có dữ liệu",
+    "language": "Ngôn ngữ",
+    "theme": "Giao diện",
+    "logout": "Đăng xuất",
+    "profile": "Thông tin cá nhân",
+    "deleteConfirm": "Bạn có chắc chắn muốn xoá mục này?",
+    "createSuccess": "Tạo mới thành công",
+    "updateSuccess": "Cập nhật thành công",
+    "deleteSuccess": "Xoá thành công",
+    "somethingWrong": "Đã có lỗi xảy ra"
+  },
+  "menu": {
+    "dashboard": "Tổng quan",
+    "movies": "Phim",
+    "showtimes": "Suất chiếu",
+    "bookings": "Đặt vé"
+  },
+  "auth": {
+    "login": "Đăng nhập",
+    "loginTitle": "Đăng nhập hệ thống",
+    "loginSubtitle": "Quản trị rạp chiếu phim",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "emailRequired": "Vui lòng nhập email",
+    "emailInvalid": "Email không hợp lệ",
+    "passwordRequired": "Vui lòng nhập mật khẩu",
+    "passwordMin": "Mật khẩu tối thiểu 6 ký tự",
+    "loginSuccess": "Đăng nhập thành công",
+    "loginFailed": "Đăng nhập thất bại"
+  },
+  "movie": {
+    "title": "Quản lý phim",
+    "name": "Tên phim",
+    "genre": "Thể loại",
+    "duration": "Thời lượng",
+    "director": "Đạo diễn",
+    "description": "Mô tả",
+    "posterUrl": "Ảnh poster",
+    "releaseDate": "Ngày khởi chiếu",
+    "status": "Trạng thái",
+    "createTitle": "Thêm phim",
+    "editTitle": "Cập nhật phim",
+    "searchPlaceholder": "Tìm theo tên phim, đạo diễn...",
+    "statusDraft": "Nháp",
+    "statusShowing": "Đang chiếu",
+    "statusEnded": "Đã kết thúc"
+  },
+  "error": {
+    "notFoundTitle": "404",
+    "notFoundSubtitle": "Trang bạn tìm không tồn tại.",
+    "backHome": "Về trang chủ",
+    "boundaryTitle": "Ứng dụng gặp sự cố",
+    "reload": "Tải lại trang"
+  }
+}
