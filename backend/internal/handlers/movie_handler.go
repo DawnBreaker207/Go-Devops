@@ -1,0 +1,148 @@
+package handlers
+
+import (
+	"github.com/gin-gonic/gin"
+
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
+)
+
+// MovieHandler nhan request quan ly phim.
+type MovieHandler struct {
+	movieService service.MovieService
+}
+
+// NewMovieHandler tao MovieHandler.
+func NewMovieHandler(movieService service.MovieService) *MovieHandler {
+	return &MovieHandler{movieService: movieService}
+}
+
+// List godoc
+//
+//	@Summary		Danh sach phim (co phan trang)
+//	@Tags			movies
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			page		query		int		false	"Trang hien tai"	default(1)
+//	@Param			page_size	query		int		false	"So ban ghi moi trang"	default(10)
+//	@Param			search		query		string	false	"Tim theo ten phim, dao dien, the loai"
+//	@Success		200			{object}	response.Body{data=response.Paged{items=[]dto.MovieResponse}}
+//	@Failure		400			{object}	response.Body
+//	@Failure		401			{object}	response.Body
+//	@Router			/movies [get]
+func (h *MovieHandler) List(c *gin.Context) {
+	var query dto.PageQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Error(c, err)
+		return
+	}
+	query.Normalize()
+
+	movies, total, err := h.movieService.List(c.Request.Context(), query)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.List(c, movies, query.Page, query.PageSize, total)
+}
+
+// Detail godoc
+//
+//	@Summary		Chi tiet mot phim
+//	@Tags			movies
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Movie ID"
+//	@Success		200	{object}	response.Body{data=dto.MovieResponse}
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Router			/movies/{id} [get]
+func (h *MovieHandler) Detail(c *gin.Context) {
+	movie, err := h.movieService.GetByID(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.OK(c, movie)
+}
+
+// Create godoc
+//
+//	@Summary		Them phim moi
+//	@Tags			movies
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			payload	body		dto.MovieRequest	true	"Thong tin phim"
+//	@Success		201		{object}	response.Body{data=dto.MovieResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Router			/movies [post]
+func (h *MovieHandler) Create(c *gin.Context) {
+	var req dto.MovieRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	movie, err := h.movieService.Create(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Created(c, movie)
+}
+
+// Update godoc
+//
+//	@Summary		Cap nhat phim
+//	@Tags			movies
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string				true	"Movie ID"
+//	@Param			payload	body		dto.MovieRequest	true	"Thong tin phim"
+//	@Success		200		{object}	response.Body{data=dto.MovieResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Router			/movies/{id} [put]
+func (h *MovieHandler) Update(c *gin.Context) {
+	var req dto.MovieRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	movie, err := h.movieService.Update(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.OK(c, movie)
+}
+
+// Delete godoc
+//
+//	@Summary		Xoa phim
+//	@Tags			movies
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Movie ID"
+//	@Success		200	{object}	response.Body
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Router			/movies/{id} [delete]
+func (h *MovieHandler) Delete(c *gin.Context) {
+	if err := h.movieService.Delete(c.Request.Context(), c.Param("id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.NoContentOK(c, "deleted")
+}

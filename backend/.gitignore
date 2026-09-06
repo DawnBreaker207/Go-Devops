@@ -1,0 +1,32 @@
+# binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+backend-cp
+
+# test / coverage
+*.test
+*.out
+coverage.*
+
+# env
+.env
+.env.local
+!.env.example
+
+# vendor
+vendor/
+
+# logs
+*.log
+logs/
+
+# editor / os
+.idea/
+.vscode/
+.DS_Store
+
+# tmp
+tmp/

@@ -1,0 +1,43 @@
+package database
+
+import (
+	"context"
+	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
+)
+
+// SeedAdmin tao tai khoan quan tri dau tien neu bang users con rong.
+// Chi chay o moi truong khac production de co the dang nhap ngay sau khi clone.
+func SeedAdmin(ctx context.Context, db *gorm.DB, email, password string) error {
+	var count int64
+	if err := db.WithContext(ctx).Model(&models.User{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("count users: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash seed password: %w", err)
+	}
+
+	admin := &models.User{
+		Email:    email,
+		Password: string(hashed),
+		FullName: "Administrator",
+		Role:     models.RoleAdmin,
+	}
+	if err := db.WithContext(ctx).Create(admin).Error; err != nil {
+		return fmt.Errorf("create seed admin: %w", err)
+	}
+
+	logger.Warn("seeded default admin account, doi mat khau ngay sau lan dang nhap dau tien",
+		logger.String("email", email))
+	return nil
+}
