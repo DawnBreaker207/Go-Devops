@@ -1,0 +1,555 @@
+basePath: /api/v1
+definitions:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest:
+    properties:
+      email:
+        example: admin@cinema.local
+        type: string
+      password:
+        example: secret123
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        example: 900
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+      user:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      director:
+        example: Christopher Nolan
+        maxLength: 255
+        type: string
+      duration:
+        example: 148
+        maximum: 600
+        minimum: 1
+        type: integer
+      genre:
+        example: Sci-Fi
+        maxLength: 100
+        type: string
+      poster_url:
+        maxLength: 512
+        type: string
+      release_date:
+        example: "2010-07-16"
+        type: string
+      status:
+        enum:
+        - draft
+        - showing
+        - ended
+        example: showing
+        type: string
+      title:
+        example: Inception
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - director
+    - duration
+    - genre
+    - release_date
+    - status
+    - title
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      director:
+        type: string
+      duration:
+        type: integer
+      genre:
+        type: string
+      id:
+        type: string
+      poster_url:
+        type: string
+      release_date:
+        example: "2010-07-16"
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest:
+    properties:
+      email:
+        example: admin@cinema.local
+        maxLength: 255
+        type: string
+      full_name:
+        example: Nguyen Van A
+        maxLength: 255
+        minLength: 2
+        type: string
+      password:
+        example: secret123
+        maxLength: 72
+        minLength: 6
+        type: string
+    required:
+    - email
+    - full_name
+    - password
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        example: 900
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data: {}
+      details:
+        additionalProperties:
+          type: string
+        type: object
+      message:
+        example: success
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta:
+    properties:
+      page:
+        example: 1
+        type: integer
+      page_size:
+        example: 10
+        type: integer
+      total:
+        example: 42
+        type: integer
+      total_pages:
+        example: 5
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged:
+    properties:
+      items: {}
+      meta:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta'
+    type: object
+  internal_handlers.HealthStatus:
+    properties:
+      database:
+        example: up
+        type: string
+      service:
+        example: BackEnd-CP
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+info:
+  contact: {}
+  description: API quan ly rap chieu phim cua Cinema Project.
+  title: BackEnd-CP API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email va mat khau
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Dang nhap
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Lam moi access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Thong tin dang ky
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Dang ky tai khoan
+      tags:
+      - auth
+  /health:
+    get:
+      description: Kiem tra service va ket noi database
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_handlers.HealthStatus'
+              type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Health check
+      tags:
+      - health
+  /movies:
+    get:
+      parameters:
+      - default: 1
+        description: Trang hien tai
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: So ban ghi moi trang
+        in: query
+        name: page_size
+        type: integer
+      - description: Tim theo ten phim, dao dien, the loai
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Danh sach phim (co phan trang)
+      tags:
+      - movies
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Thong tin phim
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Them phim moi
+      tags:
+      - movies
+  /movies/{id}:
+    delete:
+      parameters:
+      - description: Movie ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Xoa phim
+      tags:
+      - movies
+    get:
+      parameters:
+      - description: Movie ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Chi tiet mot phim
+      tags:
+      - movies
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Movie ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Thong tin phim
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Cap nhat phim
+      tags:
+      - movies
+  /users/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Thong tin tai khoan dang dang nhap
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    description: 'Nhap theo dinh dang: Bearer <access_token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

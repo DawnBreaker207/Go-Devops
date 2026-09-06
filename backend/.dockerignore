@@ -1,0 +1,6 @@
+.git
+bin
+*.log
+.env
+docs/swagger.json
+tmp
