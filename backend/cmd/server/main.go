@@ -129,6 +129,8 @@ func run() error {
 		HoldTTL:       time.Duration(cfg.Booking.HoldTTLMinutes) * time.Minute,
 		MaxSeats:      cfg.Booking.MaxSeatsPerBooking,
 		Hub:           hub,
+
+		LateCaptureWindow: cfg.Payment.LateCaptureWindow,
 	}
 	if queueClient != nil {
 		bookingOpts.Publisher = queueClient

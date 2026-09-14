@@ -67,6 +67,8 @@ payment:
   return_redirect_url: ""
   # Used when POST /orders/:id/pay names no provider; must be enabled.
   default_provider: mock
+  # Given-up attempts are rechecked this long for money collected late.
+  late_capture_window: 24h
   providers:
     mock:
       enabled: true

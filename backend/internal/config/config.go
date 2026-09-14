@@ -123,6 +123,9 @@ type PaymentConfig struct {
 	// DefaultProvider is used when a pay request names none; it must be enabled.
 	DefaultProvider string                 `mapstructure:"default_provider"`
 	Providers       PaymentProvidersConfig `mapstructure:"providers"`
+	// LateCaptureWindow is how long given-up attempts are rechecked with their
+	// provider for money collected late (then confirmed or refunded).
+	LateCaptureWindow time.Duration `mapstructure:"late_capture_window"`
 }
 
 // PaymentProvidersConfig has one block per supported provider. A real gateway
@@ -270,6 +273,9 @@ func (c *Config) validate() error {
 	default:
 		return fmt.Errorf("storage.driver must be local or cloudinary, got %q", c.Storage.Driver)
 	}
+	if c.Payment.LateCaptureWindow < time.Hour {
+		return fmt.Errorf("payment.late_capture_window must be at least 1h, got %s", c.Payment.LateCaptureWindow)
+	}
 	if c.Payment.Providers.Mock.Enabled && c.Payment.Providers.Mock.Secret == "" {
 		return errors.New("payment.providers.mock.secret must not be empty when the mock provider is enabled")
 	}
@@ -332,6 +338,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("payment.public_base_url", "http://localhost:8080")
 	v.SetDefault("payment.return_redirect_url", "")
 	v.SetDefault("payment.default_provider", "mock")
+	v.SetDefault("payment.late_capture_window", "24h")
 	v.SetDefault("payment.providers.mock.enabled", true)
 	v.SetDefault("payment.providers.mock.display_name", "Cổng thử nghiệm (mock)")
 	v.SetDefault("payment.providers.mock.secret", "dev-mock-secret-change-in-prod")

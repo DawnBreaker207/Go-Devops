@@ -49,12 +49,13 @@ type SweepResult struct {
 	SettledRefunds     int
 	ReconciledPayments int
 	AbandonedPayments  int
+	LateCaptures       int
 }
 
 // Total is the number of rows the pass touched.
 func (r SweepResult) Total() int {
 	return r.ReleasedSeats + r.ExpiredBookings + r.FinalizedPaid + r.SettledRefunds +
-		r.ReconciledPayments + r.AbandonedPayments
+		r.ReconciledPayments + r.AbandonedPayments + r.LateCaptures
 }
 
 // BookingService runs the money core: hold -> pay -> confirm (or refund).
@@ -92,31 +93,39 @@ type BookingOptions struct {
 	Publisher JobPublisher
 	// Hub broadcasts seat changes to realtime seat maps; nil disables it.
 	Hub *sse.Hub
+	// LateCaptureWindow is how long given-up payment attempts are rechecked
+	// for money the provider collected late; 0 means 24 hours.
+	LateCaptureWindow time.Duration
 }
 
 type bookingService struct {
-	db            *gorm.DB
-	repo          repository.BookingRepository
-	payments      repository.PaymentRepository
-	providers     *payment.Registry
-	publicBaseURL string
-	holdTTL       time.Duration
-	maxSeats      int
-	publisher     JobPublisher
-	hub           *sse.Hub
+	db                *gorm.DB
+	repo              repository.BookingRepository
+	payments          repository.PaymentRepository
+	providers         *payment.Registry
+	publicBaseURL     string
+	holdTTL           time.Duration
+	maxSeats          int
+	publisher         JobPublisher
+	hub               *sse.Hub
+	lateCaptureWindow time.Duration
 }
 
 func NewBookingService(opts BookingOptions) BookingService {
+	if opts.LateCaptureWindow <= 0 {
+		opts.LateCaptureWindow = defaultLateCaptureWindow
+	}
 	return &bookingService{
-		db:            opts.DB,
-		repo:          opts.Repo,
-		payments:      opts.Payments,
-		providers:     opts.Providers,
-		publicBaseURL: strings.TrimRight(opts.PublicBaseURL, "/"),
-		holdTTL:       opts.HoldTTL,
-		maxSeats:      opts.MaxSeats,
-		publisher:     opts.Publisher,
-		hub:           opts.Hub,
+		db:                opts.DB,
+		repo:              opts.Repo,
+		payments:          opts.Payments,
+		providers:         opts.Providers,
+		publicBaseURL:     strings.TrimRight(opts.PublicBaseURL, "/"),
+		holdTTL:           opts.HoldTTL,
+		maxSeats:          opts.MaxSeats,
+		publisher:         opts.Publisher,
+		hub:               opts.Hub,
+		lateCaptureWindow: opts.LateCaptureWindow,
 	}
 }
 

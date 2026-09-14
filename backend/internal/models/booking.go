@@ -39,12 +39,15 @@ type Booking struct {
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	IdempotencyKey *string    `gorm:"type:varchar(128)" json:"idempotency_key,omitempty"`
 	// PaymentID is the attempt whose collected money this booking carries.
-	PaymentID   *string        `gorm:"type:uuid" json:"payment_id,omitempty"`
-	PaidAt      *time.Time     `json:"paid_at,omitempty"`
-	EmailSentAt *time.Time     `json:"email_sent_at,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	PaymentID *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
+	PaidAt    *time.Time `json:"paid_at,omitempty"`
+	// A paid booking the sweep could not settle waits until NextFinalizeAt.
+	FinalizeAttempts int            `gorm:"not null;default:0" json:"-"`
+	NextFinalizeAt   *time.Time     `json:"-"`
+	EmailSentAt      *time.Time     `json:"email_sent_at,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Booking) TableName() string { return "bookings" }

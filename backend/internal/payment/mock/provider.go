@@ -142,8 +142,8 @@ func (p *Provider) QueryStatus(_ context.Context, txn payment.Transaction) (*pay
 	return n, nil
 }
 
-func (p *Provider) Refund(_ context.Context, txn payment.Transaction, req payment.RefundRequest) error {
-	return p.gw.refund(txn.TxnRef, req.Amount)
+func (p *Provider) Refund(ctx context.Context, txn payment.Transaction, req payment.RefundRequest) error {
+	return p.gw.refund(ctx, txn.TxnRef, req.Amount)
 }
 
 func (p *Provider) SimulatorPath() string          { return p.gw.basePath }

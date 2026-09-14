@@ -5,6 +5,7 @@ package audit
 
 import (
 	"context"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -69,18 +70,20 @@ func In(ctx context.Context, db *gorm.DB, r Record) error {
 	if outcome == "" {
 		outcome = OutcomeSuccess
 	}
+	// Values are cut to their column sizes: an over-long header or message must
+	// never fail the insert and roll the business change back with it (E-A2).
 	entry := &models.AuditLog{
 		ActorID:      nullableUUID(r.ActorID),
-		ActorRole:    r.ActorRole,
-		Action:       r.Action,
-		ResourceType: r.ResourceType,
-		ResourceID:   r.ResourceID,
+		ActorRole:    truncate(r.ActorRole, 32),
+		Action:       truncate(r.Action, 64),
+		ResourceType: truncate(r.ResourceType, 64),
+		ResourceID:   truncate(r.ResourceID, 128),
 		BeforeJSON:   r.Before,
 		AfterJSON:    r.After,
-		IP:           r.IP,
-		UserAgent:    r.UserAgent,
+		IP:           truncate(r.IP, 64),
+		UserAgent:    truncate(r.UserAgent, 512),
 		Outcome:      outcome,
-		ErrorMessage: r.ErrorMessage,
+		ErrorMessage: truncate(r.ErrorMessage, 2000),
 	}
 	return db.WithContext(ctx).Create(entry).Error
 }
@@ -94,6 +97,15 @@ func FromGin(c *gin.Context, r Record) Record {
 		r.UserAgent = c.GetHeader("User-Agent")
 	}
 	return r
+}
+
+// truncate keeps at most n characters (Postgres VARCHAR counts characters, not
+// bytes), never splitting a multi-byte character.
+func truncate(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n])
 }
 
 func nullableUUID(id string) *string {

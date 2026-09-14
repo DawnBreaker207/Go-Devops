@@ -15,6 +15,12 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
+// dialTimeout bounds opening a broker connection, which runs under the
+// client lock.
+const dialTimeout = 5 * time.Second
+
+var errClosed = errors.New("queue client is closed")
+
 // Client manages a connection to one RabbitMQ broker.
 type Client struct {
 	url    string
@@ -25,49 +31,74 @@ type Client struct {
 
 // Dial opens the initial connection to the broker.
 func Dial(url string) (*Client, error) {
-	conn, err := amqp.Dial(url)
+	conn, err := dial(url)
 	if err != nil {
 		return nil, fmt.Errorf("dial rabbitmq: %w", err)
 	}
 	return &Client{url: url, conn: conn}, nil
 }
 
+func dial(url string) (*amqp.Connection, error) {
+	return amqp.DialConfig(url, amqp.Config{Dial: amqp.DefaultDial(dialTimeout)})
+}
+
 // Publish sends one persistent message to a durable queue, creating the queue
 // if needed, and waits until the broker confirms it stored the message. When
-// the connection dropped (broker restart) it dials again once (T26).
+// the connection dropped (broker restart) it dials again once (T26). Only
+// getting the connection is serialized: publishers never wait for each other's
+// broker confirms, so a broker that does not confirm only stalls its callers
+// up to their context deadline.
 func (c *Client) Publish(ctx context.Context, queueName string, body []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.closed {
-		return errors.New("queue client is closed")
-	}
-
 	var err error
 	for attempt := 0; attempt < 2; attempt++ {
-		if err = c.publishOnce(ctx, queueName, body); err == nil {
+		conn, cerr := c.connection()
+		if errors.Is(cerr, errClosed) {
+			return cerr
+		}
+		if cerr != nil {
+			err = cerr
+			continue
+		}
+		if err = publishOn(ctx, conn, queueName, body); err == nil {
 			return nil
 		}
 		if ctx.Err() != nil {
 			return err
 		}
-		if c.conn != nil {
-			_ = c.conn.Close()
-			c.conn = nil
-		}
+		c.drop(conn)
 	}
 	return err
 }
 
-func (c *Client) publishOnce(ctx context.Context, queueName string, body []byte) error {
+// connection returns the live connection, dialing a new one when it dropped.
+func (c *Client) connection() (*amqp.Connection, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil, errClosed
+	}
 	if c.conn == nil || c.conn.IsClosed() {
-		conn, err := amqp.Dial(c.url)
+		conn, err := dial(c.url)
 		if err != nil {
-			return fmt.Errorf("dial rabbitmq: %w", err)
+			return nil, fmt.Errorf("dial rabbitmq: %w", err)
 		}
 		c.conn = conn
 	}
+	return c.conn, nil
+}
 
-	ch, err := c.conn.Channel()
+// drop closes a connection that failed, unless another publisher replaced it.
+func (c *Client) drop(conn *amqp.Connection) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn == conn {
+		_ = conn.Close()
+		c.conn = nil
+	}
+}
+
+func publishOn(ctx context.Context, conn *amqp.Connection, queueName string, body []byte) error {
+	ch, err := conn.Channel()
 	if err != nil {
 		return fmt.Errorf("open channel: %w", err)
 	}
@@ -118,7 +149,7 @@ func (c *Client) Consume(ctx context.Context, queueName string, handler func(con
 	reconnect := func() error {
 		disconnect()
 		var err error
-		conn, err = amqp.Dial(c.url)
+		conn, err = dial(c.url)
 		if err != nil {
 			return err
 		}

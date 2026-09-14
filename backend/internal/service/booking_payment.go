@@ -19,9 +19,28 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// abandonAfter is how long past the booking hold an unpaid attempt is still
-// queried before it is given up as abandoned.
-const abandonAfter = 15 * time.Minute
+const (
+	// abandonAfter is how long past the booking hold an unpaid attempt is
+	// still queried before it is given up as abandoned.
+	abandonAfter = 15 * time.Minute
+	// orphanCheckoutAfter is how long a stored attempt may wait for its
+	// checkout URL before a new pay request takes it over.
+	orphanCheckoutAfter = 30 * time.Second
+	// providerCallTimeout bounds opening a checkout with a provider.
+	providerCallTimeout = 20 * time.Second
+	// refundLease reserves a refund while its provider is called; it outlives
+	// refundTimeout so two workers never call the provider at once.
+	refundLease   = 2 * time.Minute
+	refundTimeout = 30 * time.Second
+	// stuckAlertAttempts is the failed try count that raises an alert for a
+	// refund or a paid booking that keeps failing (retries go on).
+	stuckAlertAttempts = 8
+	// publishTimeout bounds enqueueing a ticket email after confirm.
+	publishTimeout = 3 * time.Second
+	// defaultLateCaptureWindow is how long given-up attempts are rechecked
+	// for money collected late.
+	defaultLateCaptureWindow = 24 * time.Hour
+)
 
 // ---------------------------------------------------------------------------
 // Pay (F8)
@@ -48,10 +67,11 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 	var (
 		attempt *models.Payment
 		reused  bool
+		resume  bool
 		booking models.Booking
 	)
 	err := s.inTx(ctx, func(tx *gorm.DB) error {
-		attempt, reused = nil, false
+		attempt, reused, resume = nil, false, false
 		// Account row before booking row, the same order as a hold, so an
 		// account lock waiting between them can not deadlock the two.
 		active, err := s.repo.UserActive(ctx, tx, userID)
@@ -81,6 +101,15 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		if b.ExpiresAt == nil || !b.ExpiresAt.After(now) {
 			return apperrors.ErrBookingExpired // E-P7
 		}
+		// No money for a show that stopped selling or already started: the
+		// confirm could only refund it (E-C5).
+		showtime, err := s.repo.LockShowtime(ctx, tx, b.ShowtimeID)
+		if err != nil {
+			return err
+		}
+		if showtime == nil || showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now) {
+			return apperrors.ErrShowtimeClosed
+		}
 		booking = *b
 
 		open, err := s.payments.LockOpen(ctx, tx, b.ID, name)
@@ -89,6 +118,16 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		}
 		if open != nil {
 			attempt, reused = open, true
+			if open.RedirectURL == nil {
+				// Stored but never opened (the provider call or saving its URL
+				// failed, or the process died): after a grace period this
+				// request takes it over and opens it again, same reference.
+				n, err := s.payments.ClaimOrphanCheckout(ctx, tx, open.ID, orphanCheckoutAfter)
+				if err != nil {
+					return err
+				}
+				resume = n > 0
+			}
 			return nil
 		}
 		attempt = &models.Payment{
@@ -109,14 +148,15 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 	if err != nil {
 		return nil, err
 	}
-	if reused {
+	if reused && !resume {
 		if attempt.RedirectURL == nil {
 			return nil, apperrors.Conflict("payment is still being created, retry shortly")
 		}
 		return payResponse(attempt, *attempt.RedirectURL), nil
 	}
 
-	checkout, err := provider.CreatePayment(ctx, payment.CreateRequest{
+	createCtx, cancel := context.WithTimeout(ctx, providerCallTimeout)
+	checkout, err := provider.CreatePayment(createCtx, payment.CreateRequest{
 		TxnRef:      attempt.TxnRef,
 		BookingID:   booking.ID,
 		Amount:      attempt.Amount,
@@ -127,7 +167,13 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		NotifyURL:   s.callbackURL(name, "ipn"),
 		ExpiresAt:   *booking.ExpiresAt,
 	})
+	cancel()
 	bg := context.WithoutCancel(ctx)
+	if err != nil && resume {
+		// Retrying an orphan keeps the attempt open; the sweep abandons it if
+		// the provider never answers.
+		return nil, apperrors.ErrPaymentGateway.Wrap(err)
+	}
 	if err != nil {
 		createErr := err
 		if ferr := s.inTx(bg, func(tx *gorm.DB) error {
@@ -254,15 +300,31 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 	err := s.inTx(ctx, func(tx *gorm.DB) error {
 		ack, out, bookingID, showID = payment.AckProcessed, finalizeOutcome{}, "", ""
 
+		// Booking row before payment row, the same order as Pay, so a pay
+		// request and a notification of the same booking can not deadlock.
+		found, err := s.payments.FindByRef(ctx, providerName, n.TxnRef)
+		if err != nil {
+			return err
+		}
+		if found == nil {
+			ack = payment.AckUnknownTxn
+			return nil
+		}
+		b, err := s.repo.LockBooking(ctx, tx, found.BookingID)
+		if err != nil {
+			return err
+		}
+		if b == nil {
+			return fmt.Errorf("payment %s: booking %s missing", found.ID, found.BookingID)
+		}
 		attempt, err := s.payments.LockByRef(ctx, tx, providerName, n.TxnRef)
 		if err != nil {
 			return err
 		}
-		if attempt == nil {
-			ack = payment.AckUnknownTxn
-			return nil
+		if attempt == nil || attempt.BookingID != b.ID {
+			return fmt.Errorf("payment %s changed while locking its booking", found.ID)
 		}
-		bookingID = attempt.BookingID
+		bookingID, showID = b.ID, b.ShowtimeID
 		switch attempt.Status {
 		case models.PaymentPaid, models.PaymentRefundPending, models.PaymentRefunded:
 			ack = payment.AckDuplicate
@@ -286,15 +348,6 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 			ack = payment.AckInvalid
 			return nil
 		}
-
-		b, err := s.repo.LockBooking(ctx, tx, attempt.BookingID)
-		if err != nil {
-			return err
-		}
-		if b == nil {
-			return fmt.Errorf("payment %s: booking %s missing", attempt.ID, attempt.BookingID)
-		}
-		showID = b.ShowtimeID
 
 		// The booking already carries money of another attempt (the customer
 		// paid twice, e.g. with two providers): this payment goes straight back.
@@ -568,23 +621,30 @@ func (s *bookingService) afterFinalize(ctx context.Context, bookingID, showID st
 // settleRefund asks the provider to return the money of a REFUND_PENDING
 // attempt. A failure leaves it pending; the sweep retries.
 func (s *bookingService) settleRefund(ctx context.Context, paymentID string) bool {
-	attempt, err := s.payments.FindByID(ctx, paymentID)
-	if err != nil || attempt == nil || attempt.Status != models.PaymentRefundPending {
+	// Claim first: the IPN path and the sweep may both get here, and a provider
+	// must never be asked twice at the same time (M10).
+	attempt, err := s.payments.ClaimRefund(ctx, paymentID, refundLease)
+	if err != nil {
+		logger.Warn("claim refund failed", logger.String("payment_id", paymentID), logger.Err(err))
 		return false
+	}
+	if attempt == nil {
+		return false // settled, claimed by another worker, or waiting for its retry time
 	}
 	provider, ok := s.providers.Get(attempt.Provider)
 	if !ok {
-		logger.Warn("refund waits: payment provider not enabled",
-			logger.String("payment_id", attempt.ID), logger.String("provider", attempt.Provider))
+		s.deferRefund(ctx, attempt, "payment provider not enabled")
 		return false
 	}
 	amount := attempt.Amount
 	if attempt.PaidAmount != nil {
 		amount = *attempt.PaidAmount
 	}
-	err = provider.Refund(ctx, transactionOf(attempt), payment.RefundRequest{Amount: amount, Reason: derefString(attempt.StatusReason)})
+	refundCtx, cancel := context.WithTimeout(ctx, refundTimeout)
+	err = provider.Refund(refundCtx, transactionOf(attempt), payment.RefundRequest{Amount: amount, Reason: derefString(attempt.StatusReason)})
+	cancel()
 	if err != nil {
-		logger.Warn("provider refund failed; sweep will retry", logger.String("payment_id", attempt.ID), logger.Err(err))
+		s.deferRefund(ctx, attempt, err.Error())
 		return false
 	}
 	err = s.inTx(ctx, func(tx *gorm.DB) error {
@@ -604,6 +664,27 @@ func (s *bookingService) settleRefund(ctx context.Context, paymentID string) boo
 	return true
 }
 
+// deferRefund schedules the next try of a failed refund with backoff (M9) and
+// raises an alert once it keeps failing; retries go on.
+func (s *bookingService) deferRefund(ctx context.Context, attempt *models.Payment, reason string) {
+	logger.Warn("provider refund failed; will retry", logger.String("payment_id", attempt.ID),
+		logger.String("attempt", fmt.Sprint(attempt.RefundAttempts)), logger.String("error", reason))
+	if err := s.payments.DeferRefund(ctx, attempt.ID, reason); err != nil {
+		logger.Warn("schedule refund retry failed", logger.String("payment_id", attempt.ID), logger.Err(err))
+	}
+	if attempt.RefundAttempts != stuckAlertAttempts {
+		return
+	}
+	logger.Error("refund keeps failing, needs a look",
+		logger.String("payment_id", attempt.ID), logger.String("provider", attempt.Provider))
+	if err := s.audit(ctx, s.db, "payments.refund_stuck", "payment", attempt.ID, map[string]any{
+		"booking_id": attempt.BookingID, "provider": attempt.Provider,
+		"attempts": attempt.RefundAttempts, "error": reason,
+	}); err != nil {
+		logger.Warn("audit stuck refund failed", logger.String("payment_id", attempt.ID), logger.Err(err))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Reconcile
 // ---------------------------------------------------------------------------
@@ -619,7 +700,7 @@ func (s *bookingService) reconcile(ctx context.Context, b *models.Booking) error
 	if b.Status != models.BookingPending && b.Status != models.BookingExpired {
 		return nil
 	}
-	attempts, err := s.payments.OpenForBooking(ctx, b.ID)
+	attempts, err := s.payments.ReconcilableForBooking(ctx, b.ID, s.lateCaptureWindow)
 	if err != nil {
 		return err
 	}
@@ -642,7 +723,9 @@ const (
 // reconcilePayment queries one open attempt and applies what the provider
 // reports; an attempt still unpaid long after its hold is marked abandoned.
 func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.Payment) (reconcileResult, error) {
-	if attempt.Status != models.PaymentPending {
+	switch attempt.Status {
+	case models.PaymentPending, models.PaymentFailed:
+	default:
 		return reconcileNothing, nil
 	}
 	provider, ok := s.providers.Get(attempt.Provider)
@@ -655,6 +738,18 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 	}
 	if qerr != nil && !errors.Is(qerr, payment.ErrUnknownTxn) {
 		logger.Warn("payment status query failed", logger.String("payment_id", attempt.ID), logger.Err(qerr))
+		return reconcileNothing, nil
+	}
+	if attempt.Status == models.PaymentFailed {
+		// Money collected after we gave up on the attempt (H2): settling it
+		// confirms the booking or refunds the money. Never abandoned again.
+		if qerr == nil && n.Status == payment.StatePaid {
+			n.TxnRef = attempt.TxnRef
+			if _, err := s.applyNotification(ctx, attempt.Provider, n, sourceReconcile); err != nil {
+				return reconcileNothing, err
+			}
+			return reconcileApplied, nil
+		}
 		return reconcileNothing, nil
 	}
 	if qerr == nil && (n.Status == payment.StatePaid || n.Status == payment.StateFailed) {
@@ -727,7 +822,15 @@ func (s *bookingService) SweepExpired(ctx context.Context, limit int) (SweepResu
 	}
 	for _, id := range stuck {
 		if _, err := s.finalize(ctx, id, sourceSweep); err != nil {
-			logger.Warn("finalize stuck paid booking failed", logger.String("booking_id", id), logger.Err(err))
+			attempts, derr := s.repo.DeferFinalize(ctx, id)
+			logger.Warn("finalize stuck paid booking failed; will retry", logger.String("booking_id", id),
+				logger.String("attempt", fmt.Sprint(attempts)), logger.Err(err))
+			if derr != nil {
+				logger.Warn("schedule finalize retry failed", logger.String("booking_id", id), logger.Err(derr))
+			}
+			if attempts == stuckAlertAttempts {
+				logger.Error("paid booking can not be settled, needs a look", logger.String("booking_id", id))
+			}
 			continue
 		}
 		res.FinalizedPaid++
@@ -760,6 +863,21 @@ func (s *bookingService) SweepExpired(ctx context.Context, limit int) (SweepResu
 			res.AbandonedPayments++
 		}
 	}
+
+	late, err := s.payments.FailedForRecheck(ctx, s.lateCaptureWindow, limit)
+	if err != nil {
+		return res, err
+	}
+	for i := range late {
+		result, err := s.reconcilePayment(ctx, &late[i])
+		if err != nil {
+			logger.Warn("recheck failed payment failed", logger.String("payment_id", late[i].ID), logger.Err(err))
+			continue
+		}
+		if result == reconcileApplied {
+			res.LateCaptures++
+		}
+	}
 	return res, nil
 }
 
@@ -777,6 +895,9 @@ func (s *bookingService) publishTicketEmail(ctx context.Context, bookingID strin
 	if err != nil {
 		return
 	}
+	// A broker that does not confirm must not hold the confirm request (M12).
+	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
+	defer cancel()
 	if err := s.publisher.Publish(ctx, TicketEmailQueue, body); err != nil {
 		logger.Warn("ticket email enqueue failed; cron will send it",
 			logger.String("booking_id", bookingID), logger.Err(err))

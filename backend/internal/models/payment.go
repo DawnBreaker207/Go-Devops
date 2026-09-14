@@ -42,8 +42,12 @@ type Payment struct {
 	RefundedAt    *time.Time        `json:"refunded_at,omitempty"`
 	ExpiresAt     *time.Time        `json:"expires_at,omitempty"`
 	CheckedAt     *time.Time        `json:"checked_at,omitempty"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
+	// Refund retries: claimed before each provider call, then backed off.
+	RefundAttempts int        `gorm:"not null;default:0" json:"refund_attempts"`
+	NextRetryAt    *time.Time `json:"next_retry_at,omitempty"`
+	LastError      *string    `gorm:"type:varchar(512)" json:"last_error,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 func (Payment) TableName() string { return "payments" }

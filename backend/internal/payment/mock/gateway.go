@@ -44,7 +44,13 @@ type Txn struct {
 	NotifyURL    string
 	ReturnURL    string
 	CreatedAt    time.Time
+	// ExpiresAt is the payment deadline the merchant sent.
+	ExpiresAt time.Time
 }
+
+// lateCaptureGrace is how long past its deadline a checkout still accepts a
+// payment, like real gateways that close a transaction a while after expiry.
+const lateCaptureGrace = 20 * time.Minute
 
 // CaptureOptions shapes a simulated payment.
 type CaptureOptions struct {
@@ -78,6 +84,11 @@ type Gateway struct {
 	txns    map[string]*Txn
 	down    bool
 	refunds int
+
+	// Refund drills: failing refunds, slow refunds, and a count of calls.
+	refundErr   error
+	refundDelay time.Duration
+	refundCalls int
 }
 
 var errNotPayable = errors.New("transaction can no longer be paid")
@@ -111,6 +122,7 @@ func (g *Gateway) open(req payment.CreateRequest) (Txn, error) {
 		NotifyURL:    req.NotifyURL,
 		ReturnURL:    req.ReturnURL,
 		CreatedAt:    time.Now(),
+		ExpiresAt:    req.ExpiresAt,
 	}
 	g.txns[t.Ref] = t
 	return *t, nil
@@ -143,6 +155,9 @@ func (g *Gateway) Capture(ref string, opts CaptureOptions) (Txn, error) {
 	}
 	switch t.State {
 	case TxnPending:
+		if !t.ExpiresAt.IsZero() && time.Now().After(t.ExpiresAt.Add(lateCaptureGrace)) {
+			return *t, errNotPayable
+		}
 		if opts.Decline {
 			t.State = TxnFailed
 		} else {
@@ -255,7 +270,22 @@ func (g *Gateway) ReturnRedirect(ref string) (string, error) {
 	return u.String(), nil
 }
 
-func (g *Gateway) refund(ref string, amount int64) error {
+func (g *Gateway) refund(ctx context.Context, ref string, amount int64) error {
+	g.mu.Lock()
+	g.refundCalls++
+	delay, failWith := g.refundDelay, g.refundErr
+	g.mu.Unlock()
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	if failWith != nil {
+		return failWith
+	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	t, ok := g.txns[ref]
@@ -289,6 +319,27 @@ func (g *Gateway) Refunds() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.refunds
+}
+
+// FailRefunds makes every refund call fail with err; nil restores them.
+func (g *Gateway) FailRefunds(err error) {
+	g.mu.Lock()
+	g.refundErr = err
+	g.mu.Unlock()
+}
+
+// SetRefundDelay makes refund calls take d, to widen race windows in drills.
+func (g *Gateway) SetRefundDelay(d time.Duration) {
+	g.mu.Lock()
+	g.refundDelay = d
+	g.mu.Unlock()
+}
+
+// RefundCalls counts refund calls, accepted or not.
+func (g *Gateway) RefundCalls() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.refundCalls
 }
 
 func (g *Gateway) sign(parts ...string) string {

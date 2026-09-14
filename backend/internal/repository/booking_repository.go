@@ -106,6 +106,7 @@ type BookingRepository interface {
 	SweepExpiredHolds(ctx context.Context, limit int) ([]models.ShowtimeSeat, error)
 	ExpireOverdueUnpaid(ctx context.Context, limit int) (int64, error)
 	StuckPaidIDs(ctx context.Context, limit int) ([]string, error)
+	DeferFinalize(ctx context.Context, id string) (int, error)
 
 	PendingEmailIDs(ctx context.Context, limit int) ([]string, error)
 	ClaimEmail(ctx context.Context, id string) (int64, error)
@@ -540,10 +541,25 @@ func (r *bookingRepository) StuckPaidIDs(ctx context.Context, limit int) ([]stri
 	if err := r.db.WithContext(ctx).Model(&models.Booking{}).
 		Where("status = ? AND paid_at IS NOT NULL", models.BookingPending).
 		Where("expires_at < NOW() OR paid_at < NOW() - INTERVAL '1 minute'").
-		Order("paid_at").Limit(limit).Pluck("id", &ids).Error; err != nil {
+		Where("next_finalize_at IS NULL OR next_finalize_at <= NOW()").
+		Order("next_finalize_at NULLS FIRST, paid_at").Limit(limit).Pluck("id", &ids).Error; err != nil {
 		return nil, fmt.Errorf("find stuck paid bookings: %w", err)
 	}
 	return ids, nil
+}
+
+// DeferFinalize schedules the next try of a paid booking the sweep could not
+// settle (1 minute doubled per failure, at most 1 hour) and returns the number
+// of failed tries so far.
+func (r *bookingRepository) DeferFinalize(ctx context.Context, id string) (int, error) {
+	var attempts int
+	if err := r.db.WithContext(ctx).Raw(`UPDATE bookings
+		SET next_finalize_at = NOW() + LEAST(INTERVAL '1 hour', INTERVAL '1 minute' * power(2, finalize_attempts)),
+			finalize_attempts = finalize_attempts + 1
+		WHERE id = ? RETURNING finalize_attempts`, id).Scan(&attempts).Error; err != nil {
+		return 0, fmt.Errorf("defer finalize: %w", err)
+	}
+	return attempts, nil
 }
 
 func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]string, error) {

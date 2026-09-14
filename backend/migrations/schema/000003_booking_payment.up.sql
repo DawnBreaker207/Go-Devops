@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS bookings (
     idempotency_key VARCHAR(128),
     payment_id      UUID,
     paid_at         TIMESTAMPTZ,
+    -- A paid booking the sweep could not settle is retried with backoff.
+    finalize_attempts INTEGER   NOT NULL DEFAULT 0,
+    next_finalize_at  TIMESTAMPTZ,
     email_sent_at   TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -55,6 +58,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_idempotency_pending
 -- Sweep: overdue PENDING bookings.
 CREATE INDEX IF NOT EXISTS idx_bookings_pending_expires
     ON bookings (expires_at) WHERE status = 'pending';
+
+-- Sweep: paid bookings still PENDING (confirm crashed or keeps failing).
+CREATE INDEX IF NOT EXISTS idx_bookings_pending_paid
+    ON bookings (paid_at) WHERE status = 'pending' AND paid_at IS NOT NULL;
 
 -- Email job: confirmed bookings still waiting for their ticket email.
 CREATE INDEX IF NOT EXISTS idx_bookings_email_pending
@@ -105,6 +112,10 @@ CREATE TABLE IF NOT EXISTS payments (
     refunded_at     TIMESTAMPTZ,
     expires_at      TIMESTAMPTZ,
     checked_at      TIMESTAMPTZ,
+    -- Provider refunds are claimed before the call and retried with backoff.
+    refund_attempts INTEGER      NOT NULL DEFAULT 0,
+    next_retry_at   TIMESTAMPTZ,
+    last_error      VARCHAR(512),
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_payments_provider_ref UNIQUE (provider, txn_ref),
@@ -117,8 +128,11 @@ CREATE INDEX IF NOT EXISTS idx_payments_booking ON payments (booking_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_open_attempt
     ON payments (booking_id, provider) WHERE status = 'pending';
 
--- Sweep: refunds the provider has not acknowledged, open attempts to reconcile.
-CREATE INDEX IF NOT EXISTS idx_payments_refund_pending
-    ON payments (updated_at) WHERE status = 'refund_pending';
+-- Sweep: refunds due for a (re)try, open attempts to reconcile, and given-up
+-- attempts rechecked for money collected late.
+CREATE INDEX IF NOT EXISTS idx_payments_refund_due
+    ON payments (next_retry_at NULLS FIRST) WHERE status = 'refund_pending';
 CREATE INDEX IF NOT EXISTS idx_payments_open_created
     ON payments (created_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_payments_failed_recheck
+    ON payments (created_at) WHERE status = 'failed';
