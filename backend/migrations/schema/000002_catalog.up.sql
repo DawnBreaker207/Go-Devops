@@ -1,6 +1,25 @@
--- Catalog schema (Track 2): halls, seats, prices, showtimes and per-show
--- seat state. Seats are generated from a hall layout; ticket sales only
+-- Module catalog: movies, halls, seats, prices, showtimes and per-show seat
+-- state (F2–F6). Seats are generated from a hall layout; ticket sales only
 -- touch showtime_seats.
+
+CREATE TABLE IF NOT EXISTS movies (
+    id           UUID PRIMARY KEY,
+    title        VARCHAR(255) NOT NULL,
+    genre        VARCHAR(100) NOT NULL,
+    duration     INTEGER      NOT NULL,
+    director     VARCHAR(255) NOT NULL,
+    description  TEXT,
+    poster_url   VARCHAR(512),
+    release_date DATE         NOT NULL,
+    status       VARCHAR(32)  NOT NULL DEFAULT 'draft',
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at   TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_movies_title ON movies (title);
+CREATE INDEX IF NOT EXISTS idx_movies_status ON movies (status);
+CREATE INDEX IF NOT EXISTS idx_movies_deleted_at ON movies (deleted_at);
 
 CREATE TABLE IF NOT EXISTS halls (
     id             UUID PRIMARY KEY,

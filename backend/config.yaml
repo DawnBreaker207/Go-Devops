@@ -26,9 +26,7 @@ database:
   max_open_conns: 25
   max_idle_conns: 5
   conn_max_lifetime: 1h
-  # Schema is owned by migrations (migrations/schema, make migrate-up) — it
-  # carries partial unique indexes GORM can't express, so AutoMigrate stays off.
-  auto_migrate: false
+  # The schema comes only from migrations/schema (make migrate-up).
 
 jwt:
   # Dev-only secrets; override via JWT_ACCESS_SECRET / JWT_REFRESH_SECRET in prod.

@@ -64,7 +64,6 @@ type DatabaseConfig struct {
 	MaxOpenConns    int           `mapstructure:"max_open_conns"`
 	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
 	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
-	AutoMigrate     bool          `mapstructure:"auto_migrate"`
 }
 
 type JWTConfig struct {
@@ -300,7 +299,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 5)
 	v.SetDefault("database.conn_max_lifetime", "1h")
-	v.SetDefault("database.auto_migrate", true)
 
 	v.SetDefault("jwt.access_secret", "")
 	v.SetDefault("jwt.refresh_secret", "")

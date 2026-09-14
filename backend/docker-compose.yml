@@ -51,9 +51,7 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
       DATABASE_NAME: ${DATABASE_NAME:-cinema}
       DATABASE_SSLMODE: disable
-      # Schema comes from migrations/schema (make migrate-up); AutoMigrate
-      # would fight the partial unique indexes, so it stays off.
-      DATABASE_AUTO_MIGRATE: "false"
+      # The schema comes only from migrations/schema (make migrate-up).
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev_access_secret_change_me_32_chars}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_secret_change_me_32chars}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}

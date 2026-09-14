@@ -67,13 +67,6 @@ func run() error {
 		}
 	}()
 
-	if cfg.Database.AutoMigrate {
-		if err := database.AutoMigrate(db); err != nil {
-			return err
-		}
-		logger.Info("database schema migrated")
-	}
-
 	if !cfg.App.IsProduction() {
 		if err := database.SeedAdmin(context.Background(), db, cfg.App.AdminEmail, cfg.App.AdminPassword); err != nil {
 			return err

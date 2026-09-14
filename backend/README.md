@@ -49,8 +49,8 @@ password: admin123                (APP_ADMIN_PASSWORD)
 | `make lint` | `go vet ./...` |
 | `make fmt` / `make tidy` | Format source / dọn `go.mod` |
 | `make swag` | Sinh lại swagger vào `docs/` |
-| `make migrate-up` / `make migrate-down` | Chạy / rollback migration |
-| `make migrate-create name=add_showtimes` | Tạo cặp file migration mới |
+| `make migrate-up` / `make migrate-down` | Chạy / rollback migration (schema chỉ đến từ `migrations/schema`, gom theo module — xem `migrations/README.md`) |
+| `make migrate-db-reset` | Xoá và dựng lại DB dev từ migration + seed |
 | `make docker-up` / `make docker-down` | Docker compose |
 
 ## Biến môi trường
@@ -65,7 +65,6 @@ Thứ tự ưu tiên: **biến môi trường → `.env` → `config.yaml` → d
 | `SERVER_PORT` | `8080` | Cổng HTTP |
 | `SERVER_SHUTDOWN_TIMEOUT` | `10s` | Thời gian chờ khi graceful shutdown |
 | `DATABASE_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_NAME` | `localhost` / `5432` / `postgres` / `postgres` / `cinema` | Kết nối Postgres |
-| `DATABASE_AUTO_MIGRATE` | `true` | Dev dùng GORM AutoMigrate; production nên đặt `false` và chạy `make migrate-up` |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | *(bắt buộc)* | Hai secret phải khác nhau, service từ chối khởi động nếu trống hoặc trùng |
 | `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | `15m` / `168h` | Hạn của access / refresh token |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Danh sách origin, phân tách bằng dấu phẩy |
@@ -105,7 +104,7 @@ Mọi response đều theo khung chung:
 cmd/server/main.go      # wiring + graceful shutdown
 internal/
 ├── config/             # viper: config.yaml + .env + biến môi trường
-├── database/           # kết nối GORM, AutoMigrate, seed admin, health check
+├── database/           # kết nối GORM, seed admin, health check
 ├── dto/                # request/response struct + binding rule
 ├── models/             # entity GORM
 ├── repository/         # interface + implement, chỉ chạm DB

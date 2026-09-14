@@ -12,7 +12,6 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/config"
-	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
 // Connect opens the Postgres connection and tunes the connection pool.
@@ -54,27 +53,6 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	}
 
 	return db, nil
-}
-
-// AutoMigrate creates/updates the schema from models. For dev environments
-// only; production uses `make migrate-up` for versioned schema control.
-func AutoMigrate(db *gorm.DB) error {
-	entities := []any{
-		&models.User{},
-		&models.Movie{},
-		&models.Hall{},
-		&models.Seat{},
-		&models.HallPrice{},
-		&models.Showtime{},
-		&models.ShowtimeSeat{},
-		&models.AuditLog{},
-		&models.BatchJob{},
-		&models.DailyAggregate{},
-	}
-	if err := db.AutoMigrate(entities...); err != nil {
-		return fmt.Errorf("auto migrate: %w", err)
-	}
-	return nil
 }
 
 // Close releases the connection, used on shutdown.
