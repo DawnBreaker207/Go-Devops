@@ -9,7 +9,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Logger ghi lai moi request kem thoi gian xu ly va status.
+// Logger logs each request with latency and status.
 func Logger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()

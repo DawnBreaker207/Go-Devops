@@ -1,4 +1,4 @@
-// Package main la diem khoi chay cua BackEnd-CP.
+// Package main is the entry point of BackEnd-CP.
 package main
 
 import (
@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/batch"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/config"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/database"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/handlers"
@@ -19,16 +21,17 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
 
 // @title						BackEnd-CP API
 // @version					1.0
-// @description				API quan ly rap chieu phim cua Cinema Project.
+// @description				API for the Cinema Project box-office system.
 // @BasePath					/api/v1
 // @securityDefinitions.apikey	BearerAuth
 // @in							header
 // @name						Authorization
-// @description				Nhap theo dinh dang: Bearer <access_token>
+// @description				Header format: Bearer <access_token>
 func main() {
 	if err := run(); err != nil {
 		log.Fatalf("server exited with error: %v", err)
@@ -77,19 +80,40 @@ func run() error {
 		cfg.JWT.RefreshTTL,
 	)
 
-	// Wire cac layer: repository -> service -> handler.
+	// Wire the layers: repository -> service -> handler.
 	userRepo := repository.NewUserRepository(db)
 	movieRepo := repository.NewMovieRepository(db)
+	hallRepo := repository.NewHallRepository(db)
+	showtimeRepo := repository.NewShowtimeRepository(db)
 
-	authService := service.NewAuthService(userRepo, jwtManager)
+	authService := service.NewAuthService(db, userRepo, jwtManager)
 	userService := service.NewUserService(userRepo)
-	movieService := service.NewMovieService(movieRepo)
+	movieService := service.NewMovieService(db, movieRepo)
+	hallService := service.NewHallService(db, hallRepo)
+	location, err := time.LoadLocation(cfg.Database.TimeZone)
+	if err != nil {
+		return fmt.Errorf("load timezone %q: %w", cfg.Database.TimeZone, err)
+	}
+	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location)
 
-	engine := router.New(cfg, jwtManager, router.Handlers{
-		Health: handlers.NewHealthHandler(db, cfg.App.Name),
-		Auth:   handlers.NewAuthHandler(authService),
-		User:   handlers.NewUserHandler(userService),
-		Movie:  handlers.NewMovieHandler(movieService),
+	// Rate limits: /auth against brute force, /orders/hold against seat bots.
+	authLimiter := ratelimit.New(cfg.RateLimit.Auth.Capacity, cfg.RateLimit.Auth.RefillPerSecond)
+	holdLimiter := ratelimit.New(cfg.RateLimit.Hold.Capacity, cfg.RateLimit.Hold.RefillPerSecond)
+
+	// Background jobs: registry + cron + batch_jobs log.
+	batchRepo := repository.NewBatchJobRepository(db)
+	batchManager := batch.NewManager(db, batchRepo)
+	batchManager.Start()
+	defer batchManager.Stop()
+
+	engine := router.New(cfg, db, jwtManager, authLimiter, holdLimiter, router.Handlers{
+		Health:   handlers.NewHealthHandler(db, cfg.App.Name),
+		Auth:     handlers.NewAuthHandler(authService),
+		User:     handlers.NewUserHandler(userService),
+		Movie:    handlers.NewMovieHandler(movieService),
+		Batch:    handlers.NewBatchHandler(batchManager, batchRepo, db),
+		Hall:     handlers.NewHallHandler(hallService),
+		Showtime: handlers.NewShowtimeHandler(showtimeService),
 	})
 
 	server := &http.Server{
@@ -111,7 +135,7 @@ func run() error {
 		}
 	}()
 
-	// Cho tin hieu dung hoac loi tu server.
+	// Wait for a shutdown signal or a fatal server error.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -133,7 +157,7 @@ func run() error {
 	return nil
 }
 
-// configPath cho phep tro toi thu muc chua config.yaml/.env qua bien CONFIG_PATH.
+// configPath resolves the directory holding config.yaml/.env via CONFIG_PATH.
 func configPath() string {
 	if path := os.Getenv("CONFIG_PATH"); path != "" {
 		return path

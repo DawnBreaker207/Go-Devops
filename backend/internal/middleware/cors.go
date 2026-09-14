@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORS cho phep cac origin duoc khai bao trong config goi API.
-// Dat "*" trong allowedOrigins de mo cho moi origin (chi nen dung o dev).
+// CORS allows only configured origins.
+// "*" in allowedOrigins allows every origin (dev only).
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	allowAll := false
 	allowed := make(map[string]struct{}, len(allowedOrigins))

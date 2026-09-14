@@ -10,14 +10,14 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// Key luu thong tin nguoi dung da xac thuc trong gin.Context.
+// Keys storing authenticated user info in the gin context.
 const (
 	ContextUserID    = "user_id"
 	ContextUserEmail = "user_email"
 	ContextUserRole  = "user_role"
 )
 
-// Auth kiem tra access token trong header Authorization: Bearer <token>.
+// Auth validates the access token in the Authorization: Bearer <token> header.
 func Auth(jwtManager *jwt.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -45,7 +45,7 @@ func Auth(jwtManager *jwt.Manager) gin.HandlerFunc {
 	}
 }
 
-// RequireRoles chi cho phep cac role duoc liet ke di tiep. Dung sau Auth.
+// RequireRoles allows only the listed roles. Must run after Auth.
 func RequireRoles(roles ...string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, role := range roles {
@@ -62,10 +62,10 @@ func RequireRoles(roles ...string) gin.HandlerFunc {
 	}
 }
 
-// CurrentUserID lay id nguoi dung dang dang nhap.
+// CurrentUserID returns the authenticated user's id.
 func CurrentUserID(c *gin.Context) string { return contextString(c, ContextUserID) }
 
-// CurrentUserRole lay role nguoi dung dang dang nhap.
+// CurrentUserRole returns the authenticated user's role.
 func CurrentUserRole(c *gin.Context) string { return contextString(c, ContextUserRole) }
 
 func contextString(c *gin.Context, key string) string {
