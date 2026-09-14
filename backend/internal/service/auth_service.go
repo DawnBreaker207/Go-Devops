@@ -7,14 +7,17 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
+	"gorm.io/gorm"
 )
 
-// AuthService xu ly dang ky, dang nhap va lam moi token.
+// AuthService handles register, login, and token refresh.
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
@@ -22,13 +25,13 @@ type AuthService interface {
 }
 
 type authService struct {
+	db         *gorm.DB
 	userRepo   repository.UserRepository
 	jwtManager *jwt.Manager
 }
 
-// NewAuthService tao AuthService.
-func NewAuthService(userRepo repository.UserRepository, jwtManager *jwt.Manager) AuthService {
-	return &authService{userRepo: userRepo, jwtManager: jwtManager}
+func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, jwtManager *jwt.Manager) AuthService {
+	return &authService{db: db, userRepo: userRepo, jwtManager: jwtManager}
 }
 
 func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error) {
@@ -56,6 +59,11 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
+	// Auth events are activity records, not handled by the middleware's
+	// failure path; written after the fact, best-effort — a failed audit row
+	// must not take the user's session down.
+	s.auditSuccess(ctx, "auth.register", user.ID, user.Role,
+		map[string]any{"email": user.Email, "full_name": user.FullName})
 
 	result := dto.NewUserResponse(user)
 	return &result, nil
@@ -64,7 +72,7 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
 	user, err := s.userRepo.FindByEmail(ctx, normalizeEmail(req.Email))
 	if err != nil {
-		// Khong lo cho client biet email co ton tai hay khong.
+		// Don't reveal whether the email exists.
 		if errors.Is(err, apperrors.ErrUserNotFound) {
 			return nil, apperrors.ErrInvalidCredentials
 		}
@@ -79,6 +87,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	if err != nil {
 		return nil, apperrors.Internal("cannot issue token").Wrap(err)
 	}
+	s.auditSuccess(ctx, "auth.login", user.ID, user.Role, nil)
 
 	return &dto.LoginResponse{
 		TokenResponse: newTokenResponse(pair),
@@ -92,7 +101,7 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 		return nil, err
 	}
 
-	// Doc lai user de token bi thu hoi ngay khi tai khoan bi xoa hoac doi quyen.
+	// Re-read the user so tokens are invalidated when the account is deleted or demoted.
 	user, err := s.userRepo.FindByID(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrUserNotFound) {
@@ -105,9 +114,28 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 	if err != nil {
 		return nil, apperrors.Internal("cannot issue token").Wrap(err)
 	}
+	s.auditSuccess(ctx, "auth.refresh", user.ID, user.Role, nil)
 
 	result := newTokenResponse(pair)
 	return &result, nil
+}
+
+// auditSuccess writes an auth event row. The middleware stashes the route's
+// action and network info into the context; here we only complete it.
+func (s *authService) auditSuccess(ctx context.Context, action, userID, role string, after map[string]any) {
+	rec, ok := audit.FromContext(ctx)
+	if !ok {
+		return
+	}
+	rec.Action = action
+	rec.ActorID = userID
+	rec.ActorRole = role
+	rec.ResourceType = "user"
+	rec.ResourceID = userID
+	rec.After = after
+	if err := audit.In(ctx, s.db, rec); err != nil {
+		logger.L().Warn("auth audit row not written", logger.Err(err), logger.String("action", action))
+	}
 }
 
 func newTokenResponse(pair *jwt.TokenPair) dto.TokenResponse {

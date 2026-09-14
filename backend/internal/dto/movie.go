@@ -6,10 +6,10 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// DateLayout la dinh dang ngay dung tren API.
+// DateLayout is the date format used by the API.
 const DateLayout = "2006-01-02"
 
-// MovieRequest la body dung chung cho tao moi va cap nhat phim.
+// MovieRequest is the shared body for creating and updating movies.
 type MovieRequest struct {
 	Title       string `json:"title" binding:"required,min=1,max=255" example:"Inception"`
 	Genre       string `json:"genre" binding:"required,max=100" example:"Sci-Fi"`
@@ -21,13 +21,13 @@ type MovieRequest struct {
 	Status      string `json:"status" binding:"required,oneof=draft showing ended" example:"showing"`
 }
 
-// ParseReleaseDate doi chuoi ngay sang time.Time.
-// Binding da chan dinh dang nen loi o day chi xay ra khi goi truc tiep.
+// ParseReleaseDate parses the date string into time.Time.
+// Binding validates the format, so errors only occur on direct calls.
 func (r MovieRequest) ParseReleaseDate() (time.Time, error) {
 	return time.Parse(DateLayout, r.ReleaseDate)
 }
 
-// MovieResponse la phim tra ve cho client.
+// MovieResponse is a movie returned to the client.
 type MovieResponse struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
@@ -42,7 +42,6 @@ type MovieResponse struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// NewMovieResponse map model sang DTO.
 func NewMovieResponse(movie *models.Movie) MovieResponse {
 	return MovieResponse{
 		ID:          movie.ID,
@@ -59,7 +58,6 @@ func NewMovieResponse(movie *models.Movie) MovieResponse {
 	}
 }
 
-// NewMovieResponses map danh sach model sang DTO.
 func NewMovieResponses(movies []models.Movie) []MovieResponse {
 	result := make([]MovieResponse, 0, len(movies))
 	for i := range movies {

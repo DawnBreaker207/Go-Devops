@@ -6,7 +6,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// UserResponse la thong tin nguoi dung tra ve cho client (khong co password).
+// UserResponse is user info returned to the client (no password).
 type UserResponse struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
@@ -16,7 +16,6 @@ type UserResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// NewUserResponse map model sang DTO.
 func NewUserResponse(user *models.User) UserResponse {
 	return UserResponse{
 		ID:        user.ID,

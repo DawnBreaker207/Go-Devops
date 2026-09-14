@@ -8,19 +8,18 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// UserHandler nhan request lien quan den nguoi dung.
+// UserHandler handles user-related requests.
 type UserHandler struct {
 	userService service.UserService
 }
 
-// NewUserHandler tao UserHandler.
 func NewUserHandler(userService service.UserService) *UserHandler {
 	return &UserHandler{userService: userService}
 }
 
 // Me godoc
 //
-//	@Summary		Thong tin tai khoan dang dang nhap
+//	@Summary		Current logged-in account info
 //	@Tags			users
 //	@Produce		json
 //	@Security		BearerAuth

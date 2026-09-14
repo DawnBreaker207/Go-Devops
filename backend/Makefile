@@ -3,8 +3,10 @@ BIN_DIR     := bin
 MAIN_PKG    := ./cmd/server
 SWAG        := $(shell go env GOPATH)/bin/swag
 MIGRATE_URL ?= postgres://postgres:postgres@localhost:5432/cinema?sslmode=disable
+DATABASE_NAME ?= cinema
+DATABASE_USER ?= postgres
 
-.PHONY: help run build test lint fmt tidy swag migrate-up migrate-down migrate-create docker-up docker-down clean
+.PHONY: help run build test lint fmt tidy swag migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
 
 help: ## Liet ke cac lenh co san
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -32,16 +34,35 @@ swag: ## Sinh lai swagger docs vao thu muc docs/
 	@command -v $(SWAG) >/dev/null 2>&1 || go install github.com/swaggo/swag/cmd/swag@latest
 	$(SWAG) init -g cmd/server/main.go -o docs --parseDependency --parseInternal
 
-migrate-up: ## Chay migration len ban moi nhat
-	migrate -path migrations -database "$(MIGRATE_URL)" up
+migrate-up: ## Apply schema migrations
+	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
 
-migrate-down: ## Rollback 1 buoc migration
-	migrate -path migrations -database "$(MIGRATE_URL)" down 1
+migrate-down: ## Roll back 1 schema step
+	migrate -path migrations/schema -database "$(MIGRATE_URL)" down 1
 
-migrate-create: ## Tao migration moi: make migrate-create name=add_showtimes
-	migrate create -ext sql -dir migrations -seq $(name)
+migrate-seed: ## Apply idempotent SQL scripts from migrations/seed (in order)
+	@for f in migrations/seed/*.sql; do \
+		echo "== applying $$f"; \
+		docker compose exec -T postgres psql -U $(DATABASE_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 < $$f; \
+	done
 
-docker-up: ## Chay postgres + backend bang docker compose
+migrate-db-reset: ## Drop & recreate the dev DB, then apply schema + seed (destroys all data!)
+	docker compose exec -T postgres psql -U $(DATABASE_USER) -c "DROP DATABASE IF EXISTS $(DATABASE_NAME) WITH (FORCE);" -c "CREATE DATABASE $(DATABASE_NAME);"
+	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
+	$(MAKE) migrate-seed
+
+migrate-create: ## Scaffold a schema migration: make migrate-create name=f4_halls
+	migrate create -ext sql -dir migrations/schema -seq $(name)
+
+migrate-create-seed: ## Scaffold a seed script: make migrate-create-seed name=sample_showtimes
+	@n=$$(ls migrations/seed/*.sql 2>/dev/null | wc -l); \
+	f=$$(printf '%06d_%s.sql' $$n $$name); \
+	touch migrations/seed/$$f; \
+	echo created migrations/seed/$$f
+
+docker-up: ## Apply schema, then start postgres + rabbitmq + backend
+	@command -v migrate >/dev/null 2>&1 || (echo "install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest" && exit 1)
+	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
 	docker compose up -d --build
 
 docker-down: ## Dung va xoa container

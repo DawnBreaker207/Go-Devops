@@ -13,11 +13,13 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// MovieRepository truy xuat bang movies.
+// MovieRepository accesses the movies table. Writes take the database (or
+// transaction) to execute on so the service can persist audit rows in the
+// same transaction.
 type MovieRepository interface {
-	Create(ctx context.Context, movie *models.Movie) error
-	Update(ctx context.Context, movie *models.Movie) error
-	Delete(ctx context.Context, id string) error
+	Create(ctx context.Context, db *gorm.DB, movie *models.Movie) error
+	Update(ctx context.Context, db *gorm.DB, movie *models.Movie) error
+	Delete(ctx context.Context, db *gorm.DB, id string) error
 	FindByID(ctx context.Context, id string) (*models.Movie, error)
 	List(ctx context.Context, query dto.PageQuery) ([]models.Movie, int64, error)
 }
@@ -26,27 +28,26 @@ type movieRepository struct {
 	db *gorm.DB
 }
 
-// NewMovieRepository tao implement dua tren GORM.
 func NewMovieRepository(db *gorm.DB) MovieRepository {
 	return &movieRepository{db: db}
 }
 
-func (r *movieRepository) Create(ctx context.Context, movie *models.Movie) error {
-	if err := r.db.WithContext(ctx).Create(movie).Error; err != nil {
+func (r *movieRepository) Create(ctx context.Context, db *gorm.DB, movie *models.Movie) error {
+	if err := db.WithContext(ctx).Create(movie).Error; err != nil {
 		return fmt.Errorf("create movie: %w", err)
 	}
 	return nil
 }
 
-func (r *movieRepository) Update(ctx context.Context, movie *models.Movie) error {
-	if err := r.db.WithContext(ctx).Save(movie).Error; err != nil {
+func (r *movieRepository) Update(ctx context.Context, db *gorm.DB, movie *models.Movie) error {
+	if err := db.WithContext(ctx).Save(movie).Error; err != nil {
 		return fmt.Errorf("update movie: %w", err)
 	}
 	return nil
 }
 
-func (r *movieRepository) Delete(ctx context.Context, id string) error {
-	result := r.db.WithContext(ctx).Delete(&models.Movie{}, "id = ?", id)
+func (r *movieRepository) Delete(ctx context.Context, db *gorm.DB, id string) error {
+	result := db.WithContext(ctx).Delete(&models.Movie{}, "id = ?", id)
 	if result.Error != nil {
 		return fmt.Errorf("delete movie: %w", result.Error)
 	}

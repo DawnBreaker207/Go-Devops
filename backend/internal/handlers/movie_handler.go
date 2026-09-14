@@ -8,25 +8,24 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// MovieHandler nhan request quan ly phim.
+// MovieHandler handles movie requests.
 type MovieHandler struct {
 	movieService service.MovieService
 }
 
-// NewMovieHandler tao MovieHandler.
 func NewMovieHandler(movieService service.MovieService) *MovieHandler {
 	return &MovieHandler{movieService: movieService}
 }
 
 // List godoc
 //
-//	@Summary		Danh sach phim (co phan trang)
+//	@Summary		List movies (paginated)
 //	@Tags			movies
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Param			page		query		int		false	"Trang hien tai"	default(1)
-//	@Param			page_size	query		int		false	"So ban ghi moi trang"	default(10)
-//	@Param			search		query		string	false	"Tim theo ten phim, dao dien, the loai"
+//	@Param			page		query		int		false	"Current page"	default(1)
+//	@Param			page_size	query		int		false	"Records per page"	default(10)
+//	@Param			search		query		string	false	"Search by title, director, or genre"
 //	@Success		200			{object}	response.Body{data=response.Paged{items=[]dto.MovieResponse}}
 //	@Failure		400			{object}	response.Body
 //	@Failure		401			{object}	response.Body
@@ -50,7 +49,7 @@ func (h *MovieHandler) List(c *gin.Context) {
 
 // Detail godoc
 //
-//	@Summary		Chi tiet mot phim
+//	@Summary		Get movie details
 //	@Tags			movies
 //	@Produce		json
 //	@Security		BearerAuth
@@ -71,12 +70,12 @@ func (h *MovieHandler) Detail(c *gin.Context) {
 
 // Create godoc
 //
-//	@Summary		Them phim moi
+//	@Summary		Create a new movie
 //	@Tags			movies
 //	@Accept			json
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Param			payload	body		dto.MovieRequest	true	"Thong tin phim"
+//	@Param			payload	body		dto.MovieRequest	true	"Movie details"
 //	@Success		201		{object}	response.Body{data=dto.MovieResponse}
 //	@Failure		400		{object}	response.Body
 //	@Failure		401		{object}	response.Body
@@ -99,13 +98,13 @@ func (h *MovieHandler) Create(c *gin.Context) {
 
 // Update godoc
 //
-//	@Summary		Cap nhat phim
+//	@Summary		Update a movie
 //	@Tags			movies
 //	@Accept			json
 //	@Produce		json
 //	@Security		BearerAuth
 //	@Param			id		path		string				true	"Movie ID"
-//	@Param			payload	body		dto.MovieRequest	true	"Thong tin phim"
+//	@Param			payload	body		dto.MovieRequest	true	"Movie details"
 //	@Success		200		{object}	response.Body{data=dto.MovieResponse}
 //	@Failure		400		{object}	response.Body
 //	@Failure		401		{object}	response.Body
@@ -129,7 +128,7 @@ func (h *MovieHandler) Update(c *gin.Context) {
 
 // Delete godoc
 //
-//	@Summary		Xoa phim
+//	@Summary		Delete a movie
 //	@Tags			movies
 //	@Produce		json
 //	@Security		BearerAuth

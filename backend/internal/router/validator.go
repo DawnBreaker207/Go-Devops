@@ -8,8 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// registerValidators cau hinh validator cua gin de bao loi theo ten field json
-// (vd "release_date") thay vi ten field Go ("ReleaseDate").
+// Use json field names (e.g. "release_date") in validation errors instead of Go field names.
 func registerValidators() {
 	engine, ok := binding.Validator.Engine().(*validator.Validate)
 	if !ok {

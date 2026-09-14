@@ -1,4 +1,4 @@
-// Package config doc cau hinh tu config.yaml, .env va bien moi truong.
+// Package config loads settings from config.yaml, .env and environment vars.
 package config
 
 import (
@@ -12,22 +12,27 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config gom toan bo cau hinh cua service.
+// Config holds every service setting.
 type Config struct {
-	App      AppConfig      `mapstructure:"app"`
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	CORS     CORSConfig     `mapstructure:"cors"`
+	App       AppConfig        `mapstructure:"app"`
+	Server    ServerConfig     `mapstructure:"server"`
+	Database  DatabaseConfig   `mapstructure:"database"`
+	JWT       JWTConfig        `mapstructure:"jwt"`
+	CORS      CORSConfig       `mapstructure:"cors"`
+	RateLimit RateLimitConfig  `mapstructure:"rate_limit"`
+	Queue     QueueConfig      `mapstructure:"queue"`
 }
 
 type AppConfig struct {
 	Name     string `mapstructure:"name"`
 	Env      string `mapstructure:"env"`
 	LogLevel string `mapstructure:"log_level"`
-	// Tai khoan quan tri duoc tao san khi database con rong (chi o moi truong khac production).
+	// Default admin account seeded when the DB is empty (non-production only).
 	AdminEmail    string `mapstructure:"admin_email"`
 	AdminPassword string `mapstructure:"admin_password"`
+	// RoomCleanupMinutes is the buffer appended to a showtime's effective end
+	// when checking hall-schedule conflicts.
+	RoomCleanupMinutes int `mapstructure:"room_cleanup_minutes"`
 }
 
 type ServerConfig struct {
@@ -63,7 +68,24 @@ type CORSConfig struct {
 	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
-// DSN tra ve chuoi ket noi Postgres cho GORM.
+// RateLimitConfig throttles each endpoint group per client.
+type RateLimitConfig struct {
+	Auth RateLimitRule `mapstructure:"auth"`
+	Hold RateLimitRule `mapstructure:"hold"`
+}
+
+// RateLimitRule is the parameter set of one token bucket.
+type RateLimitRule struct {
+	Capacity        int     `mapstructure:"capacity"`
+	RefillPerSecond float64 `mapstructure:"refill_per_second"`
+}
+
+// QueueConfig configures the RabbitMQ connection.
+type QueueConfig struct {
+	URL string `mapstructure:"url"`
+}
+
+// DSN returns the Postgres connection string for GORM.
 func (d DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
@@ -71,7 +93,7 @@ func (d DatabaseConfig) DSN() string {
 	)
 }
 
-// MigrateURL tra ve URL dung cho golang-migrate.
+// MigrateURL returns the connection URL used by golang-migrate.
 func (d DatabaseConfig) MigrateURL() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -79,10 +101,10 @@ func (d DatabaseConfig) MigrateURL() string {
 	)
 }
 
-// IsProduction cho biet co dang chay o moi truong production khong.
+// IsProduction reports whether we run in the production environment.
 func (a AppConfig) IsProduction() bool { return a.Env == "production" }
 
-// Load doc cau hinh theo thu tu: default -> config.yaml -> .env -> bien moi truong.
+// Load reads config in order: defaults -> config.yaml -> .env -> env vars.
 func Load(path string) (*Config, error) {
 	v := viper.New()
 	setDefaults(v)
@@ -97,7 +119,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	// .env chi lam gia tri du phong: bien moi truong that luon duoc uu tien hon.
+	// .env only fills gaps: real env vars always win.
 	if err := loadDotEnv(path + "/.env"); err != nil {
 		return nil, err
 	}
@@ -115,7 +137,7 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// loadDotEnv nap file .env vao moi truong process, khong ghi de bien da ton tai.
+// loadDotEnv loads .env into the process env, never overriding existing vars.
 func loadDotEnv(file string) error {
 	envViper := viper.New()
 	envViper.SetConfigFile(file)
@@ -166,6 +188,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.log_level", "info")
 	v.SetDefault("app.admin_email", "admin@cinema.local")
 	v.SetDefault("app.admin_password", "admin123")
+	v.SetDefault("app.room_cleanup_minutes", 20)
 
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.read_timeout", "15s")
@@ -191,4 +214,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.issuer", "backend-cp")
 
 	v.SetDefault("cors.allowed_origins", []string{"http://localhost:3000"})
+
+	v.SetDefault("rate_limit.auth.capacity", 10)
+	v.SetDefault("rate_limit.auth.refill_per_second", 2)
+	v.SetDefault("rate_limit.hold.capacity", 20)
+	v.SetDefault("rate_limit.hold.refill_per_second", 5)
+
+	v.SetDefault("queue.url", "amqp://guest:guest@localhost:5672/")
 }
