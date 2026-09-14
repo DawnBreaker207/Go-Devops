@@ -82,7 +82,9 @@ func consumeN(c *Client, queueName string, n int, timeout time.Duration) []strin
 
 func mustPublish(t *testing.T, c *Client, queueName, body string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Generous: under `go test -race ./...` the broker confirm of a cold queue
+	// took over 10s while the other packages loaded the machine.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := c.Publish(ctx, queueName, []byte(body)); err != nil {
 		t.Fatalf("publish %s: %v", body, err)
