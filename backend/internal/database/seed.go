@@ -37,7 +37,7 @@ func SeedAdmin(ctx context.Context, db *gorm.DB, email, password string) error {
 		return fmt.Errorf("create seed admin: %w", err)
 	}
 
-	logger.Warn("seeded default admin account, doi mat khau ngay sau lan dang nhap dau tien",
-		logger.String("email", email))
+	// Email stays out of the log (app.admin_email in config tells which one).
+	logger.Warn("seeded default admin account, doi mat khau ngay sau lan dang nhap dau tien")
 	return nil
 }

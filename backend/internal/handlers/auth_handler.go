@@ -54,6 +54,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 //	@Success		200		{object}	response.Body{data=dto.LoginResponse}
 //	@Failure		400		{object}	response.Body
 //	@Failure		401		{object}	response.Body
+//	@Failure		403		{object}	response.Body	"account locked"
+//	@Failure		429		{object}	response.Body	"too many failed attempts"
 //	@Router			/auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req dto.LoginRequest
@@ -61,6 +63,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	req.ClientIP = c.ClientIP()
 
 	result, err := h.authService.Login(c.Request.Context(), req)
 	if err != nil {

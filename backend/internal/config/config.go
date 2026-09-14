@@ -14,13 +14,24 @@ import (
 
 // Config holds every service setting.
 type Config struct {
-	App       AppConfig        `mapstructure:"app"`
-	Server    ServerConfig     `mapstructure:"server"`
-	Database  DatabaseConfig   `mapstructure:"database"`
-	JWT       JWTConfig        `mapstructure:"jwt"`
-	CORS      CORSConfig       `mapstructure:"cors"`
-	RateLimit RateLimitConfig  `mapstructure:"rate_limit"`
-	Queue     QueueConfig      `mapstructure:"queue"`
+	App       AppConfig       `mapstructure:"app"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
+	Queue     QueueConfig     `mapstructure:"queue"`
+	Booking   BookingConfig   `mapstructure:"booking"`
+	Payment   PaymentConfig   `mapstructure:"payment"`
+	Mail      MailConfig      `mapstructure:"mail"`
+	Storage   StorageConfig   `mapstructure:"storage"`
+	Audit     AuditConfig     `mapstructure:"audit"`
+}
+
+// AuditConfig sets how long audit logs are kept (the cleanup job removes older
+// rows). Must be at least 90 days (FR-AUDIT-02).
+type AuditConfig struct {
+	RetentionDays int `mapstructure:"retention_days"`
 }
 
 type AppConfig struct {
@@ -70,8 +81,16 @@ type CORSConfig struct {
 
 // RateLimitConfig throttles each endpoint group per client.
 type RateLimitConfig struct {
-	Auth RateLimitRule `mapstructure:"auth"`
-	Hold RateLimitRule `mapstructure:"hold"`
+	Auth  RateLimitRule    `mapstructure:"auth"`
+	Hold  RateLimitRule    `mapstructure:"hold"`
+	Login LoginGuardConfig `mapstructure:"login"`
+}
+
+// LoginGuardConfig locks an email+IP pair out after consecutive wrong
+// passwords (T14).
+type LoginGuardConfig struct {
+	MaxFailures int           `mapstructure:"max_failures"`
+	Lockout     time.Duration `mapstructure:"lockout"`
 }
 
 // RateLimitRule is the parameter set of one token bucket.
@@ -83,6 +102,66 @@ type RateLimitRule struct {
 // QueueConfig configures the RabbitMQ connection.
 type QueueConfig struct {
 	URL string `mapstructure:"url"`
+}
+
+// BookingConfig tunes the seat-hold flow.
+type BookingConfig struct {
+	// HoldTTLMinutes is how long a held seat stays reserved.
+	HoldTTLMinutes int `mapstructure:"hold_ttl_minutes"`
+	// MaxSeatsPerBooking caps how many seats one customer can hold at once.
+	MaxSeatsPerBooking int `mapstructure:"max_seats_per_booking"`
+}
+
+// PaymentConfig configures payments. Every provider — the mock as much as a
+// real gateway — has its own block under Providers and is enabled on its own.
+type PaymentConfig struct {
+	// PublicBaseURL is how providers and browsers reach this API (IPN and
+	// return URLs, mock checkout page).
+	PublicBaseURL string `mapstructure:"public_base_url"`
+	// ReturnRedirectURL is where the browser lands after the return URL is
+	// processed; empty answers with JSON.
+	ReturnRedirectURL string `mapstructure:"return_redirect_url"`
+	// DefaultProvider is used when a pay request names none; it must be enabled.
+	DefaultProvider string                 `mapstructure:"default_provider"`
+	Providers       PaymentProvidersConfig `mapstructure:"providers"`
+}
+
+// PaymentProvidersConfig has one block per supported provider. A real gateway
+// adds its block here (e.g. VNPay: enabled, tmn_code, hash_secret, endpoint).
+type PaymentProvidersConfig struct {
+	Mock MockProviderConfig `mapstructure:"mock"`
+}
+
+// MockProviderConfig enables the simulated gateway.
+type MockProviderConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	DisplayName string `mapstructure:"display_name"`
+	// Secret signs the mock IPN and return redirect (HMAC-SHA256).
+	Secret string `mapstructure:"secret"`
+}
+
+// MailConfig configures ticket emails. This build only has a mock mailer:
+// every email is written as an .html file into OutboxDir.
+type MailConfig struct {
+	OutboxDir string `mapstructure:"outbox_dir"`
+}
+
+// StorageConfig selects where uploaded images go: "local" (files served under
+// /media) or "cloudinary".
+type StorageConfig struct {
+	Driver        string           `mapstructure:"driver"`
+	PublicBaseURL string           `mapstructure:"public_base_url"`
+	LocalDir      string           `mapstructure:"local_dir"`
+	MaxUploadMB   int              `mapstructure:"max_upload_mb"`
+	Cloudinary    CloudinaryConfig `mapstructure:"cloudinary"`
+}
+
+// CloudinaryConfig holds the Cloudinary credentials (driver "cloudinary").
+type CloudinaryConfig struct {
+	CloudName string `mapstructure:"cloud_name"`
+	APIKey    string `mapstructure:"api_key"`
+	APISecret string `mapstructure:"api_secret"`
+	Folder    string `mapstructure:"folder"`
 }
 
 // DSN returns the Postgres connection string for GORM.
@@ -179,6 +258,22 @@ func (c *Config) validate() error {
 	if c.Server.Port <= 0 {
 		return errors.New("server port must be greater than 0")
 	}
+	if c.Audit.RetentionDays < 90 {
+		return fmt.Errorf("audit.retention_days must be at least 90, got %d", c.Audit.RetentionDays)
+	}
+	switch c.Storage.Driver {
+	case "local":
+	case "cloudinary":
+		cl := c.Storage.Cloudinary
+		if cl.CloudName == "" || cl.APIKey == "" || cl.APISecret == "" {
+			return errors.New("storage.cloudinary cloud_name, api_key and api_secret are required for the cloudinary driver")
+		}
+	default:
+		return fmt.Errorf("storage.driver must be local or cloudinary, got %q", c.Storage.Driver)
+	}
+	if c.Payment.Providers.Mock.Enabled && c.Payment.Providers.Mock.Secret == "" {
+		return errors.New("payment.providers.mock.secret must not be empty when the mock provider is enabled")
+	}
 	return nil
 }
 
@@ -219,6 +314,31 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rate_limit.auth.refill_per_second", 2)
 	v.SetDefault("rate_limit.hold.capacity", 20)
 	v.SetDefault("rate_limit.hold.refill_per_second", 5)
+	v.SetDefault("rate_limit.login.max_failures", 5)
+	v.SetDefault("rate_limit.login.lockout", "5m")
+
+	v.SetDefault("audit.retention_days", 90)
+
+	v.SetDefault("storage.driver", "local")
+	v.SetDefault("storage.public_base_url", "http://localhost:8080")
+	v.SetDefault("storage.local_dir", "tmp/uploads")
+	v.SetDefault("storage.max_upload_mb", 5)
+	v.SetDefault("storage.cloudinary.cloud_name", "")
+	v.SetDefault("storage.cloudinary.api_key", "")
+	v.SetDefault("storage.cloudinary.api_secret", "")
+	v.SetDefault("storage.cloudinary.folder", "cinema")
+
+	v.SetDefault("booking.hold_ttl_minutes", 10)
+	v.SetDefault("booking.max_seats_per_booking", 10)
+
+	v.SetDefault("payment.public_base_url", "http://localhost:8080")
+	v.SetDefault("payment.return_redirect_url", "")
+	v.SetDefault("payment.default_provider", "mock")
+	v.SetDefault("payment.providers.mock.enabled", true)
+	v.SetDefault("payment.providers.mock.display_name", "Cổng thử nghiệm (mock)")
+	v.SetDefault("payment.providers.mock.secret", "dev-mock-secret-change-in-prod")
+
+	v.SetDefault("mail.outbox_dir", "tmp/mail")
 
 	v.SetDefault("queue.url", "amqp://guest:guest@localhost:5672/")
 }

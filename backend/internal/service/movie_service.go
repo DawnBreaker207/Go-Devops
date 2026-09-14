@@ -14,8 +14,9 @@ import (
 
 // MovieService handles movie management.
 type MovieService interface {
-	List(ctx context.Context, query dto.PageQuery) ([]dto.MovieResponse, int64, error)
-	GetByID(ctx context.Context, id string) (*dto.MovieResponse, error)
+	// includeDrafts is true for admin/staff; customers never see draft movies.
+	List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]dto.MovieResponse, int64, error)
+	GetByID(ctx context.Context, id string, includeDrafts bool) (*dto.MovieResponse, error)
 	Create(ctx context.Context, req dto.MovieRequest) (*dto.MovieResponse, error)
 	Update(ctx context.Context, id string, req dto.MovieRequest) (*dto.MovieResponse, error)
 	Delete(ctx context.Context, id string) error
@@ -30,18 +31,21 @@ func NewMovieService(db *gorm.DB, movieRepo repository.MovieRepository) MovieSer
 	return &movieService{db: db, movieRepo: movieRepo}
 }
 
-func (s *movieService) List(ctx context.Context, query dto.PageQuery) ([]dto.MovieResponse, int64, error) {
-	movies, total, err := s.movieRepo.List(ctx, query)
+func (s *movieService) List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]dto.MovieResponse, int64, error) {
+	movies, total, err := s.movieRepo.List(ctx, query, includeDrafts)
 	if err != nil {
 		return nil, 0, err
 	}
 	return dto.NewMovieResponses(movies), total, nil
 }
 
-func (s *movieService) GetByID(ctx context.Context, id string) (*dto.MovieResponse, error) {
+func (s *movieService) GetByID(ctx context.Context, id string, includeDrafts bool) (*dto.MovieResponse, error) {
 	movie, err := s.movieRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if !includeDrafts && movie.Status == models.MovieStatusDraft {
+		return nil, apperrors.ErrMovieNotFound
 	}
 	result := dto.NewMovieResponse(movie)
 	return &result, nil

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
@@ -18,7 +19,35 @@ type ShowtimeService interface {
 	Update(ctx context.Context, id string, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error)
 	Delete(ctx context.Context, id string) error
 	ListByMovie(ctx context.Context, movieID, date string) ([]dto.ShowtimeListItem, error)
+	ListByDate(ctx context.Context, date string) ([]dto.ShowtimeListItem, error)
 	SeatMap(ctx context.Context, showtimeID string) (*dto.SeatMapResponse, error)
+	OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
+}
+
+// OpenShowtime returns a showtime that is open for sales (realtime tokens).
+func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error) {
+	row, err := s.showtime.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, apperrors.ErrShowtimeNotFound
+	}
+	if row.Status != models.ShowtimeOpen {
+		return nil, apperrors.ErrShowtimeNotOpen
+	}
+	return &dto.ShowtimeResponse{
+		ID:         row.ID,
+		MovieID:    row.MovieID,
+		MovieTitle: row.MovieTitle,
+		HallID:     row.HallID,
+		HallName:   row.HallName,
+		StartAt:    row.StartAt,
+		EndAt:      row.EndAt,
+		Status:     row.Status,
+		CreatedAt:  row.CreatedAt,
+		UpdatedAt:  row.UpdatedAt,
+	}, nil
 }
 
 type showtimeService struct {
@@ -136,7 +165,7 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		return nil, err
 	}
 
-	start := req.StartAt.UTC()
+	start := req.StartAt.UTC().Truncate(time.Microsecond) // DB precision, so an unchanged time compares equal
 	if !start.After(time.Now()) {
 		return nil, apperrors.Validation("start_at must be in the future")
 	}
@@ -147,9 +176,53 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		"start_at": row.StartAt, "end_at": row.EndAt, "status": row.Status}
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.showtime.LockHall(tx, req.HallID); err != nil {
+		// Lock order shared with hall layout changes: the scheduling lock of
+		// every hall involved (sorted), then the showtime row. Holds and confirms
+		// share-lock the row, so this waits for them and they see the result.
+		halls := []string{row.HallID}
+		if req.HallID != row.HallID {
+			halls = append(halls, req.HallID)
+			slices.Sort(halls)
+		}
+		for _, hallID := range halls {
+			if err := s.showtime.LockHall(tx, hallID); err != nil {
+				return err
+			}
+		}
+		current, err := s.showtime.LockForUpdate(tx, id)
+		if err != nil {
 			return err
 		}
+		if current == nil {
+			return apperrors.ErrShowtimeNotFound
+		}
+		if current.HallID != row.HallID {
+			return apperrors.ErrShowtimeChanged // moved by a concurrent update: its hall is not locked
+		}
+
+		hallChanged := current.HallID != req.HallID
+		if hallChanged {
+			// The seat grid is rebuilt for the new hall, only possible while no
+			// booking of any status points at the old seats.
+			has, err := s.showtime.ShowtimeHasBookings(tx, id)
+			if err != nil {
+				return err
+			}
+			if has {
+				return apperrors.ErrShowtimeHallLocked
+			}
+		} else if current.MovieID != req.MovieID || !current.StartAt.Equal(start) {
+			// Held and sold tickets name this movie and time: stop sales by
+			// closing the showtime instead (E-S4).
+			live, err := s.showtime.ShowtimeHasLiveBookings(tx, id)
+			if err != nil {
+				return err
+			}
+			if live {
+				return apperrors.ErrShowtimeScheduleLocked
+			}
+		}
+
 		overlaps, err := s.showtime.OverlapCount(tx, req.HallID, start, effectiveEnd, id)
 		if err != nil {
 			return err
@@ -165,10 +238,22 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		if req.Status != "" {
 			showtime.Status = req.Status
 		} else {
-			showtime.Status = row.Status
+			showtime.Status = current.Status
 		}
 		if err := s.showtime.Update(tx, showtime); err != nil {
 			return err
+		}
+		if hallChanged {
+			if err := s.showtime.DeleteSeatStates(tx, id); err != nil {
+				return err
+			}
+			seats, err := s.hall.SeatsByHall(ctx, req.HallID)
+			if err != nil {
+				return err
+			}
+			if err := s.showtime.CreateSeatStates(tx, id, seats); err != nil {
+				return err
+			}
 		}
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = id
@@ -206,6 +291,16 @@ func (s *showtimeService) Delete(ctx context.Context, id string) error {
 		return apperrors.ErrShowtimeNotFound
 	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
+		// Lock the row first, check after: a hold in flight share-locks it, so
+		// its booking is committed and seen by the check, and a hold arriving
+		// later finds the showtime gone (E-S4).
+		current, err := s.showtime.LockForUpdate(tx, id)
+		if err != nil {
+			return err
+		}
+		if current == nil {
+			return apperrors.ErrShowtimeNotFound
+		}
 		hasBookings, err := s.showtime.ShowtimeHasBookings(tx, id)
 		if err != nil {
 			return err
@@ -231,9 +326,19 @@ func (s *showtimeService) ListByMovie(ctx context.Context, movieID, date string)
 		return nil, err
 	}
 	if movie.Status != models.MovieStatusShowing {
-		return nil, apperrors.ErrMovieNotShowing
+		return []dto.ShowtimeListItem{}, nil // E-CAT2: draft/ended movies have nothing on sale
 	}
 
+	return s.pickDay(ctx, movieID, date)
+}
+
+// ListByDate lists the showtimes on sale of every showing movie for a local
+// day (default today). A day without showtimes is an empty list (T28).
+func (s *showtimeService) ListByDate(ctx context.Context, date string) ([]dto.ShowtimeListItem, error) {
+	return s.pickDay(ctx, "", date)
+}
+
+func (s *showtimeService) pickDay(ctx context.Context, movieID, date string) ([]dto.ShowtimeListItem, error) {
 	day := time.Now().In(s.location)
 	if date != "" {
 		parsed, err := time.ParseInLocation(dto.DateLayout, date, s.location)
@@ -252,14 +357,15 @@ func (s *showtimeService) ListByMovie(ctx context.Context, movieID, date string)
 	result := make([]dto.ShowtimeListItem, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, dto.ShowtimeListItem{
-			ID:        row.ID,
-			MovieID:   row.MovieID,
-			HallID:    row.HallID,
-			HallName:  row.HallName,
-			StartAt:   row.StartAt,
-			EndAt:     row.EndAt,
-			Status:    row.Status,
-			FromPrice: row.FromPrice,
+			ID:         row.ID,
+			MovieID:    row.MovieID,
+			MovieTitle: row.MovieTitle,
+			HallID:     row.HallID,
+			HallName:   row.HallName,
+			StartAt:    row.StartAt,
+			EndAt:      row.EndAt,
+			Status:     row.Status,
+			FromPrice:  row.FromPrice,
 		})
 	}
 	return result, nil
@@ -300,14 +406,15 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 		}
 		response.Prices[seat.SeatType] = seat.Price
 		response.Seats = append(response.Seats, dto.SeatMapSeat{
-			ID:       seat.SeatID,
-			Label:    dto.SeatLabel(seat.RowLabel, seat.ColNumber),
-			RowLabel: seat.RowLabel,
-			Col:      seat.ColNumber,
-			SeatType: seat.SeatType,
-			IsGap:    seat.IsGap,
-			Status:   status,
-			Price:    seat.Price,
+			ID:             seat.SeatID,
+			ShowtimeSeatID: seat.SeatShowtimeID,
+			Label:          dto.SeatLabel(seat.RowLabel, seat.ColNumber),
+			RowLabel:       seat.RowLabel,
+			Col:            seat.ColNumber,
+			SeatType:       seat.SeatType,
+			IsGap:          seat.IsGap,
+			Status:         status,
+			Price:          seat.Price,
 		})
 	}
 	return response, nil

@@ -1,0 +1,42 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+
+	"gorm.io/gorm"
+)
+
+// MaintenanceRepository removes data past its retention (job cleanup).
+type MaintenanceRepository interface {
+	// DeleteAuditOlderThan deletes up to limit audit rows older than days (by DB clock).
+	DeleteAuditOlderThan(ctx context.Context, days, limit int) (int64, error)
+	// DeleteDeadRefreshTokens deletes up to limit refresh tokens expired for a day.
+	DeleteDeadRefreshTokens(ctx context.Context, limit int) (int64, error)
+}
+
+type maintenanceRepository struct {
+	db *gorm.DB
+}
+
+func NewMaintenanceRepository(db *gorm.DB) MaintenanceRepository {
+	return &maintenanceRepository{db: db}
+}
+
+func (r *maintenanceRepository) DeleteAuditOlderThan(ctx context.Context, days, limit int) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(`DELETE FROM audit_logs WHERE id IN (
+		SELECT id FROM audit_logs WHERE created_at < NOW() - make_interval(days => CAST(? AS int)) LIMIT ?)`, days, limit)
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete old audit logs: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *maintenanceRepository) DeleteDeadRefreshTokens(ctx context.Context, limit int) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(`DELETE FROM refresh_tokens WHERE id IN (
+		SELECT id FROM refresh_tokens WHERE expires_at < NOW() - INTERVAL '1 day' LIMIT ?)`, limit)
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete dead refresh tokens: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}

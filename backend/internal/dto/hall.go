@@ -15,6 +15,9 @@ type HallRequest struct {
 	SeatsPerRow int                 `json:"seats_per_row" binding:"required,min=1,max=50" example:"12"`
 SeatTypes map[string][]string `json:"seat_types" binding:"required" example:"vip:7,8"`
 	Gaps        []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
+	// Prices is required: a hall is never created without a positive price for
+	// each of the 4 seat types (E-H6, FR-HALL-02).
+	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
 }
 
 // PriceRequest sets the price for every seat type of a hall.

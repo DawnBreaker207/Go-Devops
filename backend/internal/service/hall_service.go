@@ -73,6 +73,9 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 	if err != nil {
 		return nil, err
 	}
+	if err := validatePrices(req.Prices); err != nil {
+		return nil, err
+	}
 
 	hall := &models.Hall{
 		Name:        strings.TrimSpace(req.Name),
@@ -80,6 +83,11 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 		SeatsPerRow: req.SeatsPerRow,
 		SeatTypes:   req.SeatTypes,
 		Gaps:        req.Gaps,
+	}
+	// A nil slice would serialize to SQL NULL then `''` for the not-null
+	// jsonb column; an empty list is the correct "no gaps" value.
+	if hall.Gaps == nil {
+		hall.Gaps = []string{}
 	}
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
@@ -93,6 +101,9 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 			seats[i].HallID = hall.ID
 		}
 		if err := s.hallRepo.CreateSeats(tx, seats); err != nil {
+			return err
+		}
+		if err := s.hallRepo.UpsertPrices(tx, hall.ID, req.Prices); err != nil {
 			return err
 		}
 		if rec, ok := audit.FromContext(ctx); ok {
@@ -110,16 +121,24 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 }
 
 func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req dto.SeatUpdateRequest) (*dto.SeatResponse, error) {
-	seat, err := s.hallRepo.FindSeat(ctx, hallID, seatID)
-	if err != nil {
-		return nil, err
-	}
-	if seat == nil {
-		return nil, apperrors.ErrSeatNotFound
-	}
-	before := map[string]any{"seat_type": seat.SeatType, "is_gap": seat.IsGap}
+	var seat *models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Lock first, check after: a hold in flight share-locks its showtime, so
+		// it commits (and is seen by the check) before the layout changes, and a
+		// hold arriving later sees the new layout (E-H4).
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		var err error
+		seat, err = s.hallRepo.FindSeat(ctx, hallID, seatID)
+		if err != nil {
+			return err
+		}
+		if seat == nil {
+			return apperrors.ErrSeatNotFound
+		}
+		before := map[string]any{"seat_type": seat.SeatType, "is_gap": seat.IsGap}
 
-	err = s.db.Transaction(func(tx *gorm.DB) error {
 		hasBookings, err := s.hallRepo.HallHasBookings(tx, hallID)
 		if err != nil {
 			return err

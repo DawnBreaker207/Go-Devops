@@ -82,9 +82,18 @@ func Error(c *gin.Context, err error) {
 	writeError(c, appErr)
 }
 
+// setRetryAfter mirrors a retry_after_seconds detail into the Retry-After
+// header (429 answers).
+func setRetryAfter(c *gin.Context, appErr *apperrors.AppError) {
+	if secs, ok := appErr.Details["retry_after_seconds"]; ok {
+		c.Header("Retry-After", secs)
+	}
+}
+
 // Abort writes an error and stops the middleware chain.
 func Abort(c *gin.Context, err error) {
 	appErr := apperrors.From(err)
+	setRetryAfter(c, appErr)
 	c.Set(audit.ErrorMsgKey, appErr.Message)
 	c.AbortWithStatusJSON(appErr.Status, Body{
 		Code:    appErr.Code,
@@ -94,6 +103,7 @@ func Abort(c *gin.Context, err error) {
 }
 
 func writeError(c *gin.Context, appErr *apperrors.AppError) {
+	setRetryAfter(c, appErr)
 	c.Set(audit.ErrorMsgKey, appErr.Message)
 	c.JSON(appErr.Status, Body{
 		Code:    appErr.Code,

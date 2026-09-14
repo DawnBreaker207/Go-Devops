@@ -3,6 +3,8 @@ package database
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -20,8 +22,18 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		logLevel = gormlogger.Warn
 	}
 
+	// ParameterizedQueries: SQL is logged with placeholders only, so emails,
+	// password hashes and tokens never reach logs (NFR-LEG-01/02).
+	sqlLogger := gormlogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormlogger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  logLevel,
+		IgnoreRecordNotFoundError: true,
+		ParameterizedQueries:      true,
+		Colorful:                  !cfg.App.IsProduction(),
+	})
+
 	db, err := gorm.Open(postgres.Open(cfg.Database.DSN()), &gorm.Config{
-		Logger:                 gormlogger.Default.LogMode(logLevel),
+		Logger:                 sqlLogger,
 		SkipDefaultTransaction: true,
 		PrepareStmt:            true,
 	})

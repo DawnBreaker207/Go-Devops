@@ -1,6 +1,8 @@
 package batch
 
 import (
+	"context"
+
 	"github.com/robfig/cron/v3"
 )
 
@@ -21,4 +23,5 @@ func (s *cronScheduler) addFunc(schedule string, fn func()) (cron.EntryID, error
 
 func (s *cronScheduler) start() { s.cron.Start() }
 
-func (s *cronScheduler) stop() { s.cron.Stop() }
+// stop halts scheduling; the context is done once running jobs finished.
+func (s *cronScheduler) stop() context.Context { return s.cron.Stop() }

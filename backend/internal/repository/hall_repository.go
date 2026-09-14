@@ -83,13 +83,27 @@ func (r *HallRepository) UpdateSeat(tx *gorm.DB, seat *models.Seat) error {
 	return tx.Model(seat).Select("seat_type", "is_gap", "updated_at").Updates(seat).Error
 }
 
-// HallHasBookings reports whether any booking sits on a showtime in the hall.
-// Uses a raw query because the bookings model is not kept in the codebase.
+// LockSchedule serializes a layout change with everything selling seats of the
+// hall: the hall's scheduling lock (same key as ShowtimeRepository.LockHall, so
+// no showtime is created or moved in meanwhile), then every showtime row of the
+// hall in id order (holds and confirms share-lock them).
+func (r *HallRepository) LockSchedule(tx *gorm.DB, hallID string) error {
+	if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", hallID).Error; err != nil {
+		return err
+	}
+	var ids []string
+	return tx.Raw(`SELECT id FROM showtimes WHERE hall_id = ? AND deleted_at IS NULL ORDER BY id FOR UPDATE`, hallID).
+		Scan(&ids).Error
+}
+
+// HallHasBookings reports whether a live booking (PENDING or CONFIRMED) sits
+// on a showtime of the hall (E-H4). Expired and refunded bookings sold no
+// seat, so they do not lock the layout.
 func (r *HallRepository) HallHasBookings(tx *gorm.DB, hallID string) (bool, error) {
 	var count int64
 	err := tx.Raw(`SELECT 1 FROM bookings b
 		JOIN showtimes s ON s.id = b.showtime_id AND s.deleted_at IS NULL
-		WHERE s.hall_id = ? AND b.deleted_at IS NULL LIMIT 1`, hallID).
+		WHERE s.hall_id = ? AND b.status IN ('pending', 'confirmed') LIMIT 1`, hallID).
 		Scan(&count).Error
 	return count > 0, err
 }

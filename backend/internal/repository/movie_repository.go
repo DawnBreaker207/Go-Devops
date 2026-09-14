@@ -21,7 +21,7 @@ type MovieRepository interface {
 	Update(ctx context.Context, db *gorm.DB, movie *models.Movie) error
 	Delete(ctx context.Context, db *gorm.DB, id string) error
 	FindByID(ctx context.Context, id string) (*models.Movie, error)
-	List(ctx context.Context, query dto.PageQuery) ([]models.Movie, int64, error)
+	List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]models.Movie, int64, error)
 }
 
 type movieRepository struct {
@@ -68,8 +68,15 @@ func (r *movieRepository) FindByID(ctx context.Context, id string) (*models.Movi
 	return &movie, nil
 }
 
-func (r *movieRepository) List(ctx context.Context, query dto.PageQuery) ([]models.Movie, int64, error) {
+func (r *movieRepository) List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]models.Movie, int64, error) {
 	tx := r.db.WithContext(ctx).Model(&models.Movie{})
+
+	if query.Status != "" {
+		tx = tx.Where("status = ?", query.Status)
+	}
+	if !includeDrafts {
+		tx = tx.Where("status <> ?", models.MovieStatusDraft)
+	}
 
 	if search := strings.TrimSpace(query.Search); search != "" {
 		pattern := "%" + strings.ToLower(search) + "%"

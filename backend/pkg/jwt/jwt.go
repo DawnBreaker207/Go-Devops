@@ -28,11 +28,14 @@ type Claims struct {
 	jwtlib.RegisteredClaims
 }
 
-// TokenPair is the token pair returned to the client.
+// TokenPair is the token pair returned to the client. RefreshID and
+// RefreshExpiresAt let the caller persist the refresh token for rotation.
 type TokenPair struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresIn    int64
+	AccessToken      string
+	RefreshToken     string
+	ExpiresIn        int64
+	RefreshID        string
+	RefreshExpiresAt time.Time
 }
 
 // Manager holds the secrets and TTLs for each token type.
@@ -56,20 +59,22 @@ func NewManager(accessSecret, refreshSecret, issuer string, accessTTL, refreshTT
 
 // GeneratePair issues an access and refresh token pair.
 func (m *Manager) GeneratePair(userID, email, role string) (*TokenPair, error) {
-	accessToken, err := m.sign(userID, email, role, AccessToken, m.accessSecret, m.accessTTL)
+	accessToken, _, _, err := m.sign(userID, email, role, AccessToken, m.accessSecret, m.accessTTL)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := m.sign(userID, email, role, RefreshToken, m.refreshSecret, m.refreshTTL)
+	refreshToken, refreshID, refreshExp, err := m.sign(userID, email, role, RefreshToken, m.refreshSecret, m.refreshTTL)
 	if err != nil {
 		return nil, err
 	}
 
 	return &TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(m.accessTTL.Seconds()),
+		AccessToken:      accessToken,
+		RefreshToken:     refreshToken,
+		ExpiresIn:        int64(m.accessTTL.Seconds()),
+		RefreshID:        refreshID,
+		RefreshExpiresAt: refreshExp,
 	}, nil
 }
 
@@ -83,23 +88,27 @@ func (m *Manager) ParseRefresh(token string) (*Claims, error) {
 	return m.parse(token, m.refreshSecret, RefreshToken)
 }
 
-func (m *Manager) sign(userID, email, role string, tokenType TokenType, secret []byte, ttl time.Duration) (string, error) {
+// sign returns the token with its jti and expiry.
+func (m *Manager) sign(userID, email, role string, tokenType TokenType, secret []byte, ttl time.Duration) (string, string, time.Time, error) {
 	now := time.Now()
+	id := uuid.NewString()
+	expires := now.Add(ttl)
 	claims := Claims{
 		UserID: userID,
 		Email:  email,
 		Role:   role,
 		Type:   tokenType,
 		RegisteredClaims: jwtlib.RegisteredClaims{
-			ID:        uuid.NewString(),
+			ID:        id,
 			Subject:   userID,
 			Issuer:    m.issuer,
 			IssuedAt:  jwtlib.NewNumericDate(now),
 			NotBefore: jwtlib.NewNumericDate(now),
-			ExpiresAt: jwtlib.NewNumericDate(now.Add(ttl)),
+			ExpiresAt: jwtlib.NewNumericDate(expires),
 		},
 	}
-	return jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims).SignedString(secret)
+	token, err := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims).SignedString(secret)
+	return token, id, expires, err
 }
 
 func (m *Manager) parse(token string, secret []byte, expected TokenType) (*Claims, error) {

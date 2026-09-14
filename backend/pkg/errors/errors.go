@@ -21,6 +21,29 @@ func IsUniqueViolation(err error) bool {
 	return false
 }
 
+// IsDeadlock reports a PostgreSQL deadlock error (40P01), retried by the
+// seat-hold flow instead of surfacing to the client (R-HO2).
+func IsDeadlock(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "40P01"
+	}
+	return false
+}
+
+// IsRetryable reports transaction races worth re-running from the top:
+// unique violation (a concurrent insert won), deadlock, serialization failure.
+func IsRetryable(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505", "40P01", "40001":
+			return true
+		}
+	}
+	return false
+}
+
 // Business error codes, independent of HTTP status so clients stay stable.
 const (
 	CodeBadRequest         = 40000
@@ -32,6 +55,7 @@ const (
 	CodeConflict           = 40900
 	CodeTooManyRequests    = 42900
 	CodeInternal           = 50000
+	CodeBadGateway         = 50200
 	CodeServiceUnavailable = 50300
 )
 
@@ -108,6 +132,11 @@ func Internal(message string) *AppError {
 	return newError(http.StatusInternalServerError, CodeInternal, message)
 }
 
+// BadGateway returns 502 when an upstream provider (payment gateway) fails.
+func BadGateway(message string) *AppError {
+	return newError(http.StatusBadGateway, CodeBadGateway, message)
+}
+
 // ServiceUnavailable returns 503 when the server is temporarily unready (e.g. DB down).
 func ServiceUnavailable(message string) *AppError {
 	return newError(http.StatusServiceUnavailable, CodeServiceUnavailable, message)
@@ -135,10 +164,39 @@ var (
 	ErrShowtimeNotFound    = NotFound("showtime not found")
 	ErrSeatNotFound        = NotFound("seat not found")
 	ErrHallNameExists      = Conflict("hall name already exists")
-	ErrHallHasBookings     = Forbidden("hall layout can not be changed when it has bookings")
+	ErrHallHasBookings     = Conflict("hall layout can not be changed when it has bookings")
 	ErrShowtimeOverlap     = Conflict("showtime overlaps an existing one in this hall")
 	ErrShowtimeHasBookings = Conflict("showtime can not be deleted when it has bookings")
 	ErrSeatValidation      = Validation("invalid seat layout parameters")
 	ErrMovieNotShowing     = Validation("movie must be showing to schedule showtimes")
 	ErrShowtimeNotOpen     = NotFound("showtime is not open")
+	ErrShowtimeClosed      = Forbidden("showtime is closed for sales or has already started")
+
+	// Changing a showtime that already sells seats (E-S4).
+	ErrShowtimeScheduleLocked = Conflict("showtime with pending or confirmed bookings can only be opened or closed")
+	ErrShowtimeHallLocked     = Conflict("showtime hall can not change once it has bookings")
+	ErrShowtimeChanged        = Conflict("showtime was changed by someone else, reload and retry")
+
+	ErrBookingNotFound   = NotFound("booking not found")
+	ErrSeatTaken         = Conflict("one or more seats are no longer available")
+	ErrSeatNotSellable   = Validation("one or more seats can not be sold")
+	ErrSeatLimitExceeded = Validation("too many seats in a single booking")
+	ErrBookingExpired    = Conflict("booking hold has expired")
+	ErrBookingNotPending = Conflict("booking is not in a payable state")
+	ErrBookingNotPaid    = Conflict("booking must be paid before confirmation")
+	ErrBookingRefunded   = Conflict("booking could not be confirmed; the payment was refunded")
+	ErrPaymentInProgress = Conflict("a payment is already in progress for your pending booking")
+	ErrPaymentGateway    = BadGateway("payment provider is unavailable, please retry")
+	ErrInvalidSignature  = Unauthorized("invalid payment signature")
+	ErrMissingHallPrice  = Conflict("hall has no price for one of the requested seat types")
+	ErrTicketNotFound    = NotFound("ticket not found")
+
+	ErrAccountLocked         = Forbidden("account is locked")
+	ErrTooManyLoginAttempts  = TooManyRequests("too many failed login attempts, try again later")
+	ErrCannotLockSelf        = Conflict("you can not lock your own account")
+	ErrLastAdmin             = Conflict("at least one active admin must remain")
+	ErrCannotDemoteSelf      = Conflict("you can not change your own role")
+	ErrUploadInvalid         = Validation("file must be a JPEG, PNG or WebP image")
+	ErrUploadTooLarge        = Validation("file is too large")
+	ErrImageStoreUnavailable = BadGateway("image storage is unavailable, please retry")
 )

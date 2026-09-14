@@ -27,6 +27,12 @@ func (r MovieRequest) ParseReleaseDate() (time.Time, error) {
 	return time.Parse(DateLayout, r.ReleaseDate)
 }
 
+// MovieListQuery filters the movie list. Customers never see drafts.
+type MovieListQuery struct {
+	PageQuery
+	Status string `form:"status" binding:"omitempty,oneof=draft showing ended"`
+}
+
 // MovieResponse is a movie returned to the client.
 type MovieResponse struct {
 	ID          string    `json:"id"`

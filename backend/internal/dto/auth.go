@@ -11,6 +11,8 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email" example:"admin@cinema.local"`
 	Password string `json:"password" binding:"required,min=6" example:"secret123"`
+	// ClientIP keys the failed-login lockout together with the email.
+	ClientIP string `json:"-"`
 }
 
 // RefreshRequest is the body of POST /auth/refresh.

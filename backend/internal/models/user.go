@@ -21,6 +21,8 @@ type User struct {
 	Password  string         `gorm:"type:varchar(255);not null" json:"-"`
 	FullName  string         `gorm:"type:varchar(255);not null" json:"full_name"`
 	Role      string         `gorm:"type:varchar(32);not null;default:customer" json:"role"`
+	// Active false locks the account: no login, refresh, hold or pay (F18).
+	Active    bool           `gorm:"not null;default:true" json:"active"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

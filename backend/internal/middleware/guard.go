@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,7 +19,12 @@ import (
 func RateLimit(lim *ratelimit.Limiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !lim.Allow(c.ClientIP()) {
-			response.Abort(c, apperrors.TooManyRequests("too many requests, try again later"))
+			wait := int(math.Ceil(lim.RetryAfter().Seconds()))
+			if wait < 1 {
+				wait = 1
+			}
+			response.Abort(c, apperrors.TooManyRequests("too many requests, try again later").
+				WithDetails(map[string]string{"retry_after_seconds": strconv.Itoa(wait)}))
 			return
 		}
 		c.Next()

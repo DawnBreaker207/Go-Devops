@@ -87,10 +87,16 @@ func (m *Manager) Start() {
 	m.cron.start()
 }
 
-// Stop halts scheduling, letting already-running jobs finish.
-func (m *Manager) Stop() {
-	if m.cron != nil {
-		m.cron.stop()
+// Stop halts scheduling and waits, bounded by ctx, for running jobs to finish
+// so shutdown never closes the database under a job (E-B1, NFR-DEP-03).
+func (m *Manager) Stop(ctx context.Context) {
+	if m.cron == nil {
+		return
+	}
+	select {
+	case <-m.cron.stop().Done():
+	case <-ctx.Done():
+		logger.Warn("batch jobs still running at shutdown")
 	}
 }
 
@@ -131,8 +137,12 @@ func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	return runErr
 }
 
+// ItemAttempts is how many times a failing item is tried before it is skipped.
+const ItemAttempts = 3
+
 // RunInChunks processes items in chunks (~500), persisting progress after each
-// chunk. A failing item is counted as skipped and does not stop the job.
+// chunk. A failing item is retried up to ItemAttempts times, then counted as
+// skipped; it never stops the job (E-B4).
 func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func(ctx context.Context, item T) error) error {
 	const chunkSize = 500
 	processed, skipped := 0, 0
@@ -145,7 +155,16 @@ func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func
 			end = len(all)
 		}
 		for _, item := range all[start:end] {
-			if err := each(ctx, item); err != nil {
+			var err error
+			for attempt := 0; attempt < ItemAttempts; attempt++ {
+				if err = each(ctx, item); err == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+			}
+			if err != nil {
 				skipped++
 				continue
 			}

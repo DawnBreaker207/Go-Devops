@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,12 +10,33 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
+// sensitiveQueryKeys are credentials that travel in URLs (realtime token,
+// payment return signatures) and must not be logged (RT-01).
+var sensitiveQueryKeys = map[string]bool{"token": true, "sig": true, "signature": true}
+
+// redactQuery masks credential values of a raw query string.
+func redactQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "[unparseable]"
+	}
+	for key := range values {
+		if sensitiveQueryKeys[key] {
+			values[key] = []string{"REDACTED"}
+		}
+	}
+	return values.Encode()
+}
+
 // Logger logs each request with latency and status.
 func Logger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := redactQuery(c.Request.URL.RawQuery)
 
 		c.Next()
 

@@ -23,6 +23,8 @@ append-only):
 | 000002  | catalog (track 2)      | halls, seats, hall_prices, showtimes, showtime_seats |
 | 000003  | booking (track 3)      | bookings, tickets |
 | 000004  | operations (track 5)   | audit_logs, batch_jobs, daily_aggregates |
+| 000006  | accounts (F18, F1)     | users.active, refresh_tokens |
+| 000005  | booking fencing + payments (track 3) | booking_seats, payments; bookings.status_reason/email_sent_at/payment_id (provider/txn_ref move to payments) |
 
 `migrate-create` scaffolds the next version number automatically; place a new
 track's DDL in its own version instead of reusing an existing one.
