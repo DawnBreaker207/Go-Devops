@@ -40,9 +40,18 @@ type Handlers struct {
 	Media    *handlers.MediaHandler
 }
 
-// New builds a gin.Engine with all middleware and routes attached.
-func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, holdLimiter *ratelimit.Limiter,
-	payments *payment.Registry, h Handlers) *gin.Engine {
+// Limiters groups the rate limiters of the endpoint groups.
+type Limiters struct {
+	Auth   *ratelimit.Limiter // per IP, against password guessing
+	Hold   *ratelimit.Limiter // per IP, against seat bots
+	Events *ratelimit.Limiter // per user, realtime tokens
+}
+
+// New builds a gin.Engine with all middleware and routes attached. accounts
+// (may be nil) rechecks on every authenticated request that the account is
+// still active with the same role.
+func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts middleware.AccountChecker,
+	limits Limiters, payments *payment.Registry, h Handlers) *gin.Engine {
 	if cfg.App.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -51,9 +60,17 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
+	// Only the configured proxies may set X-Forwarded-For; with none the client
+	// IP is the TCP peer, so rate limits and the login lockout can not be
+	// dodged with a forged header (H3). Entries are validated by config.
+	if err := engine.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
+		_ = engine.SetTrustedProxies(nil)
+	}
 	engine.Use(
 		middleware.RequestID(),
 		middleware.Recovery(),
+		middleware.SecurityHeaders(),
+		middleware.BodyLimit(cfg.Server.MaxBodyBytes),
 		middleware.Logger(),
 		middleware.CORS(cfg.CORS.AllowedOrigins),
 	)
@@ -80,12 +97,12 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 
 	// DBGuard answers 503 fast when the DB is down.
 	v1 := engine.Group("/api/v1")
-	v1.Use(middleware.DBGuard(db, 500*time.Millisecond))
+	v1.Use(middleware.DBGuard(db, 500*time.Millisecond), middleware.NoStore())
 	v1.GET("/health", h.Health.Check)
 	v1.GET("/healthz", h.Health.Healthz) // HSL-01
 
 	auth := v1.Group("/auth")
-	auth.Use(middleware.RateLimit(authLimiter))
+	auth.Use(middleware.RateLimit(limits.Auth))
 	{
 		// Auth routes are public: the audit middleware only stashes IP and
 		// user agent; services fill actor after a successful login/register,
@@ -96,7 +113,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 	}
 
 	protected := v1.Group("")
-	protected.Use(middleware.Auth(jwtManager))
+	protected.Use(middleware.Auth(jwtManager, accounts))
 	{
 		protected.GET("/users/me", h.User.Me)
 
@@ -138,7 +155,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 		orders := protected.Group("/orders")
 		{
 			orders.GET("", h.Booking.List)
-			orders.POST("/hold", middleware.RateLimit(holdLimiter), middleware.Audit(db, "orders.hold", "booking"),
+			orders.POST("/hold", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.hold", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Hold)
 			orders.POST("/:id/pay", middleware.Audit(db, "orders.pay", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Pay)
@@ -159,7 +176,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 		}
 
 		// Realtime seat-map: a JWT-authenticated call mints the short-lived token.
-		protected.GET("/events/token", h.SSE.IssueToken)
+		protected.GET("/events/token", middleware.RateLimitByUser(limits.Events), h.SSE.IssueToken)
 
 		// Payment options offered to the customer (mock and real gateways alike).
 		protected.GET("/payments/providers", h.Payment.Providers)

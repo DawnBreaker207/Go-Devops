@@ -24,8 +24,9 @@ type TokenStore struct {
 	ttl time.Duration
 	now func() time.Time
 
-	mu     sync.Mutex
-	tokens map[string]tokenEntry
+	mu        sync.Mutex
+	tokens    map[string]tokenEntry
+	nextPrune time.Time
 }
 
 // NewTokenStore builds a store; ttl <= 0 uses DefaultTokenTTL and a nil clock
@@ -40,7 +41,8 @@ func NewTokenStore(ttl time.Duration, now func() time.Time) *TokenStore {
 	return &TokenStore{ttl: ttl, now: now, tokens: make(map[string]tokenEntry)}
 }
 
-// Issue mints a token for one user watching one showtime.
+// Issue mints a token for one user watching one showtime. Expired tokens are
+// swept at most once per TTL, not on every call (M13).
 func (s *TokenStore) Issue(userID, showtimeID, hallID string) (string, time.Duration) {
 	buf := make([]byte, 24)
 	if _, err := rand.Read(buf); err != nil {
@@ -51,33 +53,43 @@ func (s *TokenStore) Issue(userID, showtimeID, hallID string) (string, time.Dura
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
-	for t, e := range s.tokens {
-		if !now.Before(e.expires) {
-			delete(s.tokens, t)
+	if !now.Before(s.nextPrune) {
+		for t, e := range s.tokens {
+			if !now.Before(e.expires) {
+				delete(s.tokens, t)
+			}
 		}
+		s.nextPrune = now.Add(s.ttl)
 	}
 	s.tokens[token] = tokenEntry{userID: userID, showtimeID: showtimeID, hallID: hallID, expires: now.Add(s.ttl)}
 	return token, s.ttl
 }
 
 // Validate accepts a live token for the showtime it was issued for and
-// returns that showtime's hall.
-func (s *TokenStore) Validate(token, showtimeID string) (hallID string, ok bool) {
+// returns that showtime's hall and the user the token belongs to.
+func (s *TokenStore) Validate(token, showtimeID string) (hallID, userID string, ok bool) {
 	if token == "" {
-		return "", false
+		return "", "", false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e, found := s.tokens[token]
 	if !found {
-		return "", false
+		return "", "", false
 	}
 	if !s.now().Before(e.expires) {
 		delete(s.tokens, token)
-		return "", false
+		return "", "", false
 	}
 	if e.showtimeID != showtimeID {
-		return "", false
+		return "", "", false
 	}
-	return e.hallID, true
+	return e.hallID, e.userID, true
+}
+
+// size counts stored tokens (tests).
+func (s *TokenStore) size() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.tokens)
 }

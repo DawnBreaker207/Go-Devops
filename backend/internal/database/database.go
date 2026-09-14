@@ -2,6 +2,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -66,17 +67,16 @@ func Close(db *gorm.DB) error {
 
 // Healthy pings the DB, bounded by timeout, for health endpoints.
 func Healthy(db *gorm.DB, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return Ping(ctx, db)
+}
+
+// Ping checks the DB answers within ctx.
+func Ping(ctx context.Context, db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
-	done := make(chan error, 1)
-	go func() { done <- sqlDB.Ping() }()
-
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(timeout):
-		return fmt.Errorf("database ping timeout after %s", timeout)
-	}
+	return sqlDB.PingContext(ctx)
 }

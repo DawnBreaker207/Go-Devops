@@ -110,7 +110,8 @@ type BookingRepository interface {
 
 	PendingEmailIDs(ctx context.Context, limit int) ([]string, error)
 	ClaimEmail(ctx context.Context, id string) (int64, error)
-	ReleaseEmailClaim(ctx context.Context, id string) error
+	MarkEmailSent(ctx context.Context, id string) error
+	ReleaseEmailClaim(ctx context.Context, id string) (int, error)
 	BookingHeader(ctx context.Context, id string) (*BookingHeader, error)
 }
 
@@ -562,33 +563,58 @@ func (r *bookingRepository) DeferFinalize(ctx context.Context, id string) (int, 
 	return attempts, nil
 }
 
+// MaxTicketEmailAttempts is how many times a ticket email is tried before it
+// is given up (the tickets stay on the web, R-ML1).
+const MaxTicketEmailAttempts = 6
+
+// PendingEmailIDs lists confirmed bookings whose ticket email is due: not sent,
+// not held by a running try or waiting for its retry, tries left. Given-up
+// emails drop out, so they never starve newer ones.
 func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]string, error) {
 	var ids []string
 	if err := r.db.WithContext(ctx).Model(&models.Booking{}).
-		Where("status = ? AND email_sent_at IS NULL", models.BookingConfirmed).
+		Where("status = ? AND email_sent_at IS NULL AND email_attempts < ?", models.BookingConfirmed, MaxTicketEmailAttempts).
+		Where("email_claimed_until IS NULL OR email_claimed_until < NOW()").
 		Order("created_at").Limit(limit).Pluck("id", &ids).Error; err != nil {
 		return nil, fmt.Errorf("find bookings awaiting email: %w", err)
 	}
 	return ids, nil
 }
 
-// ClaimEmail marks a confirmed booking's email as sent before sending, so two
-// workers never mail the same booking (E-ML2). 0 rows = already claimed.
+// ClaimEmail leases a due ticket email for 5 minutes and counts the try, so
+// two workers never mail the same booking at once (E-ML2) and a worker that
+// dies mid-send leaves it to be retried after the lease. 0 rows = nothing to do.
 func (r *bookingRepository) ClaimEmail(ctx context.Context, id string) (int64, error) {
-	res := r.db.WithContext(ctx).Exec(`UPDATE bookings SET email_sent_at = NOW()
-		WHERE id = ? AND status = ? AND email_sent_at IS NULL`, id, models.BookingConfirmed)
+	res := r.db.WithContext(ctx).Exec(`UPDATE bookings
+		SET email_claimed_until = NOW() + INTERVAL '5 minutes', email_attempts = email_attempts + 1
+		WHERE id = ? AND status = ? AND email_sent_at IS NULL AND email_attempts < ?
+		  AND (email_claimed_until IS NULL OR email_claimed_until < NOW())`,
+		id, models.BookingConfirmed, MaxTicketEmailAttempts)
 	if res.Error != nil {
 		return 0, fmt.Errorf("claim ticket email: %w", res.Error)
 	}
 	return res.RowsAffected, nil
 }
 
-// ReleaseEmailClaim undoes a claim after a failed send so a later run retries.
-func (r *bookingRepository) ReleaseEmailClaim(ctx context.Context, id string) error {
-	if err := r.db.WithContext(ctx).Exec(`UPDATE bookings SET email_sent_at = NULL WHERE id = ?`, id).Error; err != nil {
-		return fmt.Errorf("release ticket email claim: %w", err)
+// MarkEmailSent records a delivered ticket email.
+func (r *bookingRepository) MarkEmailSent(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).Exec(`UPDATE bookings SET email_sent_at = NOW(), email_claimed_until = NULL
+		WHERE id = ?`, id).Error; err != nil {
+		return fmt.Errorf("mark ticket email sent: %w", err)
 	}
 	return nil
+}
+
+// ReleaseEmailClaim schedules the next try after a failed send (1 minute
+// doubled per try, at most 1 hour) and returns the tries made so far.
+func (r *bookingRepository) ReleaseEmailClaim(ctx context.Context, id string) (int, error) {
+	var attempts int
+	if err := r.db.WithContext(ctx).Raw(`UPDATE bookings
+		SET email_claimed_until = NOW() + LEAST(INTERVAL '1 hour', INTERVAL '1 minute' * power(2, GREATEST(email_attempts - 1, 0)))
+		WHERE id = ? RETURNING email_attempts`, id).Scan(&attempts).Error; err != nil {
+		return 0, fmt.Errorf("release ticket email claim: %w", err)
+	}
+	return attempts, nil
 }
 
 func (r *bookingRepository) BookingHeader(ctx context.Context, id string) (*BookingHeader, error) {

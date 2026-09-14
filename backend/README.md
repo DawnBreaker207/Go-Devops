@@ -45,13 +45,14 @@ password: admin123                (APP_ADMIN_PASSWORD)
 | ---- | ----- |
 | `make run` | Chạy server |
 | `make build` | Build binary vào `bin/backend-cp` |
-| `make test` | `go test ./... -race` |
+| `make test` | `go test ./...` (cần Postgres + RabbitMQ đang chạy) |
+| `make test-race` | Chạy toàn bộ test với `-race` trong container `golang:1.26` (race detector cần gcc) |
 | `make lint` | `go vet ./...` |
 | `make fmt` / `make tidy` | Format source / dọn `go.mod` |
 | `make swag` | Sinh lại swagger vào `docs/` |
 | `make migrate-up` / `make migrate-down` | Chạy / rollback migration (schema chỉ đến từ `migrations/schema`, gom theo module — xem `migrations/README.md`) |
 | `make migrate-db-reset` | Xoá và dựng lại DB dev từ migration + seed |
-| `make docker-up` / `make docker-down` | Docker compose |
+| `make docker-up` / `make docker-down` | Docker compose: postgres, rabbitmq, service `migrate` chạy migration rồi mới bật backend. Compose mặc định `APP_ENV=production` — chạy local thì đặt `APP_ENV=development` trong `.env`, hoặc cung cấp secret thật |
 
 ## Biến môi trường
 
@@ -68,6 +69,9 @@ Thứ tự ưu tiên: **biến môi trường → `.env` → `config.yaml` → d
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | *(bắt buộc)* | Hai secret phải khác nhau, service từ chối khởi động nếu trống hoặc trùng |
 | `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | `15m` / `168h` | Hạn của access / refresh token |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Danh sách origin, phân tách bằng dấu phẩy |
+| `SERVER_TRUSTED_PROXIES` | *(trống)* | IP/CIDR của reverse proxy được tin `X-Forwarded-For`; trống thì IP client là địa chỉ TCP |
+| `PAYMENT_LATE_CAPTURE_WINDOW` | `24h` | Thời gian kiểm lại lượt thanh toán đã bỏ để bắt tiền về muộn (≥ 1h) |
+| `PAYMENT_PROVIDERS_MOCK_ALLOW_IN_PRODUCTION` | `false` | Cổng mock không thu tiền thật: chỉ chạy ở production khi bật cờ này |
 
 ## API
 

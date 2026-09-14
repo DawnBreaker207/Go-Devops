@@ -15,9 +15,13 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// dialTimeout bounds opening a broker connection, which runs under the
-// client lock.
-const dialTimeout = 5 * time.Second
+const (
+	// dialTimeout bounds opening a broker connection, which runs under the
+	// client lock.
+	dialTimeout = 5 * time.Second
+	// consumerPrefetch is how many unacked messages a consumer holds at once.
+	consumerPrefetch = 10
+)
 
 var errClosed = errors.New("queue client is closed")
 
@@ -155,6 +159,11 @@ func (c *Client) Consume(ctx context.Context, queueName string, handler func(con
 		}
 		ch, err = conn.Channel()
 		if err != nil {
+			_ = conn.Close()
+			return err
+		}
+		// Hold only a few unacked messages in memory; the rest stay in the queue.
+		if err = ch.Qos(consumerPrefetch, 0, false); err != nil {
 			_ = conn.Close()
 			return err
 		}

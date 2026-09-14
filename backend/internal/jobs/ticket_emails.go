@@ -27,8 +27,9 @@ func NewSendTicketEmails(emails service.TicketEmailService) *batch.Job {
 				return err
 			}
 			return batch.RunInChunks(ctx, opts, ids, func(ctx context.Context, id string) error {
+				// Each email keeps its own retry schedule: no immediate retries.
 				_, err := emails.Send(ctx, id)
-				return err
+				return batch.NoRetry(err)
 			})
 		},
 	}

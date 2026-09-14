@@ -22,6 +22,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/config"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/handlers"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/jobs"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/router"
@@ -38,6 +39,8 @@ type httpEnv struct {
 	engine *gin.Engine
 	srv    *httptest.Server
 	tokens *sse.TokenStore
+	// trustedProxies configures the engine built after it is set.
+	trustedProxies []string
 }
 
 func newHTTPEnv(t *testing.T) *httpEnv {
@@ -51,18 +54,26 @@ func newHTTPEnv(t *testing.T) *httpEnv {
 func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
-		App:  config.AppConfig{Name: "test", Env: "test"},
-		CORS: config.CORSConfig{AllowedOrigins: []string{"http://localhost"}},
+		App:    config.AppConfig{Name: "test", Env: "test"},
+		CORS:   config.CORSConfig{AllowedOrigins: []string{"http://localhost"}},
+		Server: config.ServerConfig{MaxBodyBytes: 1 << 20, TrustedProxies: h.trustedProxies},
 	}
 	h.tokens = sse.NewTokenStore(sse.DefaultTokenTTL, nil)
 	runs := repository.NewBatchJobRepository(db)
 	mediaDir := h.t.TempDir()
-	return router.New(cfg, db, h.jwt, ratelimit.New(10000, 1000), ratelimit.New(10000, 1000), h.providers, router.Handlers{
+	userRepo := repository.NewUserRepository(db)
+	accounts := service.NewAccountStatusCache(userRepo, 30*time.Second)
+	limits := router.Limiters{
+		Auth:   ratelimit.New(10000, 1000),
+		Hold:   ratelimit.New(10000, 1000),
+		Events: ratelimit.New(10000, 1000),
+	}
+	return router.New(cfg, db, h.jwt, accounts, limits, h.providers, router.Handlers{
 		Health:   handlers.NewHealthHandler(db, "test"),
 		Auth:     handlers.NewAuthHandler(h.auth),
-		User:     handlers.NewUserHandler(h.accounts),
+		User:     handlers.NewUserHandler(service.NewUserService(db, userRepo, accounts.Invalidate)),
 		Movie:    handlers.NewMovieHandler(h.movies),
-		Batch:    handlers.NewBatchHandler(batch.NewManager(db, runs), runs, db),
+		Batch:    handlers.NewBatchHandler(h.batchManager(db, runs), runs, db),
 		Hall:     handlers.NewHallHandler(h.halls),
 		Showtime: handlers.NewShowtimeHandler(h.showtimes),
 		Booking:  handlers.NewBookingHandler(h.svc),
@@ -72,6 +83,19 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Report:   handlers.NewReportHandler(h.reports),
 		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
 	})
+}
+
+// batchManager registers the jobs the HTTP tests trigger; runs started by a
+// test are stopped with it.
+func (h *httpEnv) batchManager(db *gorm.DB, runs repository.BatchJobRepository) *batch.Manager {
+	m := batch.NewManager(db, runs)
+	m.Register(jobs.NewCloseDay(h.reports, time.UTC))
+	h.t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		m.Stop(ctx)
+	})
+	return m
 }
 
 // login creates an account of role and returns its access token and id.

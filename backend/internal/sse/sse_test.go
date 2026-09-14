@@ -9,12 +9,21 @@ func event(show, seat, status string) SeatEvent {
 	return SeatEvent{ShowtimeID: show, Seats: []SeatUpdate{{ID: seat, Status: status}}}
 }
 
+func subscribe(t *testing.T, hub *Hub, show, user string) *Subscription {
+	t.Helper()
+	sub, err := hub.Subscribe(show, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sub
+}
+
 // T19 / R-S10: viewers of show A never receive show B's events.
 func TestHub_IsolatesShowtimes(t *testing.T) {
 	hub := NewHub()
-	a := hub.Subscribe("show-a")
+	a := subscribe(t, hub, "show-a", "u1")
 	defer a.Close()
-	b := hub.Subscribe("show-b")
+	b := subscribe(t, hub, "show-b", "u2")
 	defer b.Close()
 
 	hub.Broadcast("show-b", event("show-b", "s1", "held"))
@@ -37,9 +46,9 @@ func TestHub_IsolatesShowtimes(t *testing.T) {
 // R-S4: a client that stops reading is dropped, others keep receiving.
 func TestHub_DropsSlowClient(t *testing.T) {
 	hub := NewHub()
-	slow := hub.Subscribe("show")
+	slow := subscribe(t, hub, "show", "u1")
 	defer slow.Close()
-	fast := hub.Subscribe("show")
+	fast := subscribe(t, hub, "show", "u2")
 	defer fast.Close()
 
 	for i := 0; i < clientBuffer+1; i++ {
@@ -60,21 +69,21 @@ func TestHub_DropsSlowClient(t *testing.T) {
 
 func TestHub_CloseEndsSubscriptions(t *testing.T) {
 	hub := NewHub()
-	sub := hub.Subscribe("show")
+	sub := subscribe(t, hub, "show", "u1")
 	sub.Close()
 	sub.Close() // idempotent
 	if hub.Viewers("show") != 0 {
 		t.Fatal("closed subscription still counted")
 	}
 
-	live := hub.Subscribe("show")
+	live := subscribe(t, hub, "show", "u1")
 	hub.Close()
 	select {
 	case <-live.Done:
 	case <-time.After(time.Second):
 		t.Fatal("hub.Close did not end the stream")
 	}
-	late := hub.Subscribe("show")
+	late := subscribe(t, hub, "show", "u1")
 	select {
 	case <-late.Done:
 	default:
@@ -92,23 +101,61 @@ func TestTokenStore(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ { // reconnect with the same URL
-		if hall, ok := store.Validate(token, "show-a"); !ok || hall != "hall-1" {
-			t.Fatalf("attempt %d: ok=%v hall=%q", i, ok, hall)
+		if hall, user, ok := store.Validate(token, "show-a"); !ok || hall != "hall-1" || user != "user-1" {
+			t.Fatalf("attempt %d: ok=%v hall=%q user=%q", i, ok, hall, user)
 		}
 	}
-	if _, ok := store.Validate(token, "show-b"); ok {
+	if _, _, ok := store.Validate(token, "show-b"); ok {
 		t.Fatal("token opened another showtime")
 	}
-	if _, ok := store.Validate("forged", "show-a"); ok {
+	if _, _, ok := store.Validate("forged", "show-a"); ok {
 		t.Fatal("unknown token accepted")
 	}
 
 	now = now.Add(29 * time.Second)
-	if _, ok := store.Validate(token, "show-a"); !ok {
+	if _, _, ok := store.Validate(token, "show-a"); !ok {
 		t.Fatal("token rejected before expiry")
 	}
 	now = now.Add(time.Second)
-	if _, ok := store.Validate(token, "show-a"); ok {
+	if _, _, ok := store.Validate(token, "show-a"); ok {
 		t.Fatal("expired token accepted")
+	}
+}
+
+// M13: one user can not open streams without bound, nor the whole server.
+func TestHub_StreamLimits(t *testing.T) {
+	hub := NewHub()
+	hub.MaxStreamsPerUser, hub.MaxStreams = 2, 3
+	a1 := subscribe(t, hub, "show", "a")
+	subscribe(t, hub, "show", "a")
+	if _, err := hub.Subscribe("show", "a"); err != ErrTooManyStreams {
+		t.Fatalf("third stream of one user: err = %v", err)
+	}
+	subscribe(t, hub, "other", "b")
+	if _, err := hub.Subscribe("show", "c"); err != ErrTooManyStreams {
+		t.Fatalf("stream over the server limit: err = %v", err)
+	}
+	a1.Close()
+	a1.Close() // releases its slot once
+	if _, err := hub.Subscribe("show", "a"); err != nil {
+		t.Fatalf("stream after closing one: %v", err)
+	}
+}
+
+// M13: expired tokens are swept at most once per TTL, not on every issue.
+func TestTokenStore_PrunesLazily(t *testing.T) {
+	now := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
+	store := NewTokenStore(30*time.Second, func() time.Time { return now })
+	store.Issue("u", "s", "h")
+	store.Issue("u", "s", "h")
+	now = now.Add(31 * time.Second)
+	store.Issue("u", "s", "h") // sweep: the first two expired
+	if n := store.size(); n != 1 {
+		t.Fatalf("tokens after sweep = %d, want 1", n)
+	}
+	now = now.Add(31 * time.Second)
+	store.Issue("u", "s", "h") // within the same sweep window? no: 31s later, sweeps again
+	if n := store.size(); n != 1 {
+		t.Fatalf("tokens after second sweep = %d, want 1", n)
 	}
 }

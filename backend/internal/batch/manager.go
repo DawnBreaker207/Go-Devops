@@ -6,7 +6,10 @@ package batch
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"runtime/debug"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -35,16 +38,31 @@ type RunOptions struct {
 	Progress func(processed, skipped int) error
 }
 
+const (
+	// runTimeout bounds one run of any job.
+	runTimeout = 30 * time.Minute
+	// bookkeepingTimeout bounds writing a run's progress or final row, which
+	// must happen even when the run's own context is already canceled.
+	bookkeepingTimeout = 5 * time.Second
+)
+
 // Manager registers, schedules and runs jobs, logging runs to batch_jobs.
 type Manager struct {
 	db   *gorm.DB
 	repo repository.BatchJobRepository
 	jobs map[string]*Job
 	cron *cronScheduler
+
+	// ctx is canceled by Stop: every running job sees it and winds down.
+	ctx    context.Context
+	cancel context.CancelFunc
+	// manual tracks runs started by Trigger.
+	manual sync.WaitGroup
 }
 
 func NewManager(db *gorm.DB, repo repository.BatchJobRepository) *Manager {
-	return &Manager{db: db, repo: repo, jobs: make(map[string]*Job)}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Manager{db: db, repo: repo, jobs: make(map[string]*Job), ctx: ctx, cancel: cancel}
 }
 
 // Register adds a job. Name is the identity; a duplicate silently replaces.
@@ -61,22 +79,24 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// Start schedules cron jobs that declare a schedule.
-func (m *Manager) Start() {
+// Start closes runs a previous process left RUNNING, then schedules cron jobs
+// that declare a schedule.
+func (m *Manager) Start(ctx context.Context) error {
+	stopped, err := m.repo.StopOrphans(ctx)
+	if err != nil {
+		return err
+	}
+	if stopped > 0 {
+		logger.Warn("batch runs interrupted by the last shutdown marked stopped", logger.Int("runs", int(stopped)))
+	}
+
 	m.cron = newCron()
 	for _, job := range m.jobs {
 		if job.Schedule == "" {
 			continue
 		}
 		name := job.Name
-		if _, err := m.cron.addFunc(job.Schedule, func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-			defer cancel()
-			if err := m.Run(ctx, name, models.TriggerCron); err != nil {
-				logger.Error("scheduled batch job failed",
-					logger.String("job", name), logger.Err(err))
-			}
-		}); err != nil {
+		if _, err := m.cron.addFunc(job.Schedule, func() { m.runScheduled(name) }); err != nil {
 			logger.Error("invalid cron schedule",
 				logger.String("job", name), logger.String("schedule", job.Schedule), logger.Err(err))
 			continue
@@ -85,60 +105,146 @@ func (m *Manager) Start() {
 			logger.String("job", name), logger.String("schedule", job.Schedule))
 	}
 	m.cron.start()
+	return nil
 }
 
-// Stop halts scheduling and waits, bounded by ctx, for running jobs to finish
-// so shutdown never closes the database under a job (E-B1, NFR-DEP-03).
-func (m *Manager) Stop(ctx context.Context) {
-	if m.cron == nil {
-		return
+// runScheduled is one cron tick. A tick that finds the previous run still going
+// is logged as a skipped run instead of an error.
+func (m *Manager) runScheduled(name string) {
+	ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
+	defer cancel()
+	err := m.Run(ctx, name, models.TriggerCron)
+	switch {
+	case err == nil:
+	case errors.Is(err, apperrors.ErrJobRunning):
+		bctx, bcancel := context.WithTimeout(context.Background(), bookkeepingTimeout)
+		defer bcancel()
+		if rerr := m.repo.RecordSkipped(bctx, name, models.TriggerCron, "previous run still running"); rerr != nil {
+			logger.Warn("skipped batch run not recorded", logger.String("job", name), logger.Err(rerr))
+		}
+	default:
+		logger.Error("scheduled batch job failed", logger.String("job", name), logger.Err(err))
 	}
+}
+
+// Stop halts scheduling, cancels the context of running jobs (they are chunked
+// and safe to rerun) and waits, bounded by ctx, for them to finish so shutdown
+// never closes the database under a job (E-B1, NFR-DEP-03).
+func (m *Manager) Stop(ctx context.Context) {
+	m.cancel()
+	done := make(chan struct{})
+	go func() {
+		if m.cron != nil {
+			<-m.cron.stop().Done()
+		}
+		m.manual.Wait()
+		close(done)
+	}()
 	select {
-	case <-m.cron.stop().Done():
+	case <-done:
 	case <-ctx.Done():
 		logger.Warn("batch jobs still running at shutdown")
 	}
 }
 
-// Run executes one job now: opens a RUNNING row, calls the job, closes the row.
-// A second call while the job is running returns ErrJobRunning.
+// Run executes one job now and waits for it: opens a RUNNING row, calls the
+// job, closes the row whatever happens (error, panic, cancellation). A second
+// call while the job is running returns ErrJobRunning.
 func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
-	job, ok := m.jobs[name]
-	if !ok {
-		return apperrors.ErrJobNotFound
-	}
-
-	run, err := m.repo.Start(ctx, name, triggeredBy)
+	job, run, err := m.begin(ctx, name, triggeredBy)
 	if err != nil {
 		return err
 	}
+	return m.execute(ctx, job, run)
+}
 
+// Trigger starts a manual run in the background. It returns once the run's
+// RUNNING row exists, so an unknown job (404) or a run already going (409) is
+// reported to the caller; the result lands in batch_jobs.
+func (m *Manager) Trigger(name, triggeredBy string) (string, error) {
+	job, run, err := m.begin(m.ctx, name, triggeredBy)
+	if err != nil {
+		return "", err
+	}
+	m.manual.Add(1)
+	go func() {
+		defer m.manual.Done()
+		ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
+		defer cancel()
+		if err := m.execute(ctx, job, run); err != nil {
+			logger.Error("manual batch job failed", logger.String("job", name), logger.Err(err))
+		}
+	}()
+	return run.ID, nil
+}
+
+func (m *Manager) begin(ctx context.Context, name, triggeredBy string) (*Job, *models.BatchJob, error) {
+	job, ok := m.jobs[name]
+	if !ok {
+		return nil, nil, apperrors.ErrJobNotFound
+	}
+	run, err := m.repo.Start(ctx, name, triggeredBy)
+	if err != nil {
+		return nil, nil, err
+	}
+	return job, run, nil
+}
+
+// execute runs the job and always closes its row: success, failed (error or
+// panic) or stopped (canceled by shutdown).
+func (m *Manager) execute(ctx context.Context, job *Job, run *models.BatchJob) (runErr error) {
+	bookkeeping := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
+	}
 	opts := RunOptions{
 		DB:          m.db,
 		RunID:       run.ID,
-		TriggeredBy: triggeredBy,
+		TriggeredBy: run.TriggeredBy,
 		Progress: func(processed, skipped int) error {
-			return m.repo.RecordProgress(context.Background(), run.ID, processed, skipped)
+			pctx, cancel := bookkeeping()
+			defer cancel()
+			return m.repo.RecordProgress(pctx, run.ID, processed, skipped)
 		},
 	}
 
-	runErr := job.Run(ctx, opts)
-	status := models.BatchSuccess
-	msg := ""
-	if runErr != nil {
-		status, msg = models.BatchFailed, runErr.Error()
-	}
-	if err := m.repo.Finish(context.Background(), run.ID, status, msg); err != nil {
-		logger.Error("finish batch job failed", logger.String("run_id", run.ID), logger.Err(err))
-	}
-	if runErr != nil {
-		runErr = fmt.Errorf("%s failed: %w", name, runErr)
-	}
-	return runErr
+	defer func() {
+		status, msg := models.BatchSuccess, ""
+		if r := recover(); r != nil {
+			runErr = fmt.Errorf("%s panicked: %v", job.Name, r)
+			status, msg = models.BatchFailed, runErr.Error()
+			logger.Error("batch job panicked", logger.String("job", job.Name),
+				logger.String("panic", fmt.Sprint(r)), logger.String("stack", string(debug.Stack())))
+		} else if runErr != nil {
+			status, msg = models.BatchFailed, runErr.Error()
+			if ctx.Err() != nil {
+				status = models.BatchStopped
+			}
+			runErr = fmt.Errorf("%s failed: %w", job.Name, runErr)
+		}
+		fctx, cancel := bookkeeping()
+		defer cancel()
+		if err := m.repo.Finish(fctx, run.ID, status, msg); err != nil {
+			logger.Error("finish batch job failed", logger.String("run_id", run.ID), logger.Err(err))
+		}
+	}()
+	return job.Run(ctx, opts)
 }
 
 // ItemAttempts is how many times a failing item is tried before it is skipped.
 const ItemAttempts = 3
+
+// NoRetry marks an item error that trying again right away can not fix (the
+// item keeps its own retry schedule): RunInChunks skips the item at once.
+func NoRetry(err error) error {
+	if err == nil {
+		return nil
+	}
+	return noRetryError{err}
+}
+
+type noRetryError struct{ error }
+
+func (e noRetryError) Unwrap() error { return e.error }
 
 // RunInChunks processes items in chunks (~500), persisting progress after each
 // chunk. A failing item is retried up to ItemAttempts times, then counted as
@@ -162,6 +268,10 @@ func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func
 				}
 				if ctx.Err() != nil {
 					return ctx.Err()
+				}
+				var noRetry noRetryError
+				if errors.As(err, &noRetry) {
+					break
 				}
 			}
 			if err != nil {

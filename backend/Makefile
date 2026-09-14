@@ -6,7 +6,7 @@ MIGRATE_URL ?= postgres://postgres:postgres@localhost:5432/cinema?sslmode=disabl
 DATABASE_NAME ?= cinema
 DATABASE_USER ?= postgres
 
-.PHONY: help run build test lint fmt tidy swag migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
+.PHONY: help run build test test-race lint fmt tidy swag migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
 
 help: ## Liet ke cac lenh co san
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -18,8 +18,14 @@ build: ## Build binary vao bin/
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BIN_DIR)/$(APP_NAME) $(MAIN_PKG)
 
-test: ## Chay unit test
-	go test ./... -race -count=1
+test: ## Chay toan bo test (can Postgres + RabbitMQ: docker compose up -d postgres rabbitmq)
+	go test ./... -count=1
+
+test-race: ## Chay test voi -race trong Docker (race detector can gcc/CGO)
+	docker run --rm -v "$(CURDIR):/src" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /src \
+		-e CGO_ENABLED=1 -e TEST_DB_HOST=host.docker.internal \
+		-e QUEUE_TEST_URL=amqp://guest:guest@host.docker.internal:5672/ \
+		golang:1.26 go test -race -count=1 ./...
 
 lint: ## Chay go vet (cai golangci-lint de kiem tra sau hon)
 	go vet ./...
@@ -60,9 +66,7 @@ migrate-create-seed: ## Scaffold a seed script: make migrate-create-seed name=sa
 	touch migrations/seed/$$f; \
 	echo created migrations/seed/$$f
 
-docker-up: ## Apply schema, then start postgres + rabbitmq + backend
-	@command -v migrate >/dev/null 2>&1 || (echo "install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest" && exit 1)
-	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
+docker-up: ## Build and start postgres + rabbitmq + migrate + backend (set secrets or APP_ENV=development in .env)
 	docker compose up -d --build
 
 docker-down: ## Dung va xoa container

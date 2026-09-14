@@ -41,8 +41,10 @@ func NewTicketEmailService(db *gorm.DB, repo repository.BookingRepository, maile
 	return &ticketEmailService{db: db, repo: repo, mailer: mailer, location: location}
 }
 
-// Send claims the booking (email_sent_at) before sending so duplicates never
-// mail twice (E-ML2); a failed send releases the claim for the next run.
+// Send leases the booking's ticket email, sends it and only then marks it sent
+// (at least once: a worker dying between send and mark sends again after the
+// lease, but never twice at the same time, E-ML2). A failed send backs off;
+// after the last try it is given up with one audit row (E-ML1).
 func (s *ticketEmailService) Send(ctx context.Context, bookingID string) (bool, error) {
 	n, err := s.repo.ClaimEmail(ctx, bookingID)
 	if err != nil {
@@ -55,24 +57,35 @@ func (s *ticketEmailService) Send(ctx context.Context, bookingID string) (bool, 
 	if err == nil {
 		err = s.mailer.Send(ctx, msg)
 	}
-	if err != nil {
-		bg := context.WithoutCancel(ctx)
-		if rerr := s.repo.ReleaseEmailClaim(bg, bookingID); rerr != nil {
-			logger.Warn("ticket email claim not released", logger.String("booking_id", bookingID), logger.Err(rerr))
+	bg := context.WithoutCancel(ctx)
+	if err == nil {
+		if merr := s.repo.MarkEmailSent(bg, bookingID); merr != nil {
+			return true, merr
 		}
-		if aerr := audit.In(bg, s.db, audit.Record{
-			ActorRole:    "system",
-			Action:       "email.ticket_failed",
-			ResourceType: "booking",
-			ResourceID:   bookingID,
-			Outcome:      audit.OutcomeFailure,
-			ErrorMessage: err.Error(),
-		}); aerr != nil {
-			logger.Warn("ticket email failure not audited", logger.Err(aerr))
-		}
+		return true, nil
+	}
+
+	attempts, rerr := s.repo.ReleaseEmailClaim(bg, bookingID)
+	if rerr != nil {
+		logger.Warn("ticket email retry not scheduled", logger.String("booking_id", bookingID), logger.Err(rerr))
+	}
+	if attempts < repository.MaxTicketEmailAttempts {
+		logger.Warn("ticket email failed; will retry", logger.String("booking_id", bookingID),
+			logger.Int("attempt", attempts), logger.Err(err))
 		return false, err
 	}
-	return true, nil
+	logger.Error("ticket email given up; the tickets stay on the web", logger.String("booking_id", bookingID), logger.Err(err))
+	if aerr := audit.In(bg, s.db, audit.Record{
+		ActorRole:    "system",
+		Action:       "email.ticket_failed",
+		ResourceType: "booking",
+		ResourceID:   bookingID,
+		Outcome:      audit.OutcomeFailure,
+		ErrorMessage: err.Error(),
+	}); aerr != nil {
+		logger.Warn("ticket email failure not audited", logger.Err(aerr))
+	}
+	return false, err
 }
 
 func (s *ticketEmailService) PendingIDs(ctx context.Context, limit int) ([]string, error) {

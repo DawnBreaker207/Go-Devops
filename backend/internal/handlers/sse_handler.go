@@ -28,15 +28,23 @@ type SSEHandler struct {
 	showtimes ShowtimeLookup
 	debounce  time.Duration
 	keepalive time.Duration
+	// writeTimeout bounds every single write: a client that stops reading
+	// frees its connection instead of holding a goroutine forever (M13).
+	writeTimeout time.Duration
+	// maxAge ends a stream so the client comes back through /events/token,
+	// which rechecks the account and the showtime.
+	maxAge time.Duration
 }
 
 func NewSSEHandler(hub *sse.Hub, tokens *sse.TokenStore, showtimes ShowtimeLookup) *SSEHandler {
 	return &SSEHandler{
-		hub:       hub,
-		tokens:    tokens,
-		showtimes: showtimes,
-		debounce:  100 * time.Millisecond,
-		keepalive: 15 * time.Second,
+		hub:          hub,
+		tokens:       tokens,
+		showtimes:    showtimes,
+		debounce:     100 * time.Millisecond,
+		keepalive:    15 * time.Second,
+		writeTimeout: 10 * time.Second,
+		maxAge:       30 * time.Minute,
 	}
 }
 
@@ -90,18 +98,18 @@ func (h *SSEHandler) IssueToken(c *gin.Context) {
 //	@Router			/events/shows/{id} [get]
 func (h *SSEHandler) Stream(c *gin.Context) {
 	showtimeID := c.Param("id")
-	hallID, ok := h.tokens.Validate(c.Query("token"), showtimeID)
+	hallID, userID, ok := h.tokens.Validate(c.Query("token"), showtimeID)
 	if !ok {
 		// R-S3: the page requests a fresh token and reconnects.
 		response.Error(c, apperrors.Unauthorized("invalid or expired realtime token"))
 		return
 	}
 
-	// The server-wide WriteTimeout would cut this long-lived response; lift
-	// the deadline for this connection only.
-	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
-
-	sub := h.hub.Subscribe(showtimeID)
+	sub, err := h.hub.Subscribe(showtimeID, userID)
+	if err != nil {
+		response.Error(c, apperrors.TooManyRequests("too many realtime streams open; close another tab"))
+		return
+	}
 	defer sub.Close()
 
 	c.Header("Content-Type", "text/event-stream")
@@ -110,13 +118,16 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no") // R-S1: nginx must not buffer
 	c.Status(http.StatusOK)
 
+	// The server-wide WriteTimeout would cut this long-lived response; every
+	// write gets its own short deadline instead, so a stalled client is let go.
+	rc := http.NewResponseController(c.Writer)
 	w := c.Writer
 	write := func(chunk string) bool {
+		_ = rc.SetWriteDeadline(time.Now().Add(h.writeTimeout))
 		if _, err := w.WriteString(chunk); err != nil {
 			return false
 		}
-		w.Flush()
-		return true
+		return rc.Flush() == nil
 	}
 	event := func(name string, data any) bool {
 		body, err := json.Marshal(data)
@@ -133,6 +144,8 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 
 	keepalive := time.NewTicker(h.keepalive)
 	defer keepalive.Stop()
+	expire := time.NewTimer(h.maxAge)
+	defer expire.Stop()
 
 	var (
 		pending []sse.SeatUpdate
@@ -152,6 +165,8 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 			return
 		case <-sub.Done:
 			return
+		case <-expire.C:
+			return // retry: 3000 brings the client back through a fresh token
 		case <-keepalive.C:
 			if !write(": ping\n\n") {
 				return

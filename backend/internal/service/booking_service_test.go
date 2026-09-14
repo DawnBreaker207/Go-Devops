@@ -221,7 +221,8 @@ func TestHold_Rejections(t *testing.T) {
 func TestPayConfirm_HappyPath(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
-	sub := e.hub.Subscribe(e.showID)
+	sub, err := e.hub.Subscribe(e.showID, "viewer")
+	e.must(err)
 	defer sub.Close()
 
 	h := e.mustHold(u, "A1", "B1", "B2")

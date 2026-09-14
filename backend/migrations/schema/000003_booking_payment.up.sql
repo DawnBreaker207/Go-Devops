@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS bookings (
     finalize_attempts INTEGER   NOT NULL DEFAULT 0,
     next_finalize_at  TIMESTAMPTZ,
     email_sent_at   TIMESTAMPTZ,
+    -- Ticket email sending is leased and retried with backoff, 6 tries at most.
+    email_attempts      INTEGER NOT NULL DEFAULT 0,
+    email_claimed_until TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at      TIMESTAMPTZ,

@@ -26,10 +26,13 @@ type UserService interface {
 type userService struct {
 	db       *gorm.DB
 	userRepo repository.UserRepository
+	onChange []func(userID string)
 }
 
-func NewUserService(db *gorm.DB, userRepo repository.UserRepository) UserService {
-	return &userService{db: db, userRepo: userRepo}
+// NewUserService builds the service; onChange callbacks run after an account's
+// active flag or role changed (e.g. AccountStatusCache.Invalidate).
+func NewUserService(db *gorm.DB, userRepo repository.UserRepository, onChange ...func(userID string)) UserService {
+	return &userService{db: db, userRepo: userRepo, onChange: onChange}
 }
 
 func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse, error) {
@@ -157,6 +160,9 @@ func (s *userService) Update(ctx context.Context, actorID, userID string, req dt
 	})
 	if err != nil {
 		return nil, err
+	}
+	for _, fn := range s.onChange {
+		fn(userID)
 	}
 	result := dto.NewUserResponse(user)
 	return &result, nil

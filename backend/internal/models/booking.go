@@ -42,12 +42,15 @@ type Booking struct {
 	PaymentID *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
 	PaidAt    *time.Time `json:"paid_at,omitempty"`
 	// A paid booking the sweep could not settle waits until NextFinalizeAt.
-	FinalizeAttempts int            `gorm:"not null;default:0" json:"-"`
-	NextFinalizeAt   *time.Time     `json:"-"`
-	EmailSentAt      *time.Time     `json:"email_sent_at,omitempty"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+	FinalizeAttempts int        `gorm:"not null;default:0" json:"-"`
+	NextFinalizeAt   *time.Time `json:"-"`
+	EmailSentAt      *time.Time `json:"email_sent_at,omitempty"`
+	// Ticket email tries; a try holds the booking until EmailClaimedUntil.
+	EmailAttempts     int            `gorm:"not null;default:0" json:"-"`
+	EmailClaimedUntil *time.Time     `json:"-"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Booking) TableName() string { return "bookings" }

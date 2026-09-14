@@ -2,7 +2,10 @@
 // changes out per showtime, plus short-lived connection tokens.
 package sse
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 // SeatUpdate is one seat status change. ID is the showtime_seat id.
 type SeatUpdate struct {
@@ -20,7 +23,18 @@ type SeatEvent struct {
 // far behind is dropped instead of slowing everyone down (R-S4).
 const clientBuffer = 64
 
+const (
+	// DefaultMaxStreamsPerUser bounds the open streams of one user (tabs).
+	DefaultMaxStreamsPerUser = 5
+	// DefaultMaxStreams bounds all open streams of the server.
+	DefaultMaxStreams = 2000
+)
+
+// ErrTooManyStreams refuses a stream over the per-user or global limit.
+var ErrTooManyStreams = errors.New("too many realtime streams")
+
 type client struct {
+	user string
 	ch   chan SeatEvent
 	done chan struct{}
 	once sync.Once
@@ -43,24 +57,41 @@ func (s *Subscription) Close() { s.close() }
 // Hub keeps one client set per showtime, so an event can never reach viewers
 // of another showtime (R-S10).
 type Hub struct {
-	mu     sync.RWMutex
-	shows  map[string]map[*client]struct{}
-	closed bool
+	// MaxStreamsPerUser and MaxStreams limit open streams (M13); set them
+	// before the hub is used.
+	MaxStreamsPerUser int
+	MaxStreams        int
+
+	mu      sync.RWMutex
+	shows   map[string]map[*client]struct{}
+	perUser map[string]int
+	total   int
+	closed  bool
 }
 
-// NewHub creates the realtime hub.
+// NewHub creates the realtime hub with the default stream limits.
 func NewHub() *Hub {
-	return &Hub{shows: make(map[string]map[*client]struct{})}
+	return &Hub{
+		MaxStreamsPerUser: DefaultMaxStreamsPerUser,
+		MaxStreams:        DefaultMaxStreams,
+		shows:             make(map[string]map[*client]struct{}),
+		perUser:           make(map[string]int),
+	}
 }
 
-// Subscribe attaches a viewer to a showtime.
-func (h *Hub) Subscribe(showtimeID string) *Subscription {
-	c := &client{ch: make(chan SeatEvent, clientBuffer), done: make(chan struct{})}
+// Subscribe attaches a viewer of userID to a showtime, or refuses it with
+// ErrTooManyStreams when the user or the server has too many streams open.
+func (h *Hub) Subscribe(showtimeID, userID string) (*Subscription, error) {
+	c := &client{user: userID, ch: make(chan SeatEvent, clientBuffer), done: make(chan struct{})}
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
 		c.drop()
-		return &Subscription{Events: c.ch, Done: c.done, close: func() {}}
+		return &Subscription{Events: c.ch, Done: c.done, close: func() {}}, nil
+	}
+	if h.total >= h.MaxStreams || h.perUser[userID] >= h.MaxStreamsPerUser {
+		h.mu.Unlock()
+		return nil, ErrTooManyStreams
 	}
 	clients := h.shows[showtimeID]
 	if clients == nil {
@@ -68,21 +99,39 @@ func (h *Hub) Subscribe(showtimeID string) *Subscription {
 		h.shows[showtimeID] = clients
 	}
 	clients[c] = struct{}{}
+	h.perUser[userID]++
+	h.total++
 	h.mu.Unlock()
 
-	return &Subscription{Events: c.ch, Done: c.done, close: func() { h.remove(showtimeID, c) }}
+	var once sync.Once
+	return &Subscription{Events: c.ch, Done: c.done, close: func() {
+		once.Do(func() { h.remove(showtimeID, c) })
+	}}, nil
 }
 
 func (h *Hub) remove(showtimeID string, c *client) {
 	h.mu.Lock()
 	if clients, ok := h.shows[showtimeID]; ok {
-		delete(clients, c)
+		if _, attached := clients[c]; attached {
+			delete(clients, c)
+			h.release(c.user)
+		}
 		if len(clients) == 0 {
 			delete(h.shows, showtimeID)
 		}
 	}
 	h.mu.Unlock()
 	c.drop()
+}
+
+// release gives back a user's stream slot; the caller holds h.mu.
+func (h *Hub) release(user string) {
+	h.total--
+	if h.perUser[user] <= 1 {
+		delete(h.perUser, user)
+	} else {
+		h.perUser[user]--
+	}
 }
 
 // Broadcast delivers an event to the viewers of exactly this showtime without
@@ -118,4 +167,6 @@ func (h *Hub) Close() {
 		}
 		delete(h.shows, id)
 	}
+	h.perUser = make(map[string]int)
+	h.total = 0
 }

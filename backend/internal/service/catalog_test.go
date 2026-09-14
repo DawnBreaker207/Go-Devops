@@ -87,7 +87,8 @@ func TestMovies_DraftsHiddenFromCustomers(t *testing.T) {
 // E-R2: the customer releases a hold; seats free up and viewers see it now.
 func TestCancelHold_ReleasesSeatsImmediately(t *testing.T) {
 	e := newEnv(t)
-	sub := e.hub.Subscribe(e.showID)
+	sub, err := e.hub.Subscribe(e.showID, "viewer")
+	e.must(err)
 	defer sub.Close()
 	u := e.users[0]
 

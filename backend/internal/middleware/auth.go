@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -17,8 +18,15 @@ const (
 	ContextUserRole  = "user_role"
 )
 
-// Auth validates the access token in the Authorization: Bearer <token> header.
-func Auth(jwtManager *jwt.Manager) gin.HandlerFunc {
+// AccountChecker reports the current state of an account, so locking it or
+// changing its role takes effect before its access token expires (L4).
+type AccountChecker interface {
+	Status(ctx context.Context, userID string) (active bool, role string, err error)
+}
+
+// Auth validates the access token in the Authorization: Bearer <token> header
+// and, with accounts set, that the account is still active with the same role.
+func Auth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -36,6 +44,21 @@ func Auth(jwtManager *jwt.Manager) gin.HandlerFunc {
 		if err != nil {
 			response.Abort(c, err)
 			return
+		}
+		if accounts != nil {
+			active, role, err := accounts.Status(c.Request.Context(), claims.UserID)
+			switch {
+			case err != nil:
+				response.Abort(c, err)
+				return
+			case !active:
+				response.Abort(c, apperrors.ErrAccountLocked)
+				return
+			case role != claims.Role:
+				// A new role needs a new token: log in again.
+				response.Abort(c, apperrors.ErrInvalidToken)
+				return
+			}
 		}
 
 		c.Set(ContextUserID, claims.UserID)

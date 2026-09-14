@@ -18,6 +18,8 @@ type BatchJobRepository interface {
 	Start(ctx context.Context, name, triggeredBy string) (*models.BatchJob, error)
 	Finish(ctx context.Context, runID, status, errorMessage string) error
 	RecordProgress(ctx context.Context, runID string, processed, skipped int) error
+	StopOrphans(ctx context.Context) (int64, error)
+	RecordSkipped(ctx context.Context, name, triggeredBy, reason string) error
 	List(ctx context.Context, query dto.PageQuery) ([]models.BatchJob, int64, error)
 }
 
@@ -72,6 +74,41 @@ func (r *batchJobRepository) RecordProgress(ctx context.Context, runID string, p
 			"skipped_rows":   skipped,
 		}).Error; err != nil {
 		return fmt.Errorf("record batch progress: %w", err)
+	}
+	return nil
+}
+
+// StopOrphans closes RUNNING rows left by a process that died mid-run. The
+// server runs as a single instance, so at startup nothing is really running;
+// without this the unique RUNNING index would block the job forever (H1).
+func (r *batchJobRepository) StopOrphans(ctx context.Context) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&models.BatchJob{}).
+		Where("status = ?", models.BatchRunning).
+		Updates(map[string]any{
+			"status":        models.BatchStopped,
+			"error_message": "interrupted: process restarted",
+			"finished_at":   time.Now(),
+		})
+	if res.Error != nil {
+		return 0, fmt.Errorf("stop orphan batch jobs: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+// RecordSkipped logs a scheduled run that did not start because the previous
+// one was still running.
+func (r *batchJobRepository) RecordSkipped(ctx context.Context, name, triggeredBy, reason string) error {
+	now := time.Now()
+	run := &models.BatchJob{
+		JobName:      name,
+		TriggeredBy:  triggeredBy,
+		Status:       models.BatchSkipped,
+		ErrorMessage: reason,
+		StartedAt:    now,
+		FinishedAt:   &now,
+	}
+	if err := r.db.WithContext(ctx).Create(run).Error; err != nil {
+		return fmt.Errorf("record skipped batch job: %w", err)
 	}
 	return nil
 }

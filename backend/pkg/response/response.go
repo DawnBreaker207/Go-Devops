@@ -68,6 +68,11 @@ func List(c *gin.Context, items any, page, pageSize int, total int64) {
 
 // Error maps errors to HTTP status and business code.
 func Error(c *gin.Context, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeError(c, apperrors.PayloadTooLarge("request body is too large"))
+		return
+	}
 	var validationErrs validator.ValidationErrors
 	if errors.As(err, &validationErrs) {
 		appErr := apperrors.Validation("validation failed").WithDetails(validationDetails(validationErrs))

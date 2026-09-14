@@ -67,7 +67,9 @@ func run() error {
 		}
 	}()
 
-	if !cfg.App.IsProduction() {
+	// The well-known seed admin exists only in development (never staging or
+	// production).
+	if cfg.App.Env == "development" {
 		if err := database.SeedAdmin(context.Background(), db, cfg.App.AdminEmail, cfg.App.AdminPassword); err != nil {
 			return err
 		}
@@ -96,7 +98,10 @@ func run() error {
 
 	loginGuard := ratelimit.NewFailureLimiter(cfg.RateLimit.Login.MaxFailures, cfg.RateLimit.Login.Lockout, nil)
 	authService := service.NewAuthService(db, userRepo, repository.NewRefreshTokenRepository(db), jwtManager, loginGuard)
-	userService := service.NewUserService(db, userRepo)
+	// Locking an account or changing its role applies to tokens already issued
+	// within accountStatusTTL (L4).
+	accountStatus := service.NewAccountStatusCache(userRepo, accountStatusTTL)
+	userService := service.NewUserService(db, userRepo, accountStatus.Invalidate)
 	movieService := service.NewMovieService(db, movieRepo)
 	hallService := service.NewHallService(db, hallRepo)
 	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location)
@@ -149,23 +154,25 @@ func run() error {
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
 	mediaService := service.NewMediaService(imageStore, maxUpload)
 
-	// Rate limits: /auth against brute force, /orders/hold against seat bots.
-	authLimiter := ratelimit.New(cfg.RateLimit.Auth.Capacity, cfg.RateLimit.Auth.RefillPerSecond)
-	holdLimiter := ratelimit.New(cfg.RateLimit.Hold.Capacity, cfg.RateLimit.Hold.RefillPerSecond)
+	// Rate limits: /auth against brute force, /orders/hold against seat bots,
+	// realtime tokens per user.
+	limits := router.Limiters{
+		Auth:   ratelimit.New(cfg.RateLimit.Auth.Capacity, cfg.RateLimit.Auth.RefillPerSecond),
+		Hold:   ratelimit.New(cfg.RateLimit.Hold.Capacity, cfg.RateLimit.Hold.RefillPerSecond),
+		Events: ratelimit.New(cfg.RateLimit.Events.Capacity, cfg.RateLimit.Events.RefillPerSecond),
+	}
 
-	// Background jobs: registry + cron + batch_jobs log.
+	// Background jobs: registry + cron + batch_jobs log. Start first closes the
+	// runs a crashed process left RUNNING (H1).
 	batchRepo := repository.NewBatchJobRepository(db)
 	batchManager := batch.NewManager(db, batchRepo)
 	batchManager.Register(jobs.NewSweepExpiredHolds(bookingService))
 	batchManager.Register(jobs.NewSendTicketEmails(emailService))
 	batchManager.Register(jobs.NewCloseDay(reportService, location))
 	batchManager.Register(jobs.NewCleanup(repository.NewMaintenanceRepository(db), cfg.Audit.RetentionDays, location))
-	batchManager.Start()
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
-		defer cancel()
-		batchManager.Stop(ctx)
-	}()
+	if err := batchManager.Start(context.Background()); err != nil {
+		return fmt.Errorf("start batch jobs: %w", err)
+	}
 
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
@@ -173,7 +180,7 @@ func run() error {
 		go jobs.ConsumeTicketEmails(workerCtx, queueClient, emailService)
 	}
 
-	engine := router.New(cfg, db, jwtManager, authLimiter, holdLimiter, providers, router.Handlers{
+	engine := router.New(cfg, db, jwtManager, accountStatus, limits, providers, router.Handlers{
 		Health:   handlers.NewHealthHandler(db, cfg.App.Name),
 		Auth:     handlers.NewAuthHandler(authService),
 		User:     handlers.NewUserHandler(userService),
@@ -190,10 +197,13 @@ func run() error {
 	})
 
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:      engine,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
+		Addr:              fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:           engine,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
+		MaxHeaderBytes:    1 << 16,
 	}
 	// SSE streams never go idle; end them as soon as shutdown starts so
 	// Shutdown does not wait out its timeout.
@@ -215,23 +225,34 @@ func run() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	var runErr error
 	select {
 	case err := <-serverErr:
-		return fmt.Errorf("listen: %w", err)
+		runErr = fmt.Errorf("listen: %w", err)
 	case sig := <-quit:
 		logger.Info("shutdown signal received", logger.String("signal", sig.String()))
 	}
 
+	// One deadline for the whole shutdown (NFR-DEP-03): stop taking requests,
+	// then stop jobs and workers, all before the deferred database close.
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
-
-	if err := server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("graceful shutdown: %w", err)
+	if runErr == nil {
+		if err := server.Shutdown(ctx); err != nil {
+			logger.Warn("graceful shutdown ran out of time; closing connections", logger.Err(err))
+			_ = server.Close()
+		}
 	}
+	batchManager.Stop(ctx)
+	stopWorkers()
 
 	logger.Info("server stopped")
-	return nil
+	return runErr
 }
+
+// accountStatusTTL bounds how long a locked account or a changed role may
+// still pass the auth middleware on one server.
+const accountStatusTTL = 30 * time.Second
 
 // buildPaymentProviders registers every enabled payment provider. A real
 // gateway is added here exactly like the mock: build its adapter from its

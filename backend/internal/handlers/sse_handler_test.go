@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,7 +32,7 @@ type sseFrame struct {
 	data  string
 }
 
-func startSSEServer(t *testing.T, writeTimeout time.Duration) (*httptest.Server, *sse.Hub, *sse.TokenStore) {
+func startSSEServer(t *testing.T, writeTimeout time.Duration, tune ...func(*SSEHandler)) (*httptest.Server, *sse.Hub, *sse.TokenStore) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	hub := sse.NewHub()
@@ -39,6 +40,9 @@ func startSSEServer(t *testing.T, writeTimeout time.Duration) (*httptest.Server,
 	h := NewSSEHandler(hub, tokens, fakeShowtimes{})
 	h.debounce = 60 * time.Millisecond
 	h.keepalive = 150 * time.Millisecond
+	for _, fn := range tune {
+		fn(h)
+	}
 
 	engine := gin.New()
 	engine.GET("/events/shows/:id", h.Stream)
@@ -155,6 +159,85 @@ func TestSSEStream(t *testing.T) {
 		case <-deadline:
 			t.Fatal("hub.Close did not end the stream")
 		}
+	}
+}
+
+// M13: a client that stops reading is let go after the write deadline instead
+// of holding its goroutine and connection forever.
+func TestSSEStream_StalledClientIsDropped(t *testing.T) {
+	srv, hub, tokens := startSSEServer(t, 0, func(h *SSEHandler) {
+		h.debounce = 5 * time.Millisecond
+		h.writeTimeout = 200 * time.Millisecond
+	})
+	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
+	resp, err := http.Get(srv.URL + "/events/shows/show-a?token=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() // never read: the client stalls
+
+	// Distinct seat ids: the debounce keeps one update per seat, so the payload
+	// stays large enough to fill the socket buffers of a client that stopped reading.
+	seats := make([]sse.SeatUpdate, 4000)
+	for i := range seats {
+		seats[i] = sse.SeatUpdate{ID: fmt.Sprintf("%036d", i), Status: "held"}
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for hub.Viewers("show-a") != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("stalled client still attached")
+		}
+		hub.Broadcast("show-a", sse.SeatEvent{ShowtimeID: "show-a", Seats: seats})
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// M13: a stream ends after its max age; the client reconnects with a new token.
+func TestSSEStream_MaxAgeEndsStream(t *testing.T) {
+	srv, _, tokens := startSSEServer(t, 0, func(h *SSEHandler) { h.maxAge = 300 * time.Millisecond })
+	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
+	resp, err := http.Get(srv.URL + "/events/shows/show-a?token=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	done := make(chan struct{})
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			if _, err := resp.Body.Read(buf); err != nil {
+				close(done)
+				return
+			}
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("stream outlived its max age")
+	}
+}
+
+// M13: over the per-user stream limit the stream is refused with 429.
+func TestSSEStream_PerUserLimit(t *testing.T) {
+	srv, hub, tokens := startSSEServer(t, 0)
+	hub.MaxStreamsPerUser = 1
+	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
+	first, err := http.Get(srv.URL + "/events/shows/show-a?token=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Body.Close()
+	if _, err := bufio.NewReader(first.Body).ReadString('\n'); err != nil {
+		t.Fatal(err)
+	}
+	second, err := http.Get(srv.URL + "/events/shows/show-a?token=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Body.Close()
+	if second.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("second stream: HTTP %d, want 429", second.StatusCode)
 	}
 }
 

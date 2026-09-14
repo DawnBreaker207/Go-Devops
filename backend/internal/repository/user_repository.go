@@ -18,6 +18,7 @@ type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
 	CreateTx(ctx context.Context, tx *gorm.DB, user *models.User) error
 	FindByID(ctx context.Context, id string) (*models.User, error)
+	StatusByID(ctx context.Context, id string) (active bool, role string, found bool, err error)
 	FindByEmail(ctx context.Context, email string) (*models.User, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	List(ctx context.Context, query dto.UserListQuery) ([]models.User, int64, error)
@@ -55,6 +56,22 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*models.User,
 		return nil, fmt.Errorf("find user by id: %w", err)
 	}
 	return &user, nil
+}
+
+// StatusByID reads only what the auth middleware checks on every request.
+func (r *userRepository) StatusByID(ctx context.Context, id string) (bool, string, bool, error) {
+	var rows []struct {
+		Active bool
+		Role   string
+	}
+	if err := r.db.WithContext(ctx).Raw(`SELECT active, role FROM users WHERE id = ? AND deleted_at IS NULL`, id).
+		Scan(&rows).Error; err != nil {
+		return false, "", false, fmt.Errorf("read user status: %w", err)
+	}
+	if len(rows) == 0 {
+		return false, "", false, nil
+	}
+	return rows[0].Active, rows[0].Role, true, nil
 }
 
 func (r *userRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {

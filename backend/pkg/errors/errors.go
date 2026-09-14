@@ -53,6 +53,7 @@ const (
 	CodeForbidden          = 40300
 	CodeNotFound           = 40400
 	CodeConflict           = 40900
+	CodePayloadTooLarge    = 41300
 	CodeTooManyRequests    = 42900
 	CodeInternal           = 50000
 	CodeBadGateway         = 50200
@@ -121,6 +122,11 @@ func NotFound(message string) *AppError {
 
 func Conflict(message string) *AppError {
 	return newError(http.StatusConflict, CodeConflict, message)
+}
+
+// PayloadTooLarge returns 413 when a request body exceeds its limit.
+func PayloadTooLarge(message string) *AppError {
+	return newError(http.StatusRequestEntityTooLarge, CodePayloadTooLarge, message)
 }
 
 // TooManyRequests returns 429 when a request exceeds the rate limit.

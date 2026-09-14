@@ -12,8 +12,14 @@ app:
 server:
   port: 8080
   read_timeout: 15s
+  read_header_timeout: 5s
   write_timeout: 15s
+  idle_timeout: 60s
   shutdown_timeout: 10s
+  # Largest JSON request body (uploads have their own limit).
+  max_body_bytes: 1048576
+  # Reverse proxies allowed to set X-Forwarded-For; empty trusts none.
+  trusted_proxies: []
 
 database:
   host: localhost
@@ -44,6 +50,10 @@ rate_limit:
   hold:
     capacity: 20
     refill_per_second: 5
+  # Realtime tokens per user.
+  events:
+    capacity: 10
+    refill_per_second: 0.2
   # 5 wrong passwords in a row for one email+IP -> 429 for the lockout time.
   login:
     max_failures: 5

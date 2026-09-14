@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -55,12 +57,13 @@ func (h *BatchHandler) List(c *gin.Context) {
 
 // Run godoc
 //
-//	@Summary		Run a job immediately
+//	@Summary		Start a job now, in the background
+//	@Description	Answers 202 once the run is registered; follow its status in /admin/batch/jobs.
 //	@Tags			batch
 //	@Accept			json
 //	@Produce		json
 //	@Param			name	path	string	true	"Job name (e.g. closeDay, sweepExpiredHolds)"
-//	@Success		200		{object}	response.Body
+//	@Success		202		{object}	response.Body
 //	@Failure		401		{object}	response.Body
 //	@Failure		403		{object}	response.Body
 //	@Failure		404		{object}	response.Body
@@ -68,16 +71,21 @@ func (h *BatchHandler) List(c *gin.Context) {
 //	@Router			/admin/batch/jobs/{name}/run [post]
 func (h *BatchHandler) Run(c *gin.Context) {
 	name := c.Param("name")
-	if err := h.manager.Run(c.Request.Context(), name, models.TriggerManual); err != nil {
+	// The run must not live in this request: a long job would outlast the
+	// write timeout and a disconnected client would cancel it (M19).
+	runID, err := h.manager.Trigger(name, models.TriggerManual)
+	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	if rec, ok := audit.FromContext(c.Request.Context()); ok {
 		rec.ResourceID = name
-		rec.After = map[string]any{"triggered_by": models.TriggerManual}
+		rec.After = map[string]any{"triggered_by": models.TriggerManual, "run_id": runID}
 		if err := audit.In(c.Request.Context(), h.db, rec); err != nil {
 			logger.L().Warn("batch run audit row not written", logger.Err(err))
 		}
 	}
-	response.OK(c, gin.H{"job": name, "status": models.BatchSuccess, "triggered_by": models.TriggerManual})
+	c.JSON(http.StatusAccepted, response.Body{Code: response.CodeSuccess, Message: "accepted", Data: gin.H{
+		"job": name, "run_id": runID, "status": models.BatchRunning, "triggered_by": models.TriggerManual,
+	}})
 }

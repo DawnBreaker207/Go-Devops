@@ -4,10 +4,11 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/batch"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/jobs"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 )
 
 // T23 / E-ML1 / E-ML2: a confirmed booking gets one email with a QR per
@@ -54,18 +55,68 @@ func TestTicketEmails(t *testing.T) {
 	if sent != 0 || failed != 1 {
 		t.Fatalf("while down: sent=%d failed=%d", sent, failed)
 	}
-	if b := e.wantStatus(id2, models.BookingConfirmed); b.EmailSentAt != nil {
-		t.Fatal("failed send left email_sent_at set")
+	b := e.wantStatus(id2, models.BookingConfirmed)
+	if b.EmailSentAt != nil || b.EmailAttempts != 1 || b.EmailClaimedUntil == nil || !b.EmailClaimedUntil.After(time.Now()) {
+		t.Fatalf("after a failed send: sent_at=%v attempts=%d claimed_until=%v", b.EmailSentAt, b.EmailAttempts, b.EmailClaimedUntil)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE resource_id = ? AND action = 'email.ticket_failed' AND outcome = 'failure'`, id2); n != batch.ItemAttempts {
-		t.Fatalf("email failure audit rows = %d, want one per attempt (%d)", n, batch.ItemAttempts)
+	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE resource_id = ? AND action = 'email.ticket_failed'`, id2); n != 0 {
+		t.Fatalf("email failure audited before its tries ran out: %d rows", n)
 	}
 
 	e.mailer.FailWith(nil)
+	if sent, _ := e.runJob(job); sent != 0 {
+		t.Fatalf("retried before its backoff: sent %d", sent)
+	}
+	e.must(e.db.Exec(`UPDATE bookings SET email_claimed_until = NOW() - INTERVAL '1 second' WHERE id = ?`, id2).Error)
 	if sent, _ := e.runJob(job); sent != 1 {
 		t.Fatalf("retry sent %d, want 1", sent)
 	}
 	if len(e.mailer.Sent()) != 2 {
 		t.Fatalf("total messages = %d, want 2", len(e.mailer.Sent()))
+	}
+}
+
+// M17 / E-ML1: a mail that keeps failing is tried 6 times with backoff, then
+// given up with a single audit row and no longer picked up.
+func TestTicketEmails_FailureBacksOffAndCaps(t *testing.T) {
+	e := newEnv(t)
+	id := e.confirmed(e.users[0], "A1")
+	e.mailer.FailWith(errors.New("smtp unavailable"))
+	for i := 1; i <= repository.MaxTicketEmailAttempts; i++ {
+		e.must(e.db.Exec(`UPDATE bookings SET email_claimed_until = NULL WHERE id = ?`, id).Error)
+		if sent, err := e.emails.Send(e.ctx, id); sent || err == nil {
+			t.Fatalf("try %d: sent=%v err=%v", i, sent, err)
+		}
+	}
+	e.must(e.db.Exec(`UPDATE bookings SET email_claimed_until = NULL WHERE id = ?`, id).Error)
+	if sent, err := e.emails.Send(e.ctx, id); sent || err != nil {
+		t.Fatalf("try past the cap: sent=%v err=%v, want nothing done", sent, err)
+	}
+	ids, err := e.emails.PendingIDs(e.ctx, 10)
+	e.must(err)
+	if len(ids) != 0 {
+		t.Fatalf("given-up email still pending: %v", ids)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE resource_id = ? AND action = 'email.ticket_failed'`, id); n != 1 {
+		t.Fatalf("failure audit rows = %d, want 1", n)
+	}
+	e.wantStatus(id, models.BookingConfirmed)
+}
+
+// M17: a worker that died holding the lease (never marked sent) leaves the
+// email to be sent once the lease runs out.
+func TestTicketEmails_ExpiredClaimIsRetried(t *testing.T) {
+	e := newEnv(t)
+	id := e.confirmed(e.users[0], "A1")
+	e.must(e.db.Exec(`UPDATE bookings SET email_attempts = 1, email_claimed_until = NOW() + INTERVAL '4 minutes' WHERE id = ?`, id).Error)
+	if sent, err := e.emails.Send(e.ctx, id); sent || err != nil {
+		t.Fatalf("while leased: sent=%v err=%v", sent, err)
+	}
+	e.must(e.db.Exec(`UPDATE bookings SET email_claimed_until = NOW() - INTERVAL '1 second' WHERE id = ?`, id).Error)
+	if sent, err := e.emails.Send(e.ctx, id); !sent || err != nil {
+		t.Fatalf("after the lease: sent=%v err=%v", sent, err)
+	}
+	if b := e.booking(id); b.EmailSentAt == nil || b.EmailClaimedUntil != nil {
+		t.Fatalf("sent_at=%v claimed_until=%v", b.EmailSentAt, b.EmailClaimedUntil)
 	}
 }

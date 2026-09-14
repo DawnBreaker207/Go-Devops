@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -47,10 +48,17 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	Port            int           `mapstructure:"port"`
-	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
-	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+	Port              int           `mapstructure:"port"`
+	ReadTimeout       time.Duration `mapstructure:"read_timeout"`
+	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout"`
+	WriteTimeout      time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
+	ShutdownTimeout   time.Duration `mapstructure:"shutdown_timeout"`
+	// MaxBodyBytes caps JSON request bodies; uploads enforce their own limit.
+	MaxBodyBytes int64 `mapstructure:"max_body_bytes"`
+	// TrustedProxies (IPs or CIDRs) may set X-Forwarded-For. Empty trusts none:
+	// the client IP is the TCP peer, so rate limits can not be dodged (H3).
+	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
 type DatabaseConfig struct {
@@ -80,9 +88,11 @@ type CORSConfig struct {
 
 // RateLimitConfig throttles each endpoint group per client.
 type RateLimitConfig struct {
-	Auth  RateLimitRule    `mapstructure:"auth"`
-	Hold  RateLimitRule    `mapstructure:"hold"`
-	Login LoginGuardConfig `mapstructure:"login"`
+	Auth RateLimitRule `mapstructure:"auth"`
+	Hold RateLimitRule `mapstructure:"hold"`
+	// Events throttles realtime tokens per user.
+	Events RateLimitRule    `mapstructure:"events"`
+	Login  LoginGuardConfig `mapstructure:"login"`
 }
 
 // LoginGuardConfig locks an email+IP pair out after consecutive wrong
@@ -140,6 +150,9 @@ type MockProviderConfig struct {
 	DisplayName string `mapstructure:"display_name"`
 	// Secret signs the mock IPN and return redirect (HMAC-SHA256).
 	Secret string `mapstructure:"secret"`
+	// AllowInProduction must be set to run the mock in production: it
+	// collects no real money.
+	AllowInProduction bool `mapstructure:"allow_in_production"`
 }
 
 // MailConfig configures ticket emails. This build only has a mock mailer:
@@ -247,12 +260,80 @@ func loadDotEnv(file string) error {
 	return nil
 }
 
+// devSecretMarkers are pieces of the placeholder secrets shipped in
+// config.yaml, .env.example and docker-compose.yml.
+var devSecretMarkers = []string{"change_me", "change-me", "changeme", "change-in-prod", "change_in_prod"}
+
+// productionSecret refuses a short or placeholder secret: with a public dev
+// secret anyone could sign admin tokens or fake payment notifications (H4).
+func productionSecret(name, value string) error {
+	if len(value) < 32 {
+		return fmt.Errorf("%s must be at least 32 characters in production", name)
+	}
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "dev-") || strings.HasPrefix(lower, "dev_") {
+		return fmt.Errorf("%s is a development secret; set a real one in production", name)
+	}
+	for _, marker := range devSecretMarkers {
+		if strings.Contains(lower, marker) {
+			return fmt.Errorf("%s is a placeholder secret; set a real one in production", name)
+		}
+	}
+	return nil
+}
+
 func (c *Config) validate() error {
 	if c.JWT.AccessSecret == "" || c.JWT.RefreshSecret == "" {
 		return errors.New("jwt access_secret and refresh_secret must not be empty")
 	}
 	if c.JWT.AccessSecret == c.JWT.RefreshSecret {
 		return errors.New("jwt access_secret and refresh_secret must be different")
+	}
+	if c.App.IsProduction() {
+		if err := productionSecret("jwt.access_secret", c.JWT.AccessSecret); err != nil {
+			return err
+		}
+		if err := productionSecret("jwt.refresh_secret", c.JWT.RefreshSecret); err != nil {
+			return err
+		}
+		if mock := c.Payment.Providers.Mock; mock.Enabled {
+			if !mock.AllowInProduction {
+				return errors.New("payment.providers.mock is enabled in production but collects no real money: " +
+					"disable it or set payment.providers.mock.allow_in_production")
+			}
+			if err := productionSecret("payment.providers.mock.secret", mock.Secret); err != nil {
+				return err
+			}
+		}
+	}
+	for _, proxy := range c.Server.TrustedProxies {
+		if net.ParseIP(proxy) == nil {
+			if _, _, err := net.ParseCIDR(proxy); err != nil {
+				return fmt.Errorf("server.trusted_proxies: %q is not an IP or CIDR", proxy)
+			}
+		}
+	}
+	if c.Server.ShutdownTimeout < time.Second {
+		return fmt.Errorf("server.shutdown_timeout must be at least 1s, got %s", c.Server.ShutdownTimeout)
+	}
+	if c.Server.MaxBodyBytes < 1024 {
+		return fmt.Errorf("server.max_body_bytes must be at least 1024, got %d", c.Server.MaxBodyBytes)
+	}
+	if c.Booking.HoldTTLMinutes < 1 || c.Booking.HoldTTLMinutes > 60 {
+		return fmt.Errorf("booking.hold_ttl_minutes must be between 1 and 60, got %d", c.Booking.HoldTTLMinutes)
+	}
+	if c.Booking.MaxSeatsPerBooking < 1 || c.Booking.MaxSeatsPerBooking > 50 {
+		return fmt.Errorf("booking.max_seats_per_booking must be between 1 and 50, got %d", c.Booking.MaxSeatsPerBooking)
+	}
+	if c.App.RoomCleanupMinutes < 0 || c.App.RoomCleanupMinutes > 240 {
+		return fmt.Errorf("app.room_cleanup_minutes must be between 0 and 240, got %d", c.App.RoomCleanupMinutes)
+	}
+	for name, rule := range map[string]RateLimitRule{
+		"auth": c.RateLimit.Auth, "hold": c.RateLimit.Hold, "events": c.RateLimit.Events,
+	} {
+		if rule.Capacity < 1 || rule.RefillPerSecond <= 0 {
+			return fmt.Errorf("rate_limit.%s needs capacity >= 1 and refill_per_second > 0", name)
+		}
 	}
 	if c.Database.Host == "" || c.Database.Name == "" {
 		return errors.New("database host and name must not be empty")
@@ -292,8 +373,12 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.read_timeout", "15s")
+	v.SetDefault("server.read_header_timeout", "5s")
 	v.SetDefault("server.write_timeout", "15s")
+	v.SetDefault("server.idle_timeout", "60s")
 	v.SetDefault("server.shutdown_timeout", "10s")
+	v.SetDefault("server.max_body_bytes", 1<<20)
+	v.SetDefault("server.trusted_proxies", []string{})
 
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 5432)
@@ -318,6 +403,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rate_limit.auth.refill_per_second", 2)
 	v.SetDefault("rate_limit.hold.capacity", 20)
 	v.SetDefault("rate_limit.hold.refill_per_second", 5)
+	v.SetDefault("rate_limit.events.capacity", 10)
+	v.SetDefault("rate_limit.events.refill_per_second", 0.2)
 	v.SetDefault("rate_limit.login.max_failures", 5)
 	v.SetDefault("rate_limit.login.lockout", "5m")
 
@@ -341,7 +428,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("payment.late_capture_window", "24h")
 	v.SetDefault("payment.providers.mock.enabled", true)
 	v.SetDefault("payment.providers.mock.display_name", "Cổng thử nghiệm (mock)")
-	v.SetDefault("payment.providers.mock.secret", "dev-mock-secret-change-in-prod")
+	// No default mock secret: config.yaml / env must provide one.
+	v.SetDefault("payment.providers.mock.secret", "")
+	v.SetDefault("payment.providers.mock.allow_in_production", false)
 
 	v.SetDefault("mail.outbox_dir", "tmp/mail")
 
