@@ -1,4 +1,4 @@
-// Package database khoi tao ket noi Postgres cho GORM.
+// Package database initializes the Postgres connection for GORM.
 package database
 
 import (
@@ -13,7 +13,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// Connect mo ket noi toi Postgres va cau hinh connection pool.
+// Connect opens the Postgres connection and tunes the connection pool.
 func Connect(cfg *config.Config) (*gorm.DB, error) {
 	logLevel := gormlogger.Info
 	if cfg.App.IsProduction() {
@@ -44,16 +44,28 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// AutoMigrate tao/cap nhat schema tu model. Dung cho moi truong dev;
-// production nen chay `make migrate-up` de kiem soat phien ban schema.
+// AutoMigrate creates/updates the schema from models. For dev environments
+// only; production uses `make migrate-up` for versioned schema control.
 func AutoMigrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&models.User{}, &models.Movie{}); err != nil {
+	entities := []any{
+		&models.User{},
+		&models.Movie{},
+		&models.Hall{},
+		&models.Seat{},
+		&models.HallPrice{},
+		&models.Showtime{},
+		&models.ShowtimeSeat{},
+		&models.AuditLog{},
+		&models.BatchJob{},
+		&models.DailyAggregate{},
+	}
+	if err := db.AutoMigrate(entities...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
 	return nil
 }
 
-// Close dong ket noi, dung khi shutdown.
+// Close releases the connection, used on shutdown.
 func Close(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -62,7 +74,7 @@ func Close(db *gorm.DB) error {
 	return sqlDB.Close()
 }
 
-// Healthy kiem tra ket noi con song khong, dung cho endpoint /health.
+// Healthy pings the DB, bounded by timeout, for health endpoints.
 func Healthy(db *gorm.DB, timeout time.Duration) error {
 	sqlDB, err := db.DB()
 	if err != nil {

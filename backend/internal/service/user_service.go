@@ -7,7 +7,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 )
 
-// UserService xu ly nghiep vu lien quan den nguoi dung.
+// UserService handles user business logic.
 type UserService interface {
 	GetByID(ctx context.Context, id string) (*dto.UserResponse, error)
 }
@@ -16,7 +16,6 @@ type userService struct {
 	userRepo repository.UserRepository
 }
 
-// NewUserService tao UserService.
 func NewUserService(userRepo repository.UserRepository) UserService {
 	return &userService{userRepo: userRepo}
 }

@@ -1,4 +1,4 @@
-// Package jwt phat hanh va xac thuc cap access/refresh token.
+// Package jwt issues and validates access/refresh token pairs.
 package jwt
 
 import (
@@ -11,7 +11,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// TokenType phan biet access va refresh token de khong dung lan nhau.
+// TokenType distinguishes access and refresh tokens.
 type TokenType string
 
 const (
@@ -19,7 +19,7 @@ const (
 	RefreshToken TokenType = "refresh"
 )
 
-// Claims la payload nhung trong token.
+// Claims is the token payload.
 type Claims struct {
 	UserID string    `json:"uid"`
 	Email  string    `json:"email"`
@@ -28,14 +28,14 @@ type Claims struct {
 	jwtlib.RegisteredClaims
 }
 
-// TokenPair la cap token tra ve cho client.
+// TokenPair is the token pair returned to the client.
 type TokenPair struct {
 	AccessToken  string
 	RefreshToken string
 	ExpiresIn    int64
 }
 
-// Manager giu secret va thoi han cua tung loai token.
+// Manager holds the secrets and TTLs for each token type.
 type Manager struct {
 	accessSecret  []byte
 	refreshSecret []byte
@@ -44,7 +44,6 @@ type Manager struct {
 	issuer        string
 }
 
-// NewManager tao manager tu cau hinh.
 func NewManager(accessSecret, refreshSecret, issuer string, accessTTL, refreshTTL time.Duration) *Manager {
 	return &Manager{
 		accessSecret:  []byte(accessSecret),
@@ -55,7 +54,7 @@ func NewManager(accessSecret, refreshSecret, issuer string, accessTTL, refreshTT
 	}
 }
 
-// GeneratePair phat hanh dong thoi access token va refresh token.
+// GeneratePair issues an access and refresh token pair.
 func (m *Manager) GeneratePair(userID, email, role string) (*TokenPair, error) {
 	accessToken, err := m.sign(userID, email, role, AccessToken, m.accessSecret, m.accessTTL)
 	if err != nil {
@@ -74,12 +73,12 @@ func (m *Manager) GeneratePair(userID, email, role string) (*TokenPair, error) {
 	}, nil
 }
 
-// ParseAccess xac thuc access token.
+// ParseAccess validates an access token.
 func (m *Manager) ParseAccess(token string) (*Claims, error) {
 	return m.parse(token, m.accessSecret, AccessToken)
 }
 
-// ParseRefresh xac thuc refresh token.
+// ParseRefresh validates a refresh token.
 func (m *Manager) ParseRefresh(token string) (*Claims, error) {
 	return m.parse(token, m.refreshSecret, RefreshToken)
 }

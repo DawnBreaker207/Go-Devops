@@ -11,7 +11,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// UserRepository truy xuat bang users.
+// UserRepository accesses the users table.
 type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
 	FindByID(ctx context.Context, id string) (*models.User, error)
@@ -23,7 +23,6 @@ type userRepository struct {
 	db *gorm.DB
 }
 
-// NewUserRepository tao implement dua tren GORM.
 func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepository{db: db}
 }

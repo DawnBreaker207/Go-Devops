@@ -8,23 +8,22 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// AuthHandler nhan request xac thuc, khong chua logic nghiep vu.
+// AuthHandler handles auth requests, no business logic.
 type AuthHandler struct {
 	authService service.AuthService
 }
 
-// NewAuthHandler tao AuthHandler.
 func NewAuthHandler(authService service.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
 // Register godoc
 //
-//	@Summary		Dang ky tai khoan
+//	@Summary		Register account
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			payload	body		dto.RegisterRequest	true	"Thong tin dang ky"
+//	@Param			payload	body		dto.RegisterRequest	true	"Registration details"
 //	@Success		201		{object}	response.Body{data=dto.UserResponse}
 //	@Failure		400		{object}	response.Body
 //	@Failure		409		{object}	response.Body
@@ -47,11 +46,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 // Login godoc
 //
-//	@Summary		Dang nhap
+//	@Summary		Login
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json
-//	@Param			payload	body		dto.LoginRequest	true	"Email va mat khau"
+//	@Param			payload	body		dto.LoginRequest	true	"Email and password"
 //	@Success		200		{object}	response.Body{data=dto.LoginResponse}
 //	@Failure		400		{object}	response.Body
 //	@Failure		401		{object}	response.Body
@@ -74,7 +73,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 // Refresh godoc
 //
-//	@Summary		Lam moi access token
+//	@Summary		Refresh access token
 //	@Tags			auth
 //	@Accept			json
 //	@Produce		json

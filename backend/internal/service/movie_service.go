@@ -4,13 +4,15 @@ import (
 	"context"
 	"strings"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
+	"gorm.io/gorm"
 )
 
-// MovieService xu ly nghiep vu quan ly phim.
+// MovieService handles movie management.
 type MovieService interface {
 	List(ctx context.Context, query dto.PageQuery) ([]dto.MovieResponse, int64, error)
 	GetByID(ctx context.Context, id string) (*dto.MovieResponse, error)
@@ -20,12 +22,12 @@ type MovieService interface {
 }
 
 type movieService struct {
+	db       *gorm.DB
 	movieRepo repository.MovieRepository
 }
 
-// NewMovieService tao MovieService.
-func NewMovieService(movieRepo repository.MovieRepository) MovieService {
-	return &movieService{movieRepo: movieRepo}
+func NewMovieService(db *gorm.DB, movieRepo repository.MovieRepository) MovieService {
+	return &movieService{db: db, movieRepo: movieRepo}
 }
 
 func (s *movieService) List(ctx context.Context, query dto.PageQuery) ([]dto.MovieResponse, int64, error) {
@@ -61,7 +63,17 @@ func (s *movieService) Create(ctx context.Context, req dto.MovieRequest) (*dto.M
 		ReleaseDate: releaseDate,
 		Status:      req.Status,
 	}
-	if err := s.movieRepo.Create(ctx, movie); err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.movieRepo.Create(ctx, tx, movie); err != nil {
+			return err
+		}
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = movie.ID
+			rec.After = map[string]any{"title": movie.Title, "status": movie.Status}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
@@ -89,7 +101,17 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 	movie.ReleaseDate = releaseDate
 	movie.Status = req.Status
 
-	if err := s.movieRepo.Update(ctx, movie); err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.movieRepo.Update(ctx, tx, movie); err != nil {
+			return err
+		}
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = id
+			rec.After = map[string]any{"title": movie.Title, "status": movie.Status}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
@@ -98,5 +120,15 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 }
 
 func (s *movieService) Delete(ctx context.Context, id string) error {
-	return s.movieRepo.Delete(ctx, id)
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.movieRepo.Delete(ctx, tx, id); err != nil {
+			return err
+		}
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = id
+			rec.After = map[string]any{"deleted": true}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
 }
