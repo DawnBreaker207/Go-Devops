@@ -1,4 +1,4 @@
-// Package response chuan hoa moi payload tra ve dang { code, message, data }.
+// Package response standardizes the { code, message, data } payload.
 package response
 
 import (
@@ -10,9 +10,11 @@ import (
 
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
+
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 )
 
-// Body la khung response chung cua toan bo API.
+// Body is the common response shape.
 type Body struct {
 	Code    int               `json:"code" example:"0"`
 	Message string            `json:"message" example:"success"`
@@ -20,7 +22,7 @@ type Body struct {
 	Details map[string]string `json:"details,omitempty"`
 }
 
-// Meta la thong tin phan trang di kem danh sach.
+// Meta is the pagination info.
 type Meta struct {
 	Page       int   `json:"page" example:"1"`
 	PageSize   int   `json:"page_size" example:"10"`
@@ -28,31 +30,31 @@ type Meta struct {
 	TotalPages int   `json:"total_pages" example:"5"`
 }
 
-// Paged la payload danh sach co phan trang.
+// Paged is a paginated list payload.
 type Paged struct {
 	Items any  `json:"items"`
 	Meta  Meta `json:"meta"`
 }
 
-// CodeSuccess la ma tra ve khi request thanh cong.
+// CodeSuccess is the code returned on success.
 const CodeSuccess = 0
 
-// OK tra ve 200 kem du lieu.
+// OK returns 200 with data.
 func OK(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, Body{Code: CodeSuccess, Message: "success", Data: data})
 }
 
-// Created tra ve 201 kem du lieu vua tao.
+// Created returns 201 with the created data.
 func Created(c *gin.Context, data any) {
 	c.JSON(http.StatusCreated, Body{Code: CodeSuccess, Message: "created", Data: data})
 }
 
-// NoContentOK tra ve 200 khong kem du lieu (vd: xoa thanh cong).
+// NoContentOK returns 200 without data.
 func NoContentOK(c *gin.Context, message string) {
 	c.JSON(http.StatusOK, Body{Code: CodeSuccess, Message: message})
 }
 
-// List tra ve danh sach da phan trang.
+// List returns a paginated list.
 func List(c *gin.Context, items any, page, pageSize int, total int64) {
 	totalPages := 0
 	if pageSize > 0 {
@@ -64,7 +66,7 @@ func List(c *gin.Context, items any, page, pageSize int, total int64) {
 	})
 }
 
-// Error map moi loai loi ve dung HTTP status + ma loi nghiep vu.
+// Error maps errors to HTTP status and business code.
 func Error(c *gin.Context, err error) {
 	var validationErrs validator.ValidationErrors
 	if errors.As(err, &validationErrs) {
@@ -80,9 +82,10 @@ func Error(c *gin.Context, err error) {
 	writeError(c, appErr)
 }
 
-// Abort ghi loi va dung chuoi middleware (dung trong middleware auth).
+// Abort writes an error and stops the middleware chain.
 func Abort(c *gin.Context, err error) {
 	appErr := apperrors.From(err)
+	c.Set(audit.ErrorMsgKey, appErr.Message)
 	c.AbortWithStatusJSON(appErr.Status, Body{
 		Code:    appErr.Code,
 		Message: appErr.Message,
@@ -91,6 +94,7 @@ func Abort(c *gin.Context, err error) {
 }
 
 func writeError(c *gin.Context, appErr *apperrors.AppError) {
+	c.Set(audit.ErrorMsgKey, appErr.Message)
 	c.JSON(appErr.Status, Body{
 		Code:    appErr.Code,
 		Message: appErr.Message,

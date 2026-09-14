@@ -5,13 +5,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// HeaderRequestID la header mang ma dinh danh request.
+// HeaderRequestID is the request identifier header.
 const HeaderRequestID = "X-Request-ID"
 
-// ContextRequestID la key luu request id trong gin.Context.
+// ContextRequestID is the key storing the request id in the gin context.
 const ContextRequestID = "request_id"
 
-// RequestID gan request id cho moi request de trace log xuyen suot.
+// RequestID attaches an id to each request for log tracing.
 func RequestID() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID := c.GetHeader(HeaderRequestID)
@@ -24,7 +24,7 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
-// GetRequestID lay request id tu context.
+// GetRequestID returns the request id from context.
 func GetRequestID(c *gin.Context) string {
 	if value, ok := c.Get(ContextRequestID); ok {
 		if requestID, ok := value.(string); ok {

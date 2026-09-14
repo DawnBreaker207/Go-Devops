@@ -11,18 +11,17 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// HealthHandler bao cao tinh trang service.
+// HealthHandler reports service status.
 type HealthHandler struct {
 	db      *gorm.DB
 	appName string
 }
 
-// NewHealthHandler tao HealthHandler.
 func NewHealthHandler(db *gorm.DB, appName string) *HealthHandler {
 	return &HealthHandler{db: db, appName: appName}
 }
 
-// HealthStatus la payload cua endpoint /health.
+// HealthStatus is the /health payload.
 type HealthStatus struct {
 	Status   string `json:"status" example:"ok"`
 	Service  string `json:"service" example:"BackEnd-CP"`
@@ -32,7 +31,7 @@ type HealthStatus struct {
 // Check godoc
 //
 //	@Summary		Health check
-//	@Description	Kiem tra service va ket noi database
+//	@Description	Service and database status
 //	@Tags			health
 //	@Produce		json
 //	@Success		200	{object}	response.Body{data=handlers.HealthStatus}
@@ -53,4 +52,24 @@ func (h *HealthHandler) Check(c *gin.Context) {
 	}
 
 	response.OK(c, status)
+}
+
+// Healthz godoc
+//
+//	@Summary		Infrastructure probe
+//	@Description	200 when the DB pings, 503 otherwise; no complex payload.
+//	@Tags			health
+//	@Produce		json
+//	@Success		200	{object}	response.Body
+//	@Failure		503	{object}	response.Body
+//	@Router			/healthz [get]
+func (h *HealthHandler) Healthz(c *gin.Context) {
+	if err := database.Healthy(h.db, 2*time.Second); err != nil {
+		c.JSON(http.StatusServiceUnavailable, response.Body{
+			Code:    http.StatusServiceUnavailable,
+			Message: "unavailable",
+		})
+		return
+	}
+	response.OK(c, nil)
 }

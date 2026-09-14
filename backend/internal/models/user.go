@@ -7,14 +7,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// Role phan quyen nguoi dung.
+// Role is the user's access level.
 const (
 	RoleAdmin    = "admin"
 	RoleStaff    = "staff"
 	RoleCustomer = "customer"
 )
 
-// User la nguoi dung he thong.
+// User is a system user.
 type User struct {
 	ID        string         `gorm:"type:uuid;primaryKey" json:"id"`
 	Email     string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
@@ -26,10 +26,10 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// TableName co dinh ten bang de khong phu thuoc quy uoc dat ten cua GORM.
+// TableName fixes the table name to bypass GORM's naming convention.
 func (User) TableName() string { return "users" }
 
-// BeforeCreate sinh UUID neu chua co.
+// BeforeCreate generates a UUID if none is set.
 func (u *User) BeforeCreate(*gorm.DB) error {
 	if u.ID == "" {
 		u.ID = uuid.NewString()

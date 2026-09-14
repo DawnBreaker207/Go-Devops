@@ -11,8 +11,8 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// SeedAdmin tao tai khoan quan tri dau tien neu bang users con rong.
-// Chi chay o moi truong khac production de co the dang nhap ngay sau khi clone.
+// SeedAdmin creates the first admin account if the users table is empty.
+// Only runs in non-production environments to allow login right after a clone.
 func SeedAdmin(ctx context.Context, db *gorm.DB, email, password string) error {
 	var count int64
 	if err := db.WithContext(ctx).Model(&models.User{}).Count(&count).Error; err != nil {
