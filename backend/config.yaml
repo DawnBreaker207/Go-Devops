@@ -1,11 +1,13 @@
-# Gia tri mac dinh cho moi truong dev.
-# Thu tu uu tien: bien moi truong > .env > config.yaml > default trong code.
+# Defaults for the dev environment.
+# Precedence: env vars > .env > config.yaml > code defaults.
 app:
   name: BackEnd-CP
   env: development
   log_level: debug
   admin_email: admin@cinema.local
   admin_password: admin123
+  # Buffer added to a showtime's effective end when checking schedule conflicts.
+  room_cleanup_minutes: 20
 
 server:
   port: 8080
@@ -24,12 +26,30 @@ database:
   max_open_conns: 25
   max_idle_conns: 5
   conn_max_lifetime: 1h
-  auto_migrate: true
+  # Schema is owned by migrations (migrations/schema, make migrate-up) — it
+  # carries partial unique indexes GORM can't express, so AutoMigrate stays off.
+  auto_migrate: false
 
 jwt:
+  # Dev-only secrets; override via JWT_ACCESS_SECRET / JWT_REFRESH_SECRET in prod.
+  access_secret: dev-access-secret-change-in-prod
+  refresh_secret: dev-refresh-secret-change-in-prod
   access_ttl: 15m
   refresh_ttl: 168h
   issuer: backend-cp
+
+# Per-endpoint rate limits (auth against brute force, hold against seat bots).
+rate_limit:
+  auth:
+    capacity: 10
+    refill_per_second: 2
+  hold:
+    capacity: 20
+    refill_per_second: 5
+
+# RabbitMQ durable queuing; use host "rabbitmq" when running via docker.
+queue:
+  url: amqp://guest:guest@localhost:5672/
 
 cors:
   allowed_origins:
