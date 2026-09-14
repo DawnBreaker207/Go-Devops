@@ -14,12 +14,12 @@ CREATE TABLE IF NOT EXISTS movies (
     status       VARCHAR(32)  NOT NULL DEFAULT 'draft',
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at   TIMESTAMPTZ
+    deleted_at   TIMESTAMPTZ,
+    CONSTRAINT ck_movie_status CHECK (status IN ('draft','showing','ended')),
+    CONSTRAINT ck_movie_duration CHECK (duration > 0)
 );
 
-CREATE INDEX IF NOT EXISTS idx_movies_title ON movies (title);
 CREATE INDEX IF NOT EXISTS idx_movies_status ON movies (status);
-CREATE INDEX IF NOT EXISTS idx_movies_deleted_at ON movies (deleted_at);
 
 CREATE TABLE IF NOT EXISTS halls (
     id             UUID PRIMARY KEY,
@@ -34,13 +34,13 @@ CREATE TABLE IF NOT EXISTS halls (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_halls_name ON halls (name) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_halls_deleted_at ON halls (deleted_at);
 
+-- The unique key (hall_id, ...) also serves lookups by hall.
 CREATE TABLE IF NOT EXISTS seats (
     id         UUID PRIMARY KEY,
     hall_id    UUID        NOT NULL REFERENCES halls(id),
     row_label  VARCHAR(8)  NOT NULL,
-    col_number INTEGER     NOT NULL,
+    col_number INTEGER     NOT NULL CHECK (col_number > 0),
     seat_type  VARCHAR(16) NOT NULL DEFAULT 'standard',
     is_gap     BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -48,8 +48,6 @@ CREATE TABLE IF NOT EXISTS seats (
     CONSTRAINT uq_seat_hall_row_col UNIQUE (hall_id, row_label, col_number),
     CONSTRAINT ck_seat_type CHECK (seat_type IN ('standard','vip','couple','recliner'))
 );
-
-CREATE INDEX IF NOT EXISTS idx_seats_hall_id ON seats (hall_id);
 
 CREATE TABLE IF NOT EXISTS hall_prices (
     id         UUID PRIMARY KEY,
@@ -61,8 +59,6 @@ CREATE TABLE IF NOT EXISTS hall_prices (
     CONSTRAINT uq_hall_prices_seat_type UNIQUE (hall_id, seat_type),
     CONSTRAINT ck_hall_prices_seat_type CHECK (seat_type IN ('standard','vip','couple','recliner'))
 );
-
-CREATE INDEX IF NOT EXISTS idx_hall_prices_hall_id ON hall_prices (hall_id);
 
 CREATE TABLE IF NOT EXISTS showtimes (
     id         UUID PRIMARY KEY,
@@ -80,7 +76,8 @@ CREATE TABLE IF NOT EXISTS showtimes (
 
 CREATE INDEX IF NOT EXISTS idx_showtimes_hall_start ON showtimes (hall_id, start_at);
 CREATE INDEX IF NOT EXISTS idx_showtimes_movie_start ON showtimes (movie_id, start_at);
-CREATE INDEX IF NOT EXISTS idx_showtimes_deleted_at ON showtimes (deleted_at);
+-- Day listings, the staff board and closeDay filter by start time only.
+CREATE INDEX IF NOT EXISTS idx_showtimes_start ON showtimes (start_at) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS showtime_seats (
     id          UUID PRIMARY KEY,
@@ -93,8 +90,9 @@ CREATE TABLE IF NOT EXISTS showtime_seats (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_showtime_seat UNIQUE (showtime_id, seat_id),
-    CONSTRAINT ck_showtime_seat_status CHECK (status IN ('available','held','sold'))
+    CONSTRAINT ck_showtime_seat_status CHECK (status IN ('available','held','sold')),
+    CONSTRAINT ck_showtime_seat_hold CHECK ((status = 'held') = (held_by IS NOT NULL AND held_until IS NOT NULL))
 );
 
-CREATE INDEX IF NOT EXISTS idx_showtime_seats_status_held_until ON showtime_seats (status, held_until);
-CREATE INDEX IF NOT EXISTS idx_showtime_seats_showtime_id ON showtime_seats (showtime_id);
+-- Sweep: expired holds.
+CREATE INDEX IF NOT EXISTS idx_showtime_seats_held ON showtime_seats (held_until) WHERE status = 'held';

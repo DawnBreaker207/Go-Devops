@@ -96,10 +96,17 @@ func TestCleanupJob_RemovesOnlyExpiredData(t *testing.T) {
 	e.must(e.db.Exec(`INSERT INTO refresh_tokens (id, user_id, family_id, expires_at) VALUES
 		(gen_random_uuid(), ?, gen_random_uuid(), NOW() - INTERVAL '2 days'),
 		(gen_random_uuid(), ?, gen_random_uuid(), NOW() + INTERVAL '2 days')`, u, u).Error)
+	e.must(e.db.Exec(`INSERT INTO batch_jobs (id, job_name, triggered_by, status, started_at) VALUES
+		(gen_random_uuid(), 'old', 'cron', 'success', NOW() - INTERVAL '91 days'),
+		(gen_random_uuid(), 'recent', 'cron', 'success', NOW() - INTERVAL '1 day'),
+		(gen_random_uuid(), 'stuck', 'cron', 'running', NOW() - INTERVAL '91 days')`).Error)
 
 	processed, _ := e.runJob(jobs.NewCleanup(repository.NewMaintenanceRepository(e.db), 90, time.UTC))
-	if processed != 4 {
-		t.Fatalf("removed = %d, want 4 (3 audit rows + 1 token)", processed)
+	if processed != 5 {
+		t.Fatalf("removed = %d, want 5 (3 audit rows + 1 batch run + 1 token)", processed)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM batch_jobs WHERE job_name IN ('recent', 'stuck')`); n != 2 || e.count(`SELECT COUNT(*) FROM batch_jobs`) != 2 {
+		t.Errorf("batch runs left = %d of recent/stuck, want only those 2", n)
 	}
 	for action, want := range map[string]int64{"test.old": 0, "test.recent": 1, "test.today": 1} {
 		if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE action = ?`, action); n != want {

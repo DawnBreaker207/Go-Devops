@@ -160,8 +160,7 @@ func (r *ShowtimeRepository) OverlapCount(tx *gorm.DB, hallID string, start, end
 // Uses a raw query because the bookings model is not kept in the codebase.
 func (r *ShowtimeRepository) ShowtimeHasBookings(tx *gorm.DB, showtimeID string) (bool, error) {
 	var count int64
-	err := tx.Raw(`SELECT 1 FROM bookings WHERE showtime_id = ? AND deleted_at IS NULL LIMIT 1`,
-		showtimeID).Scan(&count).Error
+	err := tx.Raw(`SELECT 1 FROM bookings WHERE showtime_id = ? LIMIT 1`, showtimeID).Scan(&count).Error
 	return count > 0, err
 }
 
@@ -169,8 +168,8 @@ func (r *ShowtimeRepository) ShowtimeHasBookings(tx *gorm.DB, showtimeID string)
 // or bought seats of the showtime.
 func (r *ShowtimeRepository) ShowtimeHasLiveBookings(tx *gorm.DB, showtimeID string) (bool, error) {
 	var count int64
-	err := tx.Raw(`SELECT 1 FROM bookings WHERE showtime_id = ? AND status IN ('pending', 'confirmed')
-		AND deleted_at IS NULL LIMIT 1`, showtimeID).Scan(&count).Error
+	err := tx.Raw(`SELECT 1 FROM bookings WHERE showtime_id = ? AND status IN ('pending', 'confirmed') LIMIT 1`,
+		showtimeID).Scan(&count).Error
 	return count > 0, err
 }
 

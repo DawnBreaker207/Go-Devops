@@ -46,11 +46,10 @@ type Booking struct {
 	NextFinalizeAt   *time.Time `json:"-"`
 	EmailSentAt      *time.Time `json:"email_sent_at,omitempty"`
 	// Ticket email tries; a try holds the booking until EmailClaimedUntil.
-	EmailAttempts     int            `gorm:"not null;default:0" json:"-"`
-	EmailClaimedUntil *time.Time     `json:"-"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`
+	EmailAttempts     int        `gorm:"not null;default:0" json:"-"`
+	EmailClaimedUntil *time.Time `json:"-"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 func (Booking) TableName() string { return "bookings" }

@@ -11,16 +11,18 @@ import (
 const cleanupChunk = 5000
 
 // NewCleanup builds the cleanup job: every night at 03:30 local time it
-// deletes audit logs older than the retention (kept >= 90 days, FR-AUDIT-02,
-// T40) and refresh tokens dead for a day, chunk by chunk.
-func NewCleanup(repo repository.MaintenanceRepository, auditRetentionDays int, location *time.Location) *batch.Job {
+// deletes audit logs and finished batch runs older than the retention (kept
+// >= 90 days, FR-AUDIT-02, T40) and refresh tokens dead for a day, chunk by
+// chunk.
+func NewCleanup(repo repository.MaintenanceRepository, retentionDays int, location *time.Location) *batch.Job {
 	return &batch.Job{
 		Name:     "cleanup",
 		Schedule: "CRON_TZ=" + location.String() + " 0 30 3 * * *",
 		Run: func(ctx context.Context, opts batch.RunOptions) error {
 			removed := 0
 			steps := []func() (int64, error){
-				func() (int64, error) { return repo.DeleteAuditOlderThan(ctx, auditRetentionDays, cleanupChunk) },
+				func() (int64, error) { return repo.DeleteAuditOlderThan(ctx, retentionDays, cleanupChunk) },
+				func() (int64, error) { return repo.DeleteFinishedRunsOlderThan(ctx, retentionDays, cleanupChunk) },
 				func() (int64, error) { return repo.DeleteDeadRefreshTokens(ctx, cleanupChunk) },
 			}
 			for _, step := range steps {

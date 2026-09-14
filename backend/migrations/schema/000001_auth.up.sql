@@ -17,11 +17,12 @@ CREATE TABLE IF NOT EXISTS users (
     active     BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ
+    deleted_at TIMESTAMPTZ,
+    CONSTRAINT ck_user_role CHECK (role IN ('customer','staff','admin'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email);
-CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at);
+-- A deleted account does not keep its email taken.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id         UUID PRIMARY KEY,

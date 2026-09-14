@@ -1,4 +1,5 @@
 -- Module batch & report: batch job runs and daily revenue rollups (F17, F21).
+-- Finished runs are removed by the cleanup job after the audit retention.
 
 CREATE TABLE IF NOT EXISTS batch_jobs (
     id             UUID PRIMARY KEY,
@@ -11,10 +12,13 @@ CREATE TABLE IF NOT EXISTS batch_jobs (
     started_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     finished_at    TIMESTAMPTZ,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    CONSTRAINT ck_batch_job_status CHECK (status IN ('running','success','failed','skipped','stopped'))
+    CONSTRAINT ck_batch_job_status CHECK (status IN ('running','success','failed','skipped','stopped')),
+    CONSTRAINT ck_batch_job_trigger CHECK (triggered_by IN ('cron','manual','confirm'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_batch_jobs_name_started ON batch_jobs (job_name, started_at);
+-- Admin run log (newest first) and the cleanup job.
+CREATE INDEX IF NOT EXISTS idx_batch_jobs_started ON batch_jobs (started_at);
 
 -- At most one RUNNING run per job at any time.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_batch_jobs_one_running

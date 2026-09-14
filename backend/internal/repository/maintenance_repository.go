@@ -13,6 +13,9 @@ type MaintenanceRepository interface {
 	DeleteAuditOlderThan(ctx context.Context, days, limit int) (int64, error)
 	// DeleteDeadRefreshTokens deletes up to limit refresh tokens expired for a day.
 	DeleteDeadRefreshTokens(ctx context.Context, limit int) (int64, error)
+	// DeleteFinishedRunsOlderThan deletes up to limit batch runs started more
+	// than days ago that are no longer running.
+	DeleteFinishedRunsOlderThan(ctx context.Context, days, limit int) (int64, error)
 }
 
 type maintenanceRepository struct {
@@ -37,6 +40,16 @@ func (r *maintenanceRepository) DeleteDeadRefreshTokens(ctx context.Context, lim
 		SELECT id FROM refresh_tokens WHERE expires_at < NOW() - INTERVAL '1 day' LIMIT ?)`, limit)
 	if res.Error != nil {
 		return 0, fmt.Errorf("delete dead refresh tokens: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *maintenanceRepository) DeleteFinishedRunsOlderThan(ctx context.Context, days, limit int) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(`DELETE FROM batch_jobs WHERE id IN (
+		SELECT id FROM batch_jobs WHERE status <> 'running'
+		AND started_at < NOW() - make_interval(days => CAST(? AS int)) LIMIT ?)`, days, limit)
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete old batch runs: %w", res.Error)
 	}
 	return res.RowsAffected, nil
 }

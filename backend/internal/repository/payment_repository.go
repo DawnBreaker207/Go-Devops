@@ -247,7 +247,7 @@ func (r *paymentRepository) FailedForRecheck(ctx context.Context, lateWindow tim
 	if err := r.db.WithContext(ctx).Where("status = ?", models.PaymentFailed).
 		Where("COALESCE(expires_at, created_at) > NOW() - make_interval(secs => ?)", lateWindow.Seconds()).
 		Where("checked_at IS NULL OR checked_at < NOW() - INTERVAL '10 minutes'").
-		Order("created_at").Limit(limit).Find(&out).Error; err != nil {
+		Order("COALESCE(expires_at, created_at)").Limit(limit).Find(&out).Error; err != nil {
 		return nil, fmt.Errorf("find failed payments to recheck: %w", err)
 	}
 	return out, nil

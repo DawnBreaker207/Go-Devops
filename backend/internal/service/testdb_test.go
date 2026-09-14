@@ -203,7 +203,7 @@ func newEnv(t *testing.T) *env {
 	// DELETE, not TRUNCATE: on tiny tables it avoids new relfilenodes + fsync,
 	// which made every test pay seconds on Docker Desktop.
 	e.must(testDB.Exec(`DELETE FROM audit_logs; DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
-		DELETE FROM tickets; DELETE FROM booking_seats; UPDATE bookings SET payment_id = NULL;
+		DELETE FROM tickets; DELETE FROM booking_seats;
 		DELETE FROM payments; DELETE FROM bookings; DELETE FROM showtime_seats;
 		DELETE FROM showtimes; DELETE FROM hall_prices; DELETE FROM seats; DELETE FROM halls;
 		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM users;`).Error)
