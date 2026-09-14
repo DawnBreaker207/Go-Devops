@@ -6,6 +6,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -20,6 +21,12 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
+
+// dummyPasswordHash has the cost of real password hashes.
+var dummyPasswordHash = sync.OnceValue(func() []byte {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("not-a-real-password"), bcrypt.DefaultCost)
+	return hash
+})
 
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
@@ -65,6 +72,9 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		Active:   true,
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
+		if apperrors.IsUniqueViolation(err) {
+			return nil, apperrors.ErrEmailAlreadyExists // registered concurrently
+		}
 		return nil, err
 	}
 	// Best-effort audit after the fact: a failed audit row must not fail the request.
@@ -89,8 +99,9 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 
 	user, err := s.userRepo.FindByEmail(ctx, email)
 	if err != nil {
-		// Don't reveal whether the email exists.
+		// Don't reveal whether the email exists, not even by answering faster.
 		if errors.Is(err, apperrors.ErrUserNotFound) {
+			_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), []byte(req.Password))
 			s.loginFailed(guardKey, req.ClientIP)
 			return nil, apperrors.ErrInvalidCredentials
 		}

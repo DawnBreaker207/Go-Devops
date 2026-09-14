@@ -40,6 +40,7 @@ func (h *Hall) BeforeCreate(*gorm.DB) error {
 type Seat struct {
 	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
 	HallID    string    `gorm:"type:uuid;not null;uniqueIndex:uq_seat_hall_row_col" json:"hall_id"`
+	RowIndex  int       `gorm:"not null" json:"row_index"`
 	RowLabel  string    `gorm:"type:varchar(8);not null;uniqueIndex:uq_seat_hall_row_col" json:"row_label"`
 	ColNumber int       `gorm:"not null;uniqueIndex:uq_seat_hall_row_col" json:"col_number"`
 	SeatType  string    `gorm:"type:varchar(16);not null;default:standard" json:"seat_type"`

@@ -200,7 +200,7 @@ func (r *ShowtimeRepository) SeatMap(ctx context.Context, showtimeID string) ([]
 		Joins("LEFT JOIN showtime_seats ON showtime_seats.showtime_id = showtimes.id AND showtime_seats.seat_id = seats.id").
 		Joins("LEFT JOIN hall_prices ON hall_prices.hall_id = showtimes.hall_id AND hall_prices.seat_type = seats.seat_type").
 		Where("showtimes.id = ?", showtimeID).
-		Order("seats.row_label, seats.col_number").
+		Order("seats.row_index, seats.col_number").
 		Scan(&rows).Error
 	return rows, err
 }

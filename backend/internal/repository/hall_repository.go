@@ -55,7 +55,7 @@ func (r *HallRepository) FindByID(ctx context.Context, id string) (*models.Hall,
 func (r *HallRepository) SeatsByHall(ctx context.Context, hallID string) ([]models.Seat, error) {
 	var seats []models.Seat
 	err := r.db.WithContext(ctx).
-		Where("hall_id = ?", hallID).Order("row_label, col_number").Find(&seats).Error
+		Where("hall_id = ?", hallID).Order("row_index, col_number").Find(&seats).Error
 	return seats, err
 }
 

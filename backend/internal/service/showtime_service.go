@@ -93,8 +93,10 @@ func (s *showtimeService) endOf(ctx context.Context, tx *gorm.DB, movieID string
 }
 
 func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error) {
-	if _, err := s.hall.FindByID(ctx, req.HallID); err != nil {
+	if hall, err := s.hall.FindByID(ctx, req.HallID); err != nil {
 		return nil, err
+	} else if hall == nil {
+		return nil, apperrors.ErrHallNotFound
 	}
 
 	start := req.StartAt.UTC()
@@ -166,8 +168,10 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 	if row == nil {
 		return nil, apperrors.ErrShowtimeNotFound
 	}
-	if _, err := s.hall.FindByID(ctx, req.HallID); err != nil {
+	if hall, err := s.hall.FindByID(ctx, req.HallID); err != nil {
 		return nil, err
+	} else if hall == nil {
+		return nil, apperrors.ErrHallNotFound
 	}
 
 	start := req.StartAt.UTC().Truncate(time.Microsecond) // DB precision, so an unchanged time compares equal

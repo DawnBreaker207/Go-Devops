@@ -10,11 +10,12 @@ import (
 
 // The seat grid is generated from these params.
 type HallRequest struct {
-	Name        string              `json:"name" binding:"required,min=1,max=255" example:"Phong 2"`
-	Rows        int                 `json:"rows" binding:"required,min=1,max=50" example:"8"`
-	SeatsPerRow int                 `json:"seats_per_row" binding:"required,min=1,max=50" example:"12"`
-	SeatTypes   map[string][]string `json:"seat_types" binding:"required" example:"vip:7,8"`
-	Gaps        []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
+	Name        string `json:"name" binding:"required,min=1,max=255" example:"Phong 2"`
+	Rows        int    `json:"rows" binding:"required,min=1,max=50" example:"8"`
+	SeatsPerRow int    `json:"seats_per_row" binding:"required,min=1,max=50" example:"12"`
+	// Optional: rows not listed are standard.
+	SeatTypes map[string][]string `json:"seat_types" example:"vip:7,8"`
+	Gaps      []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
 	// Must hold a positive price for each of the 4 seat types.
 	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
 }
@@ -25,7 +26,8 @@ type PriceRequest struct {
 
 type SeatUpdateRequest struct {
 	SeatType string `json:"seat_type" binding:"omitempty,oneof=standard vip couple recliner"`
-	IsGap    bool   `json:"is_gap"`
+	// Omitted keeps the current value.
+	IsGap *bool `json:"is_gap"`
 }
 
 type HallResponse struct {

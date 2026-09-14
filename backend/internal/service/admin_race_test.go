@@ -82,7 +82,7 @@ func TestRace_UpdateSeatVsHolds(t *testing.T) {
 		var updErr error
 		together(len(e.users)+1, func(i int) {
 			if i == len(e.users) {
-				_, updErr = e.halls.UpdateSeat(e.ctx, e.hallID, a1, dto.SeatUpdateRequest{SeatType: models.SeatStandard, IsGap: true})
+				_, updErr = e.halls.UpdateSeat(e.ctx, e.hallID, a1, dto.SeatUpdateRequest{SeatType: models.SeatStandard, IsGap: new(true)})
 				return
 			}
 			_, holdErrs[i] = e.hold(e.users[i], oneSeatEach[i]...)

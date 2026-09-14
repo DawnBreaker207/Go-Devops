@@ -389,7 +389,7 @@ func (r *bookingRepository) TicketRows(ctx context.Context, bookingID string) ([
 		JOIN showtime_seats ss ON ss.id = t.showtime_seat_id
 		JOIN seats s ON s.id = ss.seat_id
 		WHERE t.booking_id = ?
-		ORDER BY s.row_label, s.col_number`, bookingID).Scan(&rows).Error; err != nil {
+		ORDER BY s.row_index, s.col_number`, bookingID).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("find tickets: %w", err)
 	}
 	return rows, nil

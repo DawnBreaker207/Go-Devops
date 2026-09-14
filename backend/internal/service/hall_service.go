@@ -83,9 +83,12 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 		SeatTypes:   req.SeatTypes,
 		Gaps:        req.Gaps,
 	}
-	// A nil slice would be stored as NULL in the not-null jsonb column.
+	// Nil would be stored as JSON null in the not-null jsonb columns.
 	if hall.Gaps == nil {
 		hall.Gaps = []string{}
+	}
+	if hall.SeatTypes == nil {
+		hall.SeatTypes = map[string][]string{}
 	}
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
@@ -146,7 +149,9 @@ func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req
 		if req.SeatType != "" {
 			seat.SeatType = req.SeatType
 		}
-		seat.IsGap = req.IsGap
+		if req.IsGap != nil {
+			seat.IsGap = *req.IsGap
+		}
 		if err := s.hallRepo.UpdateSeat(tx, seat); err != nil {
 			return err
 		}
@@ -196,9 +201,6 @@ func (s *hallService) SetPrices(ctx context.Context, hallID string, req dto.Pric
 }
 
 func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps []string) ([]models.Seat, error) {
-	if len(seatTypes) == 0 {
-		return nil, apperrors.ErrSeatValidation
-	}
 	rowTypes, err := rowTypeMap(seatTypes, rows)
 	if err != nil {
 		return nil, err
@@ -223,6 +225,7 @@ func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps []
 			}
 			seats = append(seats, models.Seat{
 				HallID:    "",
+				RowIndex:  r,
 				RowLabel:  rowLabel,
 				ColNumber: c,
 				SeatType:  seatType,

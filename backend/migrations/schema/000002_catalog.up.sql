@@ -39,6 +39,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_halls_name ON halls (name) WHERE deleted_a
 CREATE TABLE IF NOT EXISTS seats (
     id         UUID PRIMARY KEY,
     hall_id    UUID        NOT NULL REFERENCES halls(id),
+    row_index  INTEGER     NOT NULL CHECK (row_index > 0), -- display order; labels sort wrong past Z
     row_label  VARCHAR(8)  NOT NULL,
     col_number INTEGER     NOT NULL CHECK (col_number > 0),
     seat_type  VARCHAR(16) NOT NULL DEFAULT 'standard',

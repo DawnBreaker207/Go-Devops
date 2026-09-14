@@ -154,6 +154,15 @@ func From(err error) *AppError {
 	if errors.As(err, &appErr) {
 		return appErr
 	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "22P02": // invalid input syntax, e.g. a malformed uuid in the path
+			return BadRequest("invalid identifier or value").Wrap(err)
+		case "23503":
+			return BadRequest("a referenced resource does not exist").Wrap(err)
+		}
+	}
 	return Internal("internal server error").Wrap(err)
 }
 

@@ -155,7 +155,7 @@ func (r *reportRepository) ShowtimeTickets(ctx context.Context, showtimeID, stat
 		q += ` AND t.status = ?`
 		args = append(args, status)
 	}
-	q += ` ORDER BY s.row_label, s.col_number`
+	q += ` ORDER BY s.row_index, s.col_number`
 	var rows []ShowtimeTicketRow
 	if err := r.db.WithContext(ctx).Raw(q, args...).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("showtime tickets: %w", err)
