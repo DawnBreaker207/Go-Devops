@@ -77,7 +77,8 @@ func TestAudit_EveryStateChangeIsLogged(t *testing.T) {
 	e.checkInvariants()
 }
 
-// T40: cleanup deletes only audit rows and batch runs past retention and refresh tokens dead for a day.
+// T40: cleanup deletes only audit rows, batch runs past retention, refresh tokens and
+// password reset tokens dead for a day.
 func TestCleanupJob_RemovesOnlyExpiredData(t *testing.T) {
 	e := newEnv(t)
 	insertAudit := func(action string, daysAgo int) {
@@ -93,14 +94,17 @@ func TestCleanupJob_RemovesOnlyExpiredData(t *testing.T) {
 	e.must(e.db.Exec(`INSERT INTO refresh_tokens (id, user_id, family_id, expires_at) VALUES
 		(gen_random_uuid(), ?, gen_random_uuid(), NOW() - INTERVAL '2 days'),
 		(gen_random_uuid(), ?, gen_random_uuid(), NOW() + INTERVAL '2 days')`, u, u).Error)
+	e.must(e.db.Exec(`INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at) VALUES
+		(gen_random_uuid(), ?, repeat('a', 64), NOW() - INTERVAL '2 days'),
+		(gen_random_uuid(), ?, repeat('b', 64), NOW() + INTERVAL '2 days')`, u, u).Error)
 	e.must(e.db.Exec(`INSERT INTO batch_jobs (id, job_name, triggered_by, status, started_at) VALUES
 		(gen_random_uuid(), 'old', 'cron', 'success', NOW() - INTERVAL '91 days'),
 		(gen_random_uuid(), 'recent', 'cron', 'success', NOW() - INTERVAL '1 day'),
 		(gen_random_uuid(), 'stuck', 'cron', 'running', NOW() - INTERVAL '91 days')`).Error)
 
 	processed, _ := e.runJob(jobs.NewCleanup(repository.NewMaintenanceRepository(e.db), 90, time.UTC))
-	if processed != 5 {
-		t.Fatalf("removed = %d, want 5 (3 audit rows + 1 batch run + 1 token)", processed)
+	if processed != 6 {
+		t.Fatalf("removed = %d, want 6 (3 audit rows + 1 batch run + 1 refresh token + 1 reset token)", processed)
 	}
 	if n := e.count(`SELECT COUNT(*) FROM batch_jobs WHERE job_name IN ('recent', 'stuck')`); n != 2 || e.count(`SELECT COUNT(*) FROM batch_jobs`) != 2 {
 		t.Errorf("batch runs left = %d of recent/stuck, want only those 2", n)
@@ -112,6 +116,9 @@ func TestCleanupJob_RemovesOnlyExpiredData(t *testing.T) {
 	}
 	if n := e.count(`SELECT COUNT(*) FROM refresh_tokens`); n != 1 {
 		t.Errorf("refresh tokens = %d, want 1", n)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM password_reset_tokens`); n != 1 {
+		t.Errorf("reset tokens = %d, want 1", n)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 type MaintenanceRepository interface {
 	DeleteAuditOlderThan(ctx context.Context, days, limit int) (int64, error)
 	DeleteDeadRefreshTokens(ctx context.Context, limit int) (int64, error)
+	DeleteDeadResetTokens(ctx context.Context, limit int) (int64, error)
 	DeleteFinishedRunsOlderThan(ctx context.Context, days, limit int) (int64, error)
 }
 
@@ -35,6 +36,15 @@ func (r *maintenanceRepository) DeleteDeadRefreshTokens(ctx context.Context, lim
 		SELECT id FROM refresh_tokens WHERE expires_at < NOW() - INTERVAL '1 day' LIMIT ?)`, limit)
 	if res.Error != nil {
 		return 0, fmt.Errorf("delete dead refresh tokens: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *maintenanceRepository) DeleteDeadResetTokens(ctx context.Context, limit int) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(`DELETE FROM password_reset_tokens WHERE id IN (
+		SELECT id FROM password_reset_tokens WHERE expires_at < NOW() - INTERVAL '1 day' LIMIT ?)`, limit)
+	if res.Error != nil {
+		return 0, fmt.Errorf("delete dead password reset tokens: %w", res.Error)
 	}
 	return res.RowsAffected, nil
 }

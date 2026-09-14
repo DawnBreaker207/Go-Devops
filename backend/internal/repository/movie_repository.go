@@ -115,6 +115,9 @@ func (r *movieRepository) List(ctx context.Context, query dto.MovieListQuery, in
 	if !includeDrafts {
 		tx = tx.Where("status <> ?", models.MovieStatusDraft)
 	}
+	if genre := strings.TrimSpace(query.Genre); genre != "" {
+		tx = tx.Where("LOWER(genre) = LOWER(?)", genre)
+	}
 
 	if search := strings.TrimSpace(query.Search); search != "" {
 		pattern := "%" + strings.ToLower(search) + "%"
@@ -128,7 +131,8 @@ func (r *movieRepository) List(ctx context.Context, query dto.MovieListQuery, in
 
 	movies := make([]models.Movie, 0, query.PageSize)
 	if err := tx.
-		Order("created_at DESC").
+		Order(movieOrder(query.Sort, query.Order)).
+		Order("id").
 		Limit(query.PageSize).
 		Offset(query.Offset()).
 		Find(&movies).Error; err != nil {
@@ -136,4 +140,24 @@ func (r *movieRepository) List(ctx context.Context, query dto.MovieListQuery, in
 	}
 
 	return movies, total, nil
+}
+
+// movieSortColumns maps the user-facing sort keys to columns; anything else
+// falls back to created_at. Values are literals, never user input.
+var movieSortColumns = map[string]string{
+	"release_date": "release_date",
+	"title":        "title",
+	"created_at":   "created_at",
+}
+
+func movieOrder(sort, order string) string {
+	column := movieSortColumns[sort]
+	if column == "" {
+		column = "created_at"
+	}
+	direction := "DESC"
+	if strings.EqualFold(order, "asc") {
+		direction = "ASC"
+	}
+	return column + " " + direction
 }

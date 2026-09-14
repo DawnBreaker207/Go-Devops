@@ -37,6 +37,32 @@ func (h *UserHandler) Me(c *gin.Context) {
 	response.OK(c, user)
 }
 
+// UpdateMe godoc
+//
+//	@Summary		Update own full name and phone
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			payload	body		dto.UpdateProfileRequest	true	"New full name and phone"
+//	@Success		200		{object}	response.Body{data=dto.UserResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Router			/users/me [put]
+func (h *UserHandler) UpdateMe(c *gin.Context) {
+	var req dto.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	user, err := h.userService.UpdateProfile(c.Request.Context(), middleware.CurrentUserID(c), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, user)
+}
+
 // List godoc
 //
 //	@Summary		List accounts (admin)

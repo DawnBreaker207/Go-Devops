@@ -95,7 +95,9 @@ func run() error {
 	paymentRepo := repository.NewPaymentRepository(db)
 
 	loginGuard := ratelimit.NewFailureLimiter(cfg.RateLimit.Login.MaxFailures, cfg.RateLimit.Login.Lockout, nil)
-	authService := service.NewAuthService(db, userRepo, repository.NewRefreshTokenRepository(db), jwtManager, loginGuard)
+	mailer := notify.NewMockMailer(cfg.Mail.OutboxDir)
+	authService := service.NewAuthService(db, userRepo, repository.NewRefreshTokenRepository(db), jwtManager, loginGuard,
+		repository.NewPasswordResetTokenRepository(db), mailer, cfg.Account.PasswordResetURL, cfg.Account.PasswordResetTTL)
 	// Locks and role changes reach already-issued tokens within accountStatusTTL.
 	accountStatus := service.NewAccountStatusCache(userRepo, accountStatusTTL)
 	userService := service.NewUserService(db, userRepo, accountStatus.Invalidate)
@@ -139,7 +141,6 @@ func run() error {
 	}
 	bookingService := service.NewBookingService(bookingOpts)
 
-	mailer := notify.NewMockMailer(cfg.Mail.OutboxDir)
 	emailService := service.NewTicketEmailService(db, bookingRepo, mailer, location)
 
 	reportService := service.NewReportService(repository.NewReportRepository(db), showtimeRepo, location)

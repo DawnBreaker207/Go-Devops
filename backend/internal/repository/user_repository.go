@@ -25,6 +25,8 @@ type UserRepository interface {
 	LockActiveAdmins(ctx context.Context, tx *gorm.DB) ([]string, error)
 	SetActive(ctx context.Context, tx *gorm.DB, id string, active bool) error
 	SetRole(ctx context.Context, tx *gorm.DB, id, role string) error
+	SetPassword(ctx context.Context, tx *gorm.DB, id, hash string) error
+	UpdateProfile(ctx context.Context, tx *gorm.DB, id, fullName, phone string) error
 }
 
 type userRepository struct {
@@ -141,6 +143,22 @@ func (r *userRepository) SetRole(ctx context.Context, tx *gorm.DB, id, role stri
 func (r *userRepository) SetActive(ctx context.Context, tx *gorm.DB, id string, active bool) error {
 	if err := tx.WithContext(ctx).Exec(`UPDATE users SET active = ?, updated_at = NOW() WHERE id = ?`, active, id).Error; err != nil {
 		return fmt.Errorf("set user active: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepository) SetPassword(ctx context.Context, tx *gorm.DB, id, hash string) error {
+	if err := tx.WithContext(ctx).Exec(`UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?`, hash, id).Error; err != nil {
+		return fmt.Errorf("set user password: %w", err)
+	}
+	return nil
+}
+
+// UpdateProfile: an empty phone clears the stored number.
+func (r *userRepository) UpdateProfile(ctx context.Context, tx *gorm.DB, id, fullName, phone string) error {
+	if err := tx.WithContext(ctx).Exec(`UPDATE users SET full_name = ?, phone = NULLIF(?, ''), updated_at = NOW() WHERE id = ?`,
+		fullName, phone, id).Error; err != nil {
+		return fmt.Errorf("update user profile: %w", err)
 	}
 	return nil
 }

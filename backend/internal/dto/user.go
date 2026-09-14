@@ -11,6 +11,7 @@ type UserResponse struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
 	FullName  string    `json:"full_name"`
+	Phone     string    `json:"phone,omitempty"`
 	Role      string    `json:"role"`
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
@@ -22,6 +23,7 @@ func NewUserResponse(user *models.User) UserResponse {
 		ID:        user.ID,
 		Email:     user.Email,
 		FullName:  user.FullName,
+		Phone:     user.Phone,
 		Role:      user.Role,
 		Active:    user.Active,
 		CreatedAt: user.CreatedAt,
@@ -58,4 +60,10 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Active *bool   `json:"active"`
 	Role   *string `json:"role" binding:"omitempty,oneof=customer staff admin" example:"staff"`
+}
+
+// UpdateProfileRequest is what a signed-in user may change about themselves.
+type UpdateProfileRequest struct {
+	FullName string `json:"full_name" binding:"required,min=2,max=255" example:"Nguyen Van A"`
+	Phone    string `json:"phone" binding:"omitempty,max=20" example:"0901234567"`
 }

@@ -30,6 +30,14 @@ func NewMovieService(db *gorm.DB, movieRepo repository.MovieRepository) MovieSer
 	return &movieService{db: db, movieRepo: movieRepo}
 }
 
+// defaultAgeRating: an omitted rating means everybody (P, per GORDP 2022/17).
+func defaultAgeRating(rating string) string {
+	if rating == "" {
+		return "P"
+	}
+	return rating
+}
+
 func (s *movieService) List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]dto.MovieResponse, int64, error) {
 	movies, total, err := s.movieRepo.List(ctx, query, includeDrafts)
 	if err != nil {
@@ -63,6 +71,9 @@ func (s *movieService) Create(ctx context.Context, req dto.MovieRequest) (*dto.M
 		Director:    strings.TrimSpace(req.Director),
 		Description: req.Description,
 		PosterURL:   req.PosterURL,
+		TrailerURL:  req.TrailerURL,
+		Cast:        req.Cast,
+		AgeRating:   defaultAgeRating(req.AgeRating),
 		ReleaseDate: releaseDate,
 		Status:      req.Status,
 	}
@@ -126,6 +137,9 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 		current.Director = strings.TrimSpace(req.Director)
 		current.Description = req.Description
 		current.PosterURL = req.PosterURL
+		current.TrailerURL = req.TrailerURL
+		current.Cast = req.Cast
+		current.AgeRating = defaultAgeRating(req.AgeRating)
 		current.ReleaseDate = releaseDate
 		current.Status = req.Status
 		if err := s.movieRepo.Update(ctx, tx, current); err != nil {

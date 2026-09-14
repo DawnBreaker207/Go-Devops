@@ -25,8 +25,17 @@ type Config struct {
 	Checkin   CheckinConfig   `mapstructure:"checkin"`
 	Payment   PaymentConfig   `mapstructure:"payment"`
 	Mail      MailConfig      `mapstructure:"mail"`
+	Account   AccountConfig   `mapstructure:"account"`
 	Storage   StorageConfig   `mapstructure:"storage"`
 	Audit     AuditConfig     `mapstructure:"audit"`
+}
+
+// AccountConfig wires the self-service account flows.
+type AccountConfig struct {
+	// PasswordResetURL is the frontend page the reset link points to; the token is appended
+	// as ?token=<hex>. Reset tokens stay valid PasswordResetTTL (5m-24h).
+	PasswordResetURL string        `mapstructure:"password_reset_url"`
+	PasswordResetTTL time.Duration `mapstructure:"password_reset_ttl"`
 }
 
 type AuditConfig struct {
@@ -349,6 +358,15 @@ func (c *Config) validate() error {
 	if c.Payment.Providers.Mock.Enabled && c.Payment.Providers.Mock.Secret == "" {
 		return errors.New("payment.providers.mock.secret must not be empty when the mock provider is enabled")
 	}
+	if c.Account.PasswordResetURL == "" {
+		c.Account.PasswordResetURL = "http://localhost:5173/reset-password"
+	}
+	if c.Account.PasswordResetTTL == 0 {
+		c.Account.PasswordResetTTL = 30 * time.Minute
+	}
+	if c.Account.PasswordResetTTL < 5*time.Minute || c.Account.PasswordResetTTL > 24*time.Hour {
+		return fmt.Errorf("account.password_reset_ttl must be between 5m and 24h, got %s", c.Account.PasswordResetTTL)
+	}
 	return nil
 }
 
@@ -427,6 +445,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("payment.providers.mock.allow_in_production", false)
 
 	v.SetDefault("mail.outbox_dir", "tmp/mail")
+
+	v.SetDefault("account.password_reset_url", "http://localhost:5173/reset-password")
+	v.SetDefault("account.password_reset_ttl", "30m")
 
 	v.SetDefault("queue.url", "amqp://guest:guest@localhost:5672/")
 }

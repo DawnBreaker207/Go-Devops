@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -14,11 +15,14 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
+var phonePattern = regexp.MustCompile(`^\+?[0-9]{8,15}$`)
+
 type UserService interface {
 	GetByID(ctx context.Context, id string) (*dto.UserResponse, error)
 	List(ctx context.Context, query dto.UserListQuery) ([]dto.UserResponse, int64, error)
 	Create(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error)
 	Update(ctx context.Context, actorID, userID string, req dto.UpdateUserRequest) (*dto.UserResponse, error)
+	UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*dto.UserResponse, error)
 }
 
 type userService struct {
@@ -31,6 +35,41 @@ type userService struct {
 // changed (e.g. AccountStatusCache.Invalidate).
 func NewUserService(db *gorm.DB, userRepo repository.UserRepository, onChange ...func(userID string)) UserService {
 	return &userService{db: db, userRepo: userRepo, onChange: onChange}
+}
+
+// UpdateProfile changes the caller's own name and phone; an empty phone clears it.
+func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*dto.UserResponse, error) {
+	fullName := strings.TrimSpace(req.FullName)
+	phone := strings.TrimSpace(req.Phone)
+	if phone != "" && !phonePattern.MatchString(phone) {
+		return nil, apperrors.Validation("phone must be 8 to 15 digits, optionally prefixed with +")
+	}
+	var user *models.User
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		u, err := s.userRepo.LockByID(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if u == nil {
+			return apperrors.ErrUserNotFound
+		}
+		if err := s.userRepo.UpdateProfile(ctx, tx, userID, fullName, phone); err != nil {
+			return err
+		}
+		u.FullName, u.Phone = fullName, phone
+		user = u
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = userID
+			rec.After = map[string]any{"full_name": user.FullName, "phone": user.Phone}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := dto.NewUserResponse(user)
+	return &result, nil
 }
 
 func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse, error) {

@@ -101,6 +101,9 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		auth.POST("/register", middleware.Audit(db, "auth.register", "user"), h.Auth.Register)
 		auth.POST("/login", middleware.Audit(db, "auth.login", "user"), h.Auth.Login)
 		auth.POST("/refresh", middleware.Audit(db, "auth.refresh", "user"), h.Auth.Refresh)
+		auth.POST("/logout", middleware.Audit(db, "auth.logout", "user"), h.Auth.Logout)
+		auth.POST("/forgot-password", middleware.Audit(db, "auth.forgot_password", "user"), h.Auth.ForgotPassword)
+		auth.POST("/reset-password", middleware.Audit(db, "auth.reset_password", "user"), h.Auth.ResetPassword)
 	}
 
 	public := v1.Group("")
@@ -116,6 +119,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 	protected.Use(middleware.Auth(jwtManager, accounts))
 	{
 		protected.GET("/users/me", h.User.Me)
+		protected.PUT("/users/me", middleware.Audit(db, "users.update_profile", "user"), h.User.UpdateMe)
+		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)
 
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
 

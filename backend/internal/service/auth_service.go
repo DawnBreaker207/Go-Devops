@@ -1,12 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"html/template"
 	"math"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -15,6 +21,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/notify"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
@@ -32,20 +39,31 @@ type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.TokenResponse, error)
+	Logout(ctx context.Context, refreshToken string) error
+	ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error)
+	ForgotPassword(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error
 }
 
 type authService struct {
-	db         *gorm.DB
-	userRepo   repository.UserRepository
-	tokens     repository.RefreshTokenRepository
-	jwtManager *jwt.Manager
-	loginGuard *ratelimit.FailureLimiter
+	db          *gorm.DB
+	userRepo    repository.UserRepository
+	tokens      repository.RefreshTokenRepository
+	resetTokens repository.PasswordResetTokenRepository
+	mailer      notify.Mailer
+	resetURL    string
+	resetTTL    time.Duration
+	jwtManager  *jwt.Manager
+	loginGuard  *ratelimit.FailureLimiter
 }
 
 // NewAuthService: loginGuard may be nil (no failed-login lockout).
 func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, tokens repository.RefreshTokenRepository,
-	jwtManager *jwt.Manager, loginGuard *ratelimit.FailureLimiter) AuthService {
-	return &authService{db: db, userRepo: userRepo, tokens: tokens, jwtManager: jwtManager, loginGuard: loginGuard}
+	jwtManager *jwt.Manager, loginGuard *ratelimit.FailureLimiter,
+	resetTokens repository.PasswordResetTokenRepository, mailer notify.Mailer,
+	resetURL string, resetTTL time.Duration) AuthService {
+	return &authService{db: db, userRepo: userRepo, tokens: tokens, resetTokens: resetTokens,
+		mailer: mailer, resetURL: resetURL, resetTTL: resetTTL, jwtManager: jwtManager, loginGuard: loginGuard}
 }
 
 func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error) {
@@ -187,6 +205,170 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 
 	result := newTokenResponse(pair)
 	return &result, nil
+}
+
+// Logout revokes the whole token family of the presented refresh token. A token
+// that is already dead still answers 200: the session is simply gone.
+func (s *authService) Logout(ctx context.Context, refreshToken string) error {
+	claims, err := s.jwtManager.ParseRefresh(refreshToken)
+	if err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		stored, err := s.tokens.Lock(ctx, tx, claims.ID)
+		if err != nil {
+			return err
+		}
+		if stored == nil || stored.UserID != claims.UserID || stored.RevokedAt != nil {
+			return nil
+		}
+		_, err = s.tokens.RevokeFamily(ctx, tx, stored.FamilyID)
+		return err
+	})
+}
+
+// ChangePassword checks the current password, then rotates it and revokes every
+// other session; the current one receives a fresh token pair.
+func (s *authService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+		return nil, apperrors.ErrInvalidCredentials
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, apperrors.Internal("cannot hash password").Wrap(err)
+	}
+	var pair *jwt.TokenPair
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.userRepo.SetPassword(ctx, tx, userID, string(hashed)); err != nil {
+			return err
+		}
+		if _, err := s.tokens.RevokeUser(ctx, tx, userID); err != nil {
+			return err
+		}
+		pair, err = s.issueTokens(ctx, tx, user, "")
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := newTokenResponse(pair)
+	return &result, nil
+}
+
+// ForgotPassword always answers 200: it never reveals whether the email exists.
+// For an existing active account it mints one live reset token and emails the
+// link; a missing email burns a bcrypt compare so the answer does not leak timing.
+func (s *authService) ForgotPassword(ctx context.Context, email string) error {
+	user, err := s.userRepo.FindByEmail(ctx, normalizeEmail(email))
+	if err != nil {
+		if errors.Is(err, apperrors.ErrUserNotFound) {
+			_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), dummyPasswordHash())
+			return nil
+		}
+		return err
+	}
+	if !user.Active {
+		return nil
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return apperrors.Internal("cannot generate reset token").Wrap(err)
+	}
+	tokenHex := hex.EncodeToString(raw)
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.resetTokens.InvalidateUser(ctx, tx, user.ID); err != nil {
+			return err
+		}
+		return s.resetTokens.Create(ctx, tx, &models.PasswordResetToken{
+			UserID:    user.ID,
+			TokenHash: sha256Hex(tokenHex),
+			ExpiresAt: time.Now().Add(s.resetTTL),
+		})
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.sendResetEmail(ctx, user.Email, tokenHex); err != nil {
+		// The mail is not on the critical path: the client must get its 200 either way.
+		logger.Warn("password reset email not sent", logger.String("user_id", user.ID), logger.Err(err))
+	}
+	return nil
+}
+
+// ResetPassword redeems a single-use token. Wrong, unused, or expired tokens are
+// rejected the same way (400); on success the password changes, the token dies
+// and every refresh token of the user is revoked.
+func (s *authService) ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error {
+	if len(req.Token) < 16 {
+		return apperrors.BadRequest("invalid or expired reset token")
+	}
+	hash := sha256Hex(strings.ToLower(req.Token))
+	var user *models.User
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		token, err := s.resetTokens.LockValid(ctx, tx, hash)
+		if err != nil {
+			return err
+		}
+		if token == nil {
+			return apperrors.BadRequest("invalid or expired reset token")
+		}
+		u, err := s.userRepo.FindByID(ctx, token.UserID)
+		if err != nil {
+			return err
+		}
+		if !u.Active {
+			return apperrors.ErrAccountLocked
+		}
+		hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return apperrors.Internal("cannot hash password").Wrap(err)
+		}
+		if err := s.userRepo.SetPassword(ctx, tx, u.ID, string(hashed)); err != nil {
+			return err
+		}
+		if err := s.resetTokens.MarkUsed(ctx, tx, token.ID); err != nil {
+			return err
+		}
+		if _, err := s.tokens.RevokeUser(ctx, tx, u.ID); err != nil {
+			return err
+		}
+		user = u
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	s.auditSuccess(ctx, "auth.reset_password", user.ID, user.Role, nil)
+	return nil
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+const resetEmailHTML = `<!doctype html>
+<html><body style="font-family:Arial,Helvetica,sans-serif;color:#1f2328;max-width:480px">
+<p>Xin chào,</p>
+<p>Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản xem phim của mình.</p>
+<p><a href="{{.URL}}">Đặt lại mật khẩu</a></p>
+<p>Liên kết có giá trị 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+</body></html>`
+
+var resetEmailTemplate = template.Must(template.New("reset").Parse(resetEmailHTML))
+
+// sendResetEmail: the recipient address never enters logs.
+func (s *authService) sendResetEmail(ctx context.Context, email, token string) error {
+	var body bytes.Buffer
+	if err := resetEmailTemplate.Execute(&body, struct{ URL string }{URL: s.resetURL + "?token=" + token}); err != nil {
+		return err
+	}
+	return s.mailer.Send(ctx, notify.Message{To: email, Subject: "Đặt lại mật khẩu", HTML: body.String()})
 }
 
 // issueTokens: an empty familyID starts a new token family (a fresh login).

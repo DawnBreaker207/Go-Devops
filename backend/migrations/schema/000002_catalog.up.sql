@@ -10,16 +10,24 @@ CREATE TABLE IF NOT EXISTS movies (
     director     VARCHAR(255) NOT NULL,
     description  TEXT,
     poster_url   VARCHAR(512),
+    trailer_url  VARCHAR(512),
+    -- "cast" is an SQL keyword.
+    cast_members TEXT,
+    age_rating   VARCHAR(4)   NOT NULL DEFAULT 'P',
     release_date DATE         NOT NULL,
     status       VARCHAR(32)  NOT NULL DEFAULT 'draft',
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deleted_at   TIMESTAMPTZ,
     CONSTRAINT ck_movie_status CHECK (status IN ('draft','showing','ended')),
-    CONSTRAINT ck_movie_duration CHECK (duration > 0)
+    CONSTRAINT ck_movie_duration CHECK (duration > 0),
+    -- Vietnamese film classification.
+    CONSTRAINT ck_movie_age_rating CHECK (age_rating IN ('P','K','T13','T16','T18'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_movies_status ON movies (status);
+CREATE INDEX IF NOT EXISTS idx_movies_genre ON movies (LOWER(genre)) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS halls (
     id             UUID PRIMARY KEY,

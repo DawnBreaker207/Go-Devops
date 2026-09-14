@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     email      VARCHAR(255) NOT NULL,
     password   VARCHAR(255) NOT NULL,
     full_name  VARCHAR(255) NOT NULL,
+    phone      VARCHAR(20),
     role       VARCHAR(32)  NOT NULL DEFAULT 'customer',
     active     BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -37,3 +38,17 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens (family_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens (user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens (expires_at);
+
+-- Only the SHA-256 of an emailed reset token is stored; a token works once.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         UUID PRIMARY KEY,
+    user_id    UUID        NOT NULL REFERENCES users(id),
+    token_hash CHAR(64)    NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at    TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_password_reset_token_hash UNIQUE (token_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens (expires_at);

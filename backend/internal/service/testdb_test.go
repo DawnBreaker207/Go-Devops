@@ -196,7 +196,7 @@ func newEnv(t *testing.T) *env {
 		DELETE FROM tickets; DELETE FROM booking_seats;
 		DELETE FROM payments; DELETE FROM bookings; DELETE FROM showtime_seats;
 		DELETE FROM showtimes; DELETE FROM hall_prices; DELETE FROM seats; DELETE FROM halls;
-		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM users;`).Error)
+		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM users;`).Error)
 
 	for i := 0; i < 8; i++ {
 		u := &models.User{Email: fmt.Sprintf("user%d@test.local", i), Password: "x", FullName: fmt.Sprintf("User %d", i), Role: models.RoleCustomer}
@@ -252,7 +252,8 @@ func newEnv(t *testing.T) *env {
 	userRepo := repository.NewUserRepository(testDB)
 	e.jwt = jwt.NewManager("test-access-secret", "test-refresh-secret", "test", 15*time.Minute, time.Hour)
 	guard := ratelimit.NewFailureLimiter(5, 5*time.Minute, func() time.Time { return e.now })
-	e.auth = service.NewAuthService(testDB, userRepo, repository.NewRefreshTokenRepository(testDB), e.jwt, guard)
+	e.auth = service.NewAuthService(testDB, userRepo, repository.NewRefreshTokenRepository(testDB), e.jwt, guard,
+		repository.NewPasswordResetTokenRepository(testDB), e.mailer, "http://test.local/reset-password", 30*time.Minute)
 	e.accounts = service.NewUserService(testDB, userRepo)
 	e.reports = service.NewReportService(repository.NewReportRepository(testDB), repository.NewShowtimeRepository(testDB), time.UTC)
 	e.movies = service.NewMovieService(testDB, repository.NewMovieRepository(testDB))

@@ -14,6 +14,8 @@ type RefreshTokenRepository interface {
 	Lock(ctx context.Context, tx *gorm.DB, id string) (*models.RefreshToken, error)
 	MarkUsed(ctx context.Context, tx *gorm.DB, id string) error
 	RevokeFamily(ctx context.Context, tx *gorm.DB, familyID string) (int64, error)
+	// RevokeUser invalidates every session of a user, whatever the token family.
+	RevokeUser(ctx context.Context, tx *gorm.DB, userID string) (int64, error)
 }
 
 type refreshTokenRepository struct {
@@ -53,6 +55,14 @@ func (r *refreshTokenRepository) RevokeFamily(ctx context.Context, tx *gorm.DB, 
 	res := r.conn(ctx, tx).Exec(`UPDATE refresh_tokens SET revoked_at = NOW() WHERE family_id = ? AND revoked_at IS NULL`, familyID)
 	if res.Error != nil {
 		return 0, fmt.Errorf("revoke refresh token family: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *refreshTokenRepository) RevokeUser(ctx context.Context, tx *gorm.DB, userID string) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL`, userID)
+	if res.Error != nil {
+		return 0, fmt.Errorf("revoke user refresh tokens: %w", res.Error)
 	}
 	return res.RowsAffected, nil
 }

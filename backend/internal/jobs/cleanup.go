@@ -11,7 +11,7 @@ import (
 const cleanupChunk = 5000
 
 // NewCleanup runs nightly at 03:30 local time: it deletes audit logs and finished runs past
-// retention and refresh tokens dead for a day.
+// retention, refresh tokens dead for a day, and password reset tokens expired for a day.
 func NewCleanup(repo repository.MaintenanceRepository, retentionDays int, location *time.Location) *batch.Job {
 	return &batch.Job{
 		Name:     "cleanup",
@@ -22,6 +22,7 @@ func NewCleanup(repo repository.MaintenanceRepository, retentionDays int, locati
 				func() (int64, error) { return repo.DeleteAuditOlderThan(ctx, retentionDays, cleanupChunk) },
 				func() (int64, error) { return repo.DeleteFinishedRunsOlderThan(ctx, retentionDays, cleanupChunk) },
 				func() (int64, error) { return repo.DeleteDeadRefreshTokens(ctx, cleanupChunk) },
+				func() (int64, error) { return repo.DeleteDeadResetTokens(ctx, cleanupChunk) },
 			}
 			for _, step := range steps {
 				for {

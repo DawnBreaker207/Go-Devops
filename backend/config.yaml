@@ -105,6 +105,12 @@ payment:
 mail:
   outbox_dir: tmp/mail
 
+# Password reset: the emailed link points at the frontend page; the token there
+# is single-use and expires after password_reset_ttl (5m-24h).
+account:
+  password_reset_url: http://localhost:5173/reset-password
+  password_reset_ttl: 30m
+
 # Audit logs older than this are removed by the nightly cleanup job (>= 90).
 audit:
   retention_days: 90
