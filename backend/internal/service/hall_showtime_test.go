@@ -15,8 +15,7 @@ func hasShowtime(items []dto.ShowtimeListItem, id string) bool {
 	return slices.ContainsFunc(items, func(it dto.ShowtimeListItem) bool { return it.ID == id })
 }
 
-// T28 / T29 / T30 (FR-CAT-01..03): showtimes of a day; empty day is an empty
-// list; halls without full prices, ended movies and started shows are hidden.
+// T28 / T29 / T30: an empty day is an empty list; unpriced halls, ended movies and started shows are hidden.
 func TestShowtimeListing_DayFilters(t *testing.T) {
 	e := newEnv(t)
 	var show models.Showtime
@@ -77,8 +76,7 @@ func TestShowtimeListing_DayFilters(t *testing.T) {
 	}
 }
 
-// T31 / T32 (FR-HALL-01/02): the grid follows rows, seat types and gaps; a
-// hall is never created or saved without a positive price for every type.
+// T31 / T32: the grid follows rows, seat types and gaps; every seat type needs a positive price.
 func TestHallCreate_GridAndPrices(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
@@ -138,8 +136,7 @@ func TestHallCreate_GridAndPrices(t *testing.T) {
 	}
 }
 
-// T33 (FR-HALL-03): a live booking (pending/confirmed) locks the layout with
-// 409; an expired booking does not.
+// T33: a pending or confirmed booking locks the layout with 409; an expired one does not.
 func TestHallLayout_LockedOnlyByLiveBookings(t *testing.T) {
 	e := newEnv(t)
 	seats, err := e.halls.SeatsByHall(e.ctx, e.hallID)
@@ -166,8 +163,7 @@ func TestHallLayout_LockedOnlyByLiveBookings(t *testing.T) {
 	}
 }
 
-// T34 (FR-SHOW-02): a showtime with bookings can not be deleted (409); closing
-// it stops sales.
+// T34: a showtime with bookings can not be deleted (409); closing it stops sales.
 func TestShowtime_DeleteAndClose(t *testing.T) {
 	e := newEnv(t)
 	spare := e.newShowtime(8 * time.Hour)
@@ -193,7 +189,7 @@ func TestShowtime_DeleteAndClose(t *testing.T) {
 	}
 }
 
-// T35 (FR-SEAT-01): the seat map shows each seat's state and its type price.
+// T35: the seat map shows each seat's state and its type price.
 func TestSeatMap_StatusesAndPrices(t *testing.T) {
 	e := newEnv(t)
 	e.confirmed(e.users[0], "A1")

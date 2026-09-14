@@ -7,8 +7,7 @@ import (
 
 var providerName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
-// Registry holds the enabled providers, in registration order. It is filled
-// once at startup and read-only afterwards.
+// Registry is filled once at startup and read-only afterwards, so reads need no lock.
 type Registry struct {
 	byName      map[string]Provider
 	order       []string
@@ -19,7 +18,6 @@ func NewRegistry() *Registry {
 	return &Registry{byName: make(map[string]Provider)}
 }
 
-// Register adds an enabled provider.
 func (r *Registry) Register(p Provider) error {
 	name := p.Name()
 	if !providerName.MatchString(name) {
@@ -33,13 +31,12 @@ func (r *Registry) Register(p Provider) error {
 	return nil
 }
 
-// Get returns an enabled provider.
 func (r *Registry) Get(name string) (Provider, bool) {
 	p, ok := r.byName[name]
 	return p, ok
 }
 
-// List returns the enabled providers in registration order.
+// List returns providers in registration order.
 func (r *Registry) List() []Provider {
 	out := make([]Provider, 0, len(r.order))
 	for _, name := range r.order {
@@ -48,8 +45,7 @@ func (r *Registry) List() []Provider {
 	return out
 }
 
-// SetDefault picks the provider used when a pay request names none; empty
-// means the customer must choose.
+// SetDefault picks the provider used when a pay request names none; empty means the customer must choose.
 func (r *Registry) SetDefault(name string) error {
 	if name != "" {
 		if _, ok := r.byName[name]; !ok {
@@ -60,5 +56,4 @@ func (r *Registry) SetDefault(name string) error {
 	return nil
 }
 
-// Default returns the default provider name, possibly empty.
 func (r *Registry) Default() string { return r.defaultName }

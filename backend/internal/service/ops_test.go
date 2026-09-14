@@ -16,15 +16,13 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 )
 
-// H1: a RUNNING row left by a crashed process is closed at startup and no
-// longer blocks the job.
 func TestBatch_OrphanRunningRowDoesNotBlock(t *testing.T) {
 	e := newEnv(t)
 	e.must(e.db.Exec(`INSERT INTO batch_jobs (id, job_name, triggered_by, status)
 		VALUES (gen_random_uuid(), 'sweepExpiredHolds', 'cron', 'running')`).Error)
 	manager := batch.NewManager(e.db, repository.NewBatchJobRepository(e.db))
 	sweep := jobs.NewSweepExpiredHolds(e.svc)
-	sweep.Schedule = "" // no cron tick may start a run between Start and the manual run below
+	sweep.Schedule = "" // no cron run may sneak in between Start and the manual run
 	manager.Register(sweep)
 	if err := manager.Run(e.ctx, "sweepExpiredHolds", models.TriggerManual); err == nil {
 		t.Fatal("orphan RUNNING row did not block before startup (test setup)")
@@ -40,8 +38,6 @@ func TestBatch_OrphanRunningRowDoesNotBlock(t *testing.T) {
 	}
 }
 
-// M19: a manual run answers 202 at once and finishes in the background; a run
-// already going is refused with 409.
 func TestHTTP_ManualJobRunIsAsync(t *testing.T) {
 	h := newHTTPEnv(t)
 	admin, _ := h.login(models.RoleAdmin)
@@ -87,8 +83,6 @@ func loginAt(t *testing.T, base, email, password, forwardedFor string) int {
 	return resp.StatusCode
 }
 
-// H3: without trusted proxies a forged X-Forwarded-For does not reset the
-// login lockout.
 func TestHTTP_ForwardedForIgnoredWithoutTrustedProxy(t *testing.T) {
 	h := newHTTPEnv(t)
 	h.newUser(models.RoleCustomer, "xff@test.local", "secret123")
@@ -102,7 +96,6 @@ func TestHTTP_ForwardedForIgnoredWithoutTrustedProxy(t *testing.T) {
 	}
 }
 
-// H3: behind a configured proxy the forwarded client IP is used.
 func TestHTTP_ForwardedForHonoredFromTrustedProxy(t *testing.T) {
 	h := newHTTPEnv(t)
 	h.trustedProxies = []string{"127.0.0.1/32", "::1/128"}
@@ -120,7 +113,6 @@ func TestHTTP_ForwardedForHonoredFromTrustedProxy(t *testing.T) {
 	}
 }
 
-// L7: oversized JSON bodies answer 413; defensive headers on every answer.
 func TestHTTP_BodyLimitAndSecurityHeaders(t *testing.T) {
 	h := newHTTPEnv(t)
 	big := `{"email":"a@test.local","password":"` + strings.Repeat("x", 2<<20) + `"}`
@@ -145,8 +137,7 @@ func TestHTTP_BodyLimitAndSecurityHeaders(t *testing.T) {
 	}
 }
 
-// L4: locking an account or changing its role takes effect on tokens already
-// issued, without waiting for them to expire.
+// Locking an account or changing its role applies to tokens already issued.
 func TestHTTP_LockedAccountTokenRejectedImmediately(t *testing.T) {
 	h := newHTTPEnv(t)
 	admin, _ := h.login(models.RoleAdmin)

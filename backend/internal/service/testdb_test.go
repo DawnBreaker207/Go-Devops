@@ -32,14 +32,9 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
 
-// Integration tests run against a real PostgreSQL (docker compose postgres).
-// A throwaway database is created, migrated from migrations/schema and
-// dropped afterwards. Without a reachable server the tests skip.
-//
-//	TEST_DB_HOST / TEST_DB_PORT / TEST_DB_USER / TEST_DB_PASSWORD override defaults.
+// Tests use a throwaway database on a real PostgreSQL and skip without one; TEST_DB_* override the defaults.
 const testDBName = "cinema_booking_test"
 
-// merchantURL is the public base URL the service hands to providers.
 const merchantURL = "http://merchant.test"
 
 var testDB *gorm.DB
@@ -117,7 +112,6 @@ func closeDB(db *gorm.DB) {
 	}
 }
 
-// applyMigrations runs every *.up.sql in version order, like migrate up.
 func applyMigrations(db *gorm.DB, dir string) error {
 	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
 	if err != nil {
@@ -136,7 +130,6 @@ func applyMigrations(db *gorm.DB, dir string) error {
 	return nil
 }
 
-// fakePublisher records ticket email jobs published after confirm.
 type fakePublisher struct {
 	mu  sync.Mutex
 	ids []string
@@ -155,9 +148,7 @@ func (p *fakePublisher) count() int {
 	return len(p.ids)
 }
 
-// env is one freshly seeded cinema: 1 movie, hall "Hall 1" of 2x5 seats
-// (row A standard with gap A5, row B vip), one open showtime in 3 hours, and
-// the mock payment provider registered like any provider.
+// env seeds 1 movie, "Hall 1" of 2x5 seats (row A standard with gap A5, row B vip) and a showtime in 3 hours.
 type env struct {
 	t         *testing.T
 	ctx       context.Context
@@ -200,8 +191,7 @@ func newEnv(t *testing.T) *env {
 	ctx := context.Background()
 	e := &env{t: t, ctx: ctx, db: testDB, seat: map[string]string{}, emailOf: map[string]string{}}
 
-	// DELETE, not TRUNCATE: on tiny tables it avoids new relfilenodes + fsync,
-	// which made every test pay seconds on Docker Desktop.
+	// DELETE, not TRUNCATE: far faster on tiny tables (no new relfilenodes and fsync).
 	e.must(testDB.Exec(`DELETE FROM audit_logs; DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
 		DELETE FROM tickets; DELETE FROM booking_seats;
 		DELETE FROM payments; DELETE FROM bookings; DELETE FROM showtime_seats;
@@ -269,12 +259,10 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
-// fullPrices is a valid price for each of the 4 seat types.
 func fullPrices() map[string]int64 {
 	return map[string]int64{"standard": priceStandard, "vip": priceVIP, "couple": 160000, "recliner": 130000}
 }
 
-// newUser creates an account that can log in with password.
 func (e *env) newUser(role, email, password string) *models.User {
 	e.t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
@@ -284,7 +272,6 @@ func (e *env) newUser(role, email, password string) *models.User {
 	return u
 }
 
-// runJob runs a batch job once and returns its last reported progress.
 func (e *env) runJob(job *batch.Job) (processed, skipped int) {
 	e.t.Helper()
 	e.must(job.Run(e.ctx, batch.RunOptions{DB: e.db, Progress: func(p, s int) error {
@@ -301,7 +288,6 @@ func (e *env) must(err error) {
 	}
 }
 
-// addProvider registers one more mock provider instance under name.
 func (e *env) addProvider(name string) *mock.Provider {
 	e.t.Helper()
 	p := mock.New(mock.Options{Name: name, Secret: "test-secret-" + name, PublicBaseURL: merchantURL})
@@ -316,9 +302,7 @@ func (e *env) newShowtime(in time.Duration) string {
 	return st.ID
 }
 
-// moveShowStart makes a showtime start in d from the DB clock (negative: it
-// already started), keeping its length, to reach the check-in window or a
-// started show without waiting.
+// moveShowStart makes a showtime start d from the DB clock (negative: already started), keeping its length.
 func (e *env) moveShowStart(showID string, d time.Duration) {
 	e.t.Helper()
 	e.must(e.db.Exec(`UPDATE showtimes SET start_at = NOW() + make_interval(secs => ?),
@@ -365,7 +349,6 @@ func (e *env) mustHold(user string, labels ...string) *dto.HoldResponse {
 	return res
 }
 
-// pay opens a mock checkout and returns the merchant reference.
 func (e *env) pay(user, bookingID string) string {
 	e.t.Helper()
 	res, err := e.svc.Pay(e.ctx, user, bookingID, dto.PayRequest{Provider: "mock"})
@@ -373,7 +356,6 @@ func (e *env) pay(user, bookingID string) string {
 	return res.TxnRef
 }
 
-// capture simulates the customer acting on the mock checkout page.
 func (e *env) capture(ref string, opts ...mock.CaptureOptions) {
 	e.t.Helper()
 	var o mock.CaptureOptions
@@ -384,7 +366,6 @@ func (e *env) capture(ref string, opts ...mock.CaptureOptions) {
 	e.must(err)
 }
 
-// notificationRequest is the signed IPN request the provider's gateway sends.
 func (e *env) notificationRequest(p *mock.Provider, ref string) *http.Request {
 	e.t.Helper()
 	req, err := p.Gateway().NotificationRequest(e.ctx, ref)
@@ -402,7 +383,6 @@ func (e *env) ipnVia(p *mock.Provider, ref string) payment.AckStatus {
 
 func (e *env) ipn(ref string) payment.AckStatus { return e.ipnVia(e.mockP, ref) }
 
-// payAndNotify runs pay -> checkout -> IPN and returns the booking.
 func (e *env) payAndNotify(user, bookingID string) models.Booking {
 	e.t.Helper()
 	ref := e.pay(user, bookingID)
@@ -413,7 +393,6 @@ func (e *env) payAndNotify(user, bookingID string) models.Booking {
 	return e.booking(bookingID)
 }
 
-// confirmed creates a confirmed booking and returns its id.
 func (e *env) confirmed(user string, labels ...string) string {
 	e.t.Helper()
 	h := e.mustHold(user, labels...)
@@ -423,19 +402,16 @@ func (e *env) confirmed(user string, labels ...string) string {
 	return h.BookingID
 }
 
-// forgedIPN is a mock-shaped notification whose signature was not made by the gateway.
 func forgedIPN(ref string, amount int64) *http.Request {
 	body := fmt.Sprintf(`{"txn_ref":%q,"amount":%d,"status":"paid","gateway_txn_id":"FAKE","signature":%q}`,
 		ref, amount, strings.Repeat("0", 64))
 	return httptest.NewRequest(http.MethodPost, "/api/v1/payments/mock/ipn", strings.NewReader(body))
 }
 
-// shiftHold moves a booking's expiry and its seats' held_until to NOW()+secs
-// (negative = already expired) in one statement.
+// shiftHold sets a booking's expiry and its seats' held_until to NOW()+secs.
 func (e *env) shiftHold(bookingID string, secs float64) {
 	e.t.Helper()
-	// Lock like the service does (booking, then its seats in id order) so
-	// concurrent tests do not deadlock on the helper itself.
+	// Lock in the service's order so concurrent tests do not deadlock on this helper.
 	e.must(e.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`SELECT 1 FROM bookings WHERE id = ? FOR UPDATE`, bookingID).Error; err != nil {
 			return err
@@ -507,8 +483,7 @@ func (e *env) wantSeat(label, status string) {
 	}
 }
 
-// checkInvariants verifies SPEC 5.3 (and the money trail) by SQL, never by
-// trusting logs.
+// checkInvariants verifies the SPEC 5.3 invariants and the money trail by SQL.
 func (e *env) checkInvariants() {
 	e.t.Helper()
 	checks := []struct{ name, sql string }{

@@ -8,7 +8,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// ShowtimeHandler handles showtime scheduling and serving.
 type ShowtimeHandler struct {
 	showtimeService service.ShowtimeService
 }

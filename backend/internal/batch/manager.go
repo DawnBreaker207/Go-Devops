@@ -1,7 +1,4 @@
-// Package batch is a background job framework: job registry, per-run logging
-// to batch_jobs, chunked processing with retry/skip, cron scheduling, and
-// manual triggers. Jobs run in-process (single instance, no queue needed for
-// scheduling); RabbitMQ is reserved for tasks that must leave the HTTP lane.
+// Package batch runs in-process background jobs with cron scheduling, run logging and chunked retry.
 package batch
 
 import (
@@ -20,43 +17,35 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Job is a unit of background work: a 6-field cron schedule (seconds included),
-// empty schedule = manual trigger only. A struct beats an interface here since
-// every job shares the same shape.
+// Job.Schedule is a 6-field cron spec (with seconds); empty means manual trigger only.
 type Job struct {
 	Name     string
 	Schedule string
 	Run      func(ctx context.Context, opts RunOptions) error
 }
 
-// RunOptions carries run-level info a job reports progress through.
 type RunOptions struct {
 	DB          *gorm.DB
 	RunID       string
 	TriggeredBy string
-	// Progress reports processed/skipped counts after each chunk (persisted to batch_jobs).
-	Progress func(processed, skipped int) error
+	Progress    func(processed, skipped int) error
 }
 
 const (
-	// runTimeout bounds one run of any job.
 	runTimeout = 30 * time.Minute
-	// bookkeepingTimeout bounds writing a run's progress or final row, which
-	// must happen even when the run's own context is already canceled.
+	// Bookkeeping writes must succeed even after the run's own context is canceled.
 	bookkeepingTimeout = 5 * time.Second
 )
 
-// Manager registers, schedules and runs jobs, logging runs to batch_jobs.
 type Manager struct {
 	db   *gorm.DB
 	repo repository.BatchJobRepository
 	jobs map[string]*Job
 	cron *cronScheduler
 
-	// ctx is canceled by Stop: every running job sees it and winds down.
+	// Canceled by Stop so running jobs wind down.
 	ctx    context.Context
 	cancel context.CancelFunc
-	// manual tracks runs started by Trigger.
 	manual sync.WaitGroup
 }
 
@@ -65,12 +54,11 @@ func NewManager(db *gorm.DB, repo repository.BatchJobRepository) *Manager {
 	return &Manager{db: db, repo: repo, jobs: make(map[string]*Job), ctx: ctx, cancel: cancel}
 }
 
-// Register adds a job. Name is the identity; a duplicate silently replaces.
+// Register adds a job; a job with the same name replaces the old one.
 func (m *Manager) Register(job *Job) {
 	m.jobs[job.Name] = job
 }
 
-// Names lists registered job names for the admin UI.
 func (m *Manager) Names() []string {
 	names := make([]string, 0, len(m.jobs))
 	for name := range m.jobs {
@@ -79,8 +67,7 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// Start closes runs a previous process left RUNNING, then schedules cron jobs
-// that declare a schedule.
+// Start marks runs left RUNNING by a previous process as stopped, then schedules jobs.
 func (m *Manager) Start(ctx context.Context) error {
 	stopped, err := m.repo.StopOrphans(ctx)
 	if err != nil {
@@ -108,8 +95,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// runScheduled is one cron tick. A tick that finds the previous run still going
-// is logged as a skipped run instead of an error.
+// A tick that finds the previous run still going is recorded as skipped, not as an error.
 func (m *Manager) runScheduled(name string) {
 	ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
 	defer cancel()
@@ -127,9 +113,8 @@ func (m *Manager) runScheduled(name string) {
 	}
 }
 
-// Stop halts scheduling, cancels the context of running jobs (they are chunked
-// and safe to rerun) and waits, bounded by ctx, for them to finish so shutdown
-// never closes the database under a job (E-B1, NFR-DEP-03).
+// Stop cancels running jobs (chunked, safe to rerun) and waits for them, bounded by ctx,
+// so shutdown never closes the database under a job.
 func (m *Manager) Stop(ctx context.Context) {
 	m.cancel()
 	done := make(chan struct{})
@@ -147,9 +132,7 @@ func (m *Manager) Stop(ctx context.Context) {
 	}
 }
 
-// Run executes one job now and waits for it: opens a RUNNING row, calls the
-// job, closes the row whatever happens (error, panic, cancellation). A second
-// call while the job is running returns ErrJobRunning.
+// Run executes a job and waits for it. It returns ErrJobRunning if the job is already running.
 func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	job, run, err := m.begin(ctx, name, triggeredBy)
 	if err != nil {
@@ -158,9 +141,8 @@ func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	return m.execute(ctx, job, run)
 }
 
-// Trigger starts a manual run in the background. It returns once the run's
-// RUNNING row exists, so an unknown job (404) or a run already going (409) is
-// reported to the caller; the result lands in batch_jobs.
+// Trigger starts a run in the background. It returns once the RUNNING row exists,
+// so an unknown or already running job is reported to the caller.
 func (m *Manager) Trigger(name, triggeredBy string) (string, error) {
 	job, run, err := m.begin(m.ctx, name, triggeredBy)
 	if err != nil {
@@ -190,8 +172,6 @@ func (m *Manager) begin(ctx context.Context, name, triggeredBy string) (*Job, *m
 	return job, run, nil
 }
 
-// execute runs the job and always closes its row: success, failed (error or
-// panic) or stopped (canceled by shutdown).
 func (m *Manager) execute(ctx context.Context, job *Job, run *models.BatchJob) (runErr error) {
 	bookkeeping := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
@@ -230,11 +210,9 @@ func (m *Manager) execute(ctx context.Context, job *Job, run *models.BatchJob) (
 	return job.Run(ctx, opts)
 }
 
-// ItemAttempts is how many times a failing item is tried before it is skipped.
 const ItemAttempts = 3
 
-// NoRetry marks an item error that trying again right away can not fix (the
-// item keeps its own retry schedule): RunInChunks skips the item at once.
+// NoRetry marks an item error an immediate retry can't fix; RunInChunks skips the item at once.
 func NoRetry(err error) error {
 	if err == nil {
 		return nil
@@ -246,9 +224,8 @@ type noRetryError struct{ error }
 
 func (e noRetryError) Unwrap() error { return e.error }
 
-// RunInChunks processes items in chunks (~500), persisting progress after each
-// chunk. A failing item is retried up to ItemAttempts times, then counted as
-// skipped; it never stops the job (E-B4).
+// RunInChunks saves progress after each chunk. A failing item is tried up to ItemAttempts
+// times, then skipped; it never stops the job.
 func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func(ctx context.Context, item T) error) error {
 	const chunkSize = 500
 	processed, skipped := 0, 0

@@ -1,5 +1,4 @@
-// Package middleware provides Gin middleware for auth, rate limiting and
-// audit declaration.
+// Package middleware provides the Gin middleware.
 package middleware
 
 import (
@@ -12,12 +11,8 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Audit declares that a route is audited with the given action and resource
-// type. It stashes WHO is acting before the handler runs (services write the
-// success row inside their transaction) and logs the failure when the status
-// comes back >= 400, outside any transaction — nothing was changed. Register
-// it BEFORE RequireRoles so forbidden attempts on an authenticated route are
-// logged too. A failed audit write only logs; it never fails the request.
+// Audit must be registered before RequireRoles so forbidden attempts are logged too.
+// Services write success rows in their transaction; failures (>= 400) are logged here.
 func Audit(db *gorm.DB, action, resourceType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rec := audit.FromGin(c, audit.Record{

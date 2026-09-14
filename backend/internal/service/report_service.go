@@ -10,8 +10,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// ReportService closes business days (F21 closeDay) and feeds the staff
-// board (the MVP part of F17). Days are local days of the configured timezone.
+// ReportService works in local days of the configured timezone.
 type ReportService interface {
 	CloseDay(ctx context.Context, day time.Time) (*dto.DailyAggregateResponse, error)
 	DailyReport(ctx context.Context, from, to string) (*dto.DailyReportResponse, error)
@@ -36,8 +35,7 @@ func (s *reportService) dayBounds(day time.Time) (string, time.Time, time.Time) 
 	return from.Format(dto.DateLayout), from, from.AddDate(0, 0, 1)
 }
 
-// CloseDay writes the daily_aggregates row of the local day containing day.
-// Running it again replaces the numbers of that row (E-B2, T24).
+// CloseDay upserts the daily_aggregates row of day's local date; rerunning it replaces the numbers.
 func (s *reportService) CloseDay(ctx context.Context, day time.Time) (*dto.DailyAggregateResponse, error) {
 	date, from, to := s.dayBounds(day)
 	if err := s.repo.UpsertDailyAggregate(ctx, date, from, to); err != nil {
@@ -53,10 +51,8 @@ func (s *reportService) CloseDay(ctx context.Context, day time.Time) (*dto.Daily
 	return newDailyAggregateResponse(agg), nil
 }
 
-// DailyReport returns the closed days in [from, to] (default: the last 7 days)
-// for admins (F17 minimal, T15). Numbers are what closeDay last wrote to
-// daily_aggregates: CONFIRMED money by payment time only (I4); run closeDay to
-// refresh today.
+// DailyReport returns what closeDay last wrote for [from, to] (default: the last 7 days);
+// run closeDay to refresh today.
 func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.DailyReportResponse, error) {
 	now := time.Now().In(s.location)
 	toDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
@@ -76,7 +72,7 @@ func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.
 		fromDay = parsed
 	}
 	if fromDay.After(toDay) {
-		return nil, apperrors.Validation("from must not be after to") // E-D1
+		return nil, apperrors.Validation("from must not be after to")
 	}
 	if toDay.Sub(fromDay) > 366*24*time.Hour {
 		return nil, apperrors.Validation("the range can not exceed 366 days")
@@ -100,7 +96,6 @@ func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.
 	return res, nil
 }
 
-// StaffBoard lists the showtimes of a day (default today) with seat counts.
 func (s *reportService) StaffBoard(ctx context.Context, date string) (*dto.StaffBoardResponse, error) {
 	day := time.Now()
 	if date != "" {
@@ -134,8 +129,6 @@ func (s *reportService) StaffBoard(ctx context.Context, date string) (*dto.Staff
 	return res, nil
 }
 
-// ShowtimeTickets lists the sold tickets of a showtime; status "issued" is the
-// list still waiting at the gate.
 func (s *reportService) ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]dto.StaffTicketResponse, error) {
 	switch status {
 	case "", models.TicketIssued, models.TicketRedeemed:

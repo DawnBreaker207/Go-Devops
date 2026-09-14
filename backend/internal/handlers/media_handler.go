@@ -11,20 +11,17 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// MediaHandler receives image uploads (movie posters).
 type MediaHandler struct {
 	media    service.MediaService
 	localDir string
 	maxBytes int64
 }
 
-// NewMediaHandler builds the handler; localDir is served under /media when
-// the local store is used, empty otherwise.
 func NewMediaHandler(media service.MediaService, localDir string, maxBytes int64) *MediaHandler {
 	return &MediaHandler{media: media, localDir: localDir, maxBytes: maxBytes}
 }
 
-// LocalDir is the directory to serve under /media ("" for remote stores).
+// LocalDir is empty for remote stores.
 func (h *MediaHandler) LocalDir() string { return h.localDir }
 
 // UploadPoster godoc

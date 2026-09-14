@@ -12,8 +12,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// T9 / E-S5: two admins create overlapping showtimes in the same hall at the
-// same moment; the advisory lock lets exactly one through.
+// T9 / E-S5: two overlapping showtimes created at once in one hall, exactly one wins.
 func TestShowtime_ConcurrentOverlapOneWins(t *testing.T) {
 	e := newEnv(t)
 	for round := 0; round < 5; round++ {
@@ -44,7 +43,7 @@ func TestShowtime_ConcurrentOverlapOneWins(t *testing.T) {
 	}
 }
 
-// F2/F3: customers never see draft movies; status filter; E-CAT2 empty list.
+// E-CAT2: also the status filter and an empty showtime list.
 func TestMovies_DraftsHiddenFromCustomers(t *testing.T) {
 	e := newEnv(t)
 	draft := &models.Movie{Title: "Secret Cut", Genre: "Drama", Duration: 90, Director: "X", ReleaseDate: time.Now(), Status: models.MovieStatusDraft}
@@ -84,7 +83,6 @@ func TestMovies_DraftsHiddenFromCustomers(t *testing.T) {
 	}
 }
 
-// E-R2: the customer releases a hold; seats free up and viewers see it now.
 func TestCancelHold_ReleasesSeatsImmediately(t *testing.T) {
 	e := newEnv(t)
 	sub, err := e.hub.Subscribe(e.showID, "viewer")

@@ -13,7 +13,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// fakeRuns records what the manager writes to batch_jobs.
 type fakeRuns struct {
 	startErr error
 
@@ -63,7 +62,6 @@ func (f *fakeRuns) statuses() []string {
 	return append([]string(nil), f.finished...)
 }
 
-// Graceful shutdown waits for a running cron job before the DB is closed.
 func TestStopWaitsForRunningJob(t *testing.T) {
 	m := NewManager(nil, &fakeRuns{})
 	started := make(chan struct{}, 1)
@@ -94,7 +92,6 @@ func TestStopWaitsForRunningJob(t *testing.T) {
 	}
 }
 
-// H1: a panicking job closes its row as failed and the job can run again.
 func TestRun_PanicIsRecordedAndReleases(t *testing.T) {
 	runs := &fakeRuns{}
 	m := NewManager(nil, runs)
@@ -116,7 +113,6 @@ func TestRun_PanicIsRecordedAndReleases(t *testing.T) {
 	}
 }
 
-// H1: starting closes the runs a crashed process left RUNNING.
 func TestStart_MarksOrphanRunsStopped(t *testing.T) {
 	runs := &fakeRuns{}
 	m := NewManager(nil, runs)
@@ -129,7 +125,6 @@ func TestStart_MarksOrphanRunsStopped(t *testing.T) {
 	}
 }
 
-// H1 / M19: shutdown cancels a manual run in progress, which is closed as stopped.
 func TestStop_CancelsRunningJobContext(t *testing.T) {
 	runs := &fakeRuns{}
 	m := NewManager(nil, runs)
@@ -156,7 +151,6 @@ func TestStop_CancelsRunningJobContext(t *testing.T) {
 	}
 }
 
-// Triggering an unknown job is reported to the caller.
 func TestTrigger_UnknownJob(t *testing.T) {
 	m := NewManager(nil, &fakeRuns{})
 	if _, err := m.Trigger("nope", models.TriggerManual); !errors.Is(err, apperrors.ErrJobNotFound) {
@@ -164,7 +158,6 @@ func TestTrigger_UnknownJob(t *testing.T) {
 	}
 }
 
-// L12: a cron tick that finds the previous run still going logs a skipped run.
 func TestCronConflict_WritesSkippedRow(t *testing.T) {
 	runs := &fakeRuns{startErr: apperrors.ErrJobRunning}
 	m := NewManager(nil, runs)
@@ -175,7 +168,6 @@ func TestCronConflict_WritesSkippedRow(t *testing.T) {
 	}
 }
 
-// M17: an item error marked NoRetry is skipped without retrying.
 func TestRunInChunks_NoRetrySkipsImmediately(t *testing.T) {
 	calls := 0
 	err := RunInChunks(context.Background(), RunOptions{}, []int{1}, func(context.Context, int) error {

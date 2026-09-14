@@ -12,8 +12,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// H5 / C7: the cleaning buffer applies after the earlier showtime and before
-// the later one.
 func TestShowtime_CleanupBufferBothSides(t *testing.T) {
 	e := newEnv(t)
 	var show models.Showtime // 100 minutes; the buffer is 20
@@ -37,8 +35,7 @@ func TestShowtime_CleanupBufferBothSides(t *testing.T) {
 	}
 }
 
-// H6: a showtime whose movie is no longer showing sells no seat, and its seat
-// map and realtime token are not served.
+// A movie no longer showing sells no seat and serves no seat map or realtime token.
 func TestHold_MovieNotOnSale(t *testing.T) {
 	e := newEnv(t)
 	// Outside the API, which refuses to end a movie with showtimes to come.
@@ -58,7 +55,6 @@ func TestHold_MovieNotOnSale(t *testing.T) {
 	e.checkInvariants()
 }
 
-// L11: a showtime that already started serves no seat map and no realtime token.
 func TestSeatMap_StartedShowNotServed(t *testing.T) {
 	e := newEnv(t)
 	e.moveShowStart(e.showID, -time.Minute)
@@ -75,9 +71,7 @@ func movieUpdate(status string, duration int) dto.MovieRequest {
 		ReleaseDate: "2026-09-01", Status: status}
 }
 
-// F2 E-M2 / E-M4 (L10): a movie with showtimes still to come can not be
-// deleted, ended or change its duration; closing them frees ending, only past
-// showtimes free the duration and deletion.
+// E-M2 / E-M4: closed showtimes allow ending the movie; only past ones free duration and deletion.
 func TestMovies_DeleteAndStatusGuardedByUpcomingShowtimes(t *testing.T) {
 	e := newEnv(t)
 	update := func(status string, duration int) error {
@@ -98,8 +92,7 @@ func TestMovies_DeleteAndStatusGuardedByUpcomingShowtimes(t *testing.T) {
 		t.Fatalf("edit the other fields: %v", err)
 	}
 
-	// Closed: the movie may end, but a closed showtime could reopen with the
-	// wrong end, so the duration stays.
+	// A closed showtime could reopen with a wrong end, so the duration stays locked.
 	e.must(e.db.Exec(`UPDATE showtimes SET status = 'closed' WHERE id = ?`, e.showID).Error)
 	if err := update(models.MovieStatusShowing, 120); !isAppErr(err, apperrors.ErrMovieDurationLocked) {
 		t.Fatalf("change duration with a closed showtime to come: err = %v", err)
@@ -120,8 +113,7 @@ func TestMovies_DeleteAndStatusGuardedByUpcomingShowtimes(t *testing.T) {
 	}
 }
 
-// F5 E-S3: ending a movie and scheduling a showtime of it at the same moment
-// never leaves an open showtime of an ended movie.
+// E-S3: the race never leaves an open showtime of an ended movie.
 func TestRace_MovieEndVsShowtimeCreate(t *testing.T) {
 	e := newEnv(t)
 	for round := 0; round < 10; round++ {
@@ -164,8 +156,7 @@ func TestRace_MovieEndVsShowtimeCreate(t *testing.T) {
 	}
 }
 
-// M15 / E-S7: closing always works, even for a started showtime of an ended
-// movie; reopening needs a showing movie and a showtime still to come.
+// E-S7: closing always works; reopening needs a showing movie and a showtime still to come.
 func TestShowtimeUpdate_CloseStartedShowOfEndedMovie(t *testing.T) {
 	e := newEnv(t)
 	e.confirmed(e.users[0], "A1")
@@ -197,9 +188,7 @@ func TestShowtimeUpdate_CloseStartedShowOfEndedMovie(t *testing.T) {
 	e.checkInvariants()
 }
 
-// L6 / E-HO3: an idempotency key backs one request. Retried as is it returns
-// the same hold; reused for another seat lot or once its booking ended it
-// answers 409.
+// E-HO3: a retry returns the same hold; reuse for other seats or an ended booking answers 409.
 func TestHold_IdempotencyKeyReuseRules(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]

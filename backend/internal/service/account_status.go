@@ -9,10 +9,8 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// AccountStatusCache tells the auth middleware whether an account is still
-// active and with which role. Answers are kept for ttl so authenticated
-// requests do not all read the users table; changes made through UserService
-// drop the entry at once. In memory: the server runs as a single instance.
+// AccountStatusCache keeps account status for ttl; UserService changes drop the entry at once.
+// In memory only: the server runs as a single instance.
 type AccountStatusCache struct {
 	repo repository.UserRepository
 	ttl  time.Duration
@@ -27,14 +25,12 @@ type accountStatus struct {
 	expires time.Time
 }
 
-// maxAccountStatusEntries bounds the cache; expired entries are pruned past it.
 const maxAccountStatusEntries = 10000
 
 func NewAccountStatusCache(repo repository.UserRepository, ttl time.Duration) *AccountStatusCache {
 	return &AccountStatusCache{repo: repo, ttl: ttl, entries: make(map[string]accountStatus)}
 }
 
-// Status implements middleware.AccountChecker.
 func (c *AccountStatusCache) Status(ctx context.Context, userID string) (bool, string, error) {
 	now := time.Now()
 	c.mu.Lock()
@@ -65,7 +61,6 @@ func (c *AccountStatusCache) Status(ctx context.Context, userID string) (bool, s
 	return active, role, nil
 }
 
-// Invalidate forgets an account so its next request reads the database.
 func (c *AccountStatusCache) Invalidate(userID string) {
 	c.mu.Lock()
 	delete(c.entries, userID)

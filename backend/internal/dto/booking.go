@@ -2,15 +2,13 @@ package dto
 
 import "time"
 
-// HoldRequest reserves seats for a showtime. seat_ids are showtime_seat ids
-// from GET /shows/:id/seats.
+// seat_ids are showtime_seat ids from GET /shows/:id/seats.
 type HoldRequest struct {
 	ShowID         string   `json:"show_id" binding:"required"`
 	SeatIDs        []string `json:"seat_ids" binding:"required,min=1"`
 	IdempotencyKey string   `json:"idempotency_key" binding:"omitempty,min=1,max=128"`
 }
 
-// HeldSeat is one reserved seat with its locked price.
 type HeldSeat struct {
 	ShowtimeSeatID string `json:"showtime_seat_id"`
 	Label          string `json:"label"`
@@ -20,7 +18,6 @@ type HeldSeat struct {
 	Price          int64  `json:"price"`
 }
 
-// HoldResponse is the result of POST /orders/hold.
 type HoldResponse struct {
 	BookingID         string     `json:"booking_id"`
 	ShowtimeID        string     `json:"showtime_id"`
@@ -30,15 +27,13 @@ type HoldResponse struct {
 	ReplacedBookingID string     `json:"replaced_booking_id,omitempty"`
 }
 
-// PayRequest opens a checkout with one of the enabled providers (see GET
-// /payments/providers); empty uses the configured default. The amount always
-// comes from the booking, never from the client (R-P4).
+// An empty provider uses the configured default (see GET /payments/providers).
+// The amount always comes from the booking, never from the client.
 type PayRequest struct {
 	Provider string `json:"provider" binding:"omitempty,max=32" example:"mock"`
 	ClientIP string `json:"-"`
 }
 
-// PayResponse returns the provider checkout to redirect the customer to.
 type PayResponse struct {
 	PaymentID   string     `json:"payment_id"`
 	Provider    string     `json:"provider"`
@@ -47,7 +42,6 @@ type PayResponse struct {
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
-// OrderStatusResponse describes one booking.
 type OrderStatusResponse struct {
 	ID           string          `json:"id"`
 	ShowtimeID   string          `json:"showtime_id"`
@@ -61,7 +55,6 @@ type OrderStatusResponse struct {
 	Showtime     *OrderShowtime  `json:"showtime,omitempty"`
 }
 
-// OrderShowtime is what the e-ticket shows about the showtime (UC-03).
 type OrderShowtime struct {
 	MovieID    string    `json:"movie_id"`
 	MovieTitle string    `json:"movie_title"`
@@ -73,7 +66,7 @@ type OrderShowtime struct {
 	Ended      bool      `json:"ended"`
 }
 
-// TicketResponse is one issued ticket; the frontend renders the QR from code.
+// The frontend renders the QR from code.
 type TicketResponse struct {
 	ID             string `json:"id"`
 	ShowtimeSeatID string `json:"showtime_seat_id"`
@@ -84,18 +77,16 @@ type TicketResponse struct {
 	Status         string `json:"status"`
 }
 
-// OrderDetailResponse couples a booking with its tickets.
 type OrderDetailResponse struct {
 	OrderStatusResponse
 	Tickets []TicketResponse `json:"tickets"`
 }
 
-// RedeemRequestBody is what staff send to check a ticket in at the gate.
 type RedeemRequestBody struct {
 	ShowtimeID string `json:"showtime_id" binding:"required"`
 }
 
-// RedeemResponse is the check-in verdict: ok | used | wrong_show | not_found.
+// Status: ok | used | wrong_show | not_found | too_early | closed.
 type RedeemResponse struct {
 	Status     string     `json:"status"`
 	TicketID   string     `json:"ticket_id,omitempty"`
@@ -104,8 +95,7 @@ type RedeemResponse struct {
 	HallName   string     `json:"hall_name,omitempty"`
 	SeatLabel  string     `json:"seat_label,omitempty"`
 	StartAt    *time.Time `json:"start_at,omitempty"`
-	// Check-in window of the showtime (E-T4), so the gate can tell when the
-	// doors open or closed.
+	// Check-in window, so the gate can tell when the doors open or closed.
 	CheckinOpensAt  *time.Time `json:"checkin_opens_at,omitempty"`
 	CheckinClosesAt *time.Time `json:"checkin_closes_at,omitempty"`
 }

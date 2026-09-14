@@ -14,7 +14,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// TicketRow is a ticket joined with its physical seat.
 type TicketRow struct {
 	ID             string `gorm:"column:id"`
 	BookingID      string `gorm:"column:booking_id"`
@@ -27,7 +26,6 @@ type TicketRow struct {
 	SeatType       string `gorm:"column:seat_type"`
 }
 
-// TicketGateRow is what the gate needs to judge a scanned ticket.
 type TicketGateRow struct {
 	ID            string    `gorm:"column:id"`
 	Code          string    `gorm:"column:code"`
@@ -41,7 +39,6 @@ type TicketGateRow struct {
 	ColNumber     int       `gorm:"column:col_number"`
 }
 
-// BookingHeader is a booking joined with its customer, movie and hall (email).
 type BookingHeader struct {
 	ID          string    `gorm:"column:id"`
 	Status      string    `gorm:"column:status"`
@@ -53,7 +50,6 @@ type BookingHeader struct {
 	StartAt     time.Time `gorm:"column:start_at"`
 }
 
-// ShowtimeInfoRow is what an order shows about its showtime.
 type ShowtimeInfoRow struct {
 	ID         string    `gorm:"column:id"`
 	MovieID    string    `gorm:"column:movie_id"`
@@ -64,9 +60,7 @@ type ShowtimeInfoRow struct {
 	EndAt      time.Time `gorm:"column:end_at"`
 }
 
-// BookingRepository owns seats-of-a-show locking, bookings and tickets.
-// Methods taking tx must run inside the caller's transaction; a nil tx falls
-// back to the plain connection.
+// Methods taking tx run in the caller's transaction; a nil tx uses the plain connection.
 type BookingRepository interface {
 	Now(ctx context.Context, tx *gorm.DB) (time.Time, error)
 
@@ -147,8 +141,7 @@ func firstOrNil[T any](q *gorm.DB, what string) (*T, error) {
 	return &row, nil
 }
 
-// Now reads the database clock: every hold/expiry comparison uses one
-// authoritative time source regardless of app machine drift (R-HO6).
+// Now reads the database clock so hold/expiry checks do not depend on app server clock drift.
 func (r *bookingRepository) Now(ctx context.Context, tx *gorm.DB) (time.Time, error) {
 	var now time.Time
 	if err := r.conn(ctx, tx).Raw("SELECT NOW()").Scan(&now).Error; err != nil {
@@ -165,8 +158,6 @@ func (r *bookingRepository) FindByIDAndUser(ctx context.Context, id, userID stri
 	return firstOrNil[models.Booking](r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID), "find user booking")
 }
 
-// ListByUser returns a user's bookings (page 1-based), newest first. Expired
-// and refunded bookings stay in the history (E-O2).
 func (r *bookingRepository) ListByUser(ctx context.Context, userID string, page, pageSize int) ([]models.Booking, int64, error) {
 	var total int64
 	if err := r.db.WithContext(ctx).Model(&models.Booking{}).
@@ -182,10 +173,8 @@ func (r *bookingRepository) ListByUser(ctx context.Context, userID string, page,
 	return bookings, total, nil
 }
 
-// LockUserShow serializes the holds of one user on one showtime (several tabs,
-// retries with the same idempotency key) so each one sees the booking the
-// previous one committed, instead of racing it. Two-key advisory locks live in
-// a different key space than the single-key hall lock.
+// LockUserShow serializes one user's holds on one showtime (tabs, retries) so each sees the
+// booking the previous one committed. The two-key lock does not collide with the one-key hall lock.
 func (r *bookingRepository) LockUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) error {
 	if err := r.conn(ctx, tx).Exec("SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", userID, showtimeID).Error; err != nil {
 		return fmt.Errorf("lock user showtime: %w", err)
@@ -193,10 +182,8 @@ func (r *bookingRepository) LockUserShow(ctx context.Context, tx *gorm.DB, userI
 	return nil
 }
 
-// UserActive reports whether the account may buy (F18: locked accounts can
-// not hold or pay). The row is share-locked, so an admin locking the account
-// waits for holds and payments in flight and later ones see the lock. Callers
-// take it before any booking lock (see Pay) to keep one lock order.
+// UserActive share-locks the user row so an admin locking the account waits for in-flight
+// holds and payments. Take it before any booking lock to keep one lock order.
 func (r *bookingRepository) UserActive(ctx context.Context, tx *gorm.DB, userID string) (bool, error) {
 	var active []bool
 	if err := r.conn(ctx, tx).Raw(`SELECT active FROM users WHERE id = ? AND deleted_at IS NULL FOR SHARE`, userID).
@@ -206,14 +193,12 @@ func (r *bookingRepository) UserActive(ctx context.Context, tx *gorm.DB, userID 
 	return len(active) == 1 && active[0], nil
 }
 
-// LockBooking serializes every state change of one booking (pay, IPN,
-// confirm, refund, replace) behind its row lock.
+// Every state change of a booking (pay, IPN, confirm, refund, replace) takes this row lock.
 func (r *bookingRepository) LockBooking(ctx context.Context, tx *gorm.DB, id string) (*models.Booking, error) {
 	return firstOrNil[models.Booking](r.conn(ctx, tx).Clauses(forUpdate()).Where("id = ?", id), "lock booking")
 }
 
-// LockLatestByKey locks the newest booking created with an idempotency key,
-// whatever its status: a key backs one request only (E-HO3).
+// Any status matches: an idempotency key backs one request only.
 func (r *bookingRepository) LockLatestByKey(ctx context.Context, tx *gorm.DB, key string) (*models.Booking, error) {
 	return firstOrNil[models.Booking](r.conn(ctx, tx).Clauses(forUpdate()).
 		Where("idempotency_key = ?", key).Order("created_at DESC"), "lock booking by idempotency key")
@@ -230,7 +215,6 @@ func (r *bookingRepository) LockShowtime(ctx context.Context, tx *gorm.DB, id st
 	return firstOrNil[models.Showtime](r.conn(ctx, tx).Clauses(forShare()).Where("id = ?", id), "lock showtime")
 }
 
-// MovieShowing reports whether a movie still sells tickets (H6).
 func (r *bookingRepository) MovieShowing(ctx context.Context, tx *gorm.DB, movieID string) (bool, error) {
 	var status []string
 	if err := r.conn(ctx, tx).Raw(`SELECT status FROM movies WHERE id = ? AND deleted_at IS NULL`, movieID).
@@ -266,7 +250,6 @@ func (r *bookingRepository) BookingSeats(ctx context.Context, tx *gorm.DB, booki
 	return seats, nil
 }
 
-// ExpireBooking moves an unpaid PENDING booking to EXPIRED.
 func (r *bookingRepository) ExpireBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET status = ?, status_reason = ?, updated_at = NOW()
 		WHERE id = ? AND status = ? AND paid_at IS NULL`,
@@ -277,8 +260,7 @@ func (r *bookingRepository) ExpireBooking(ctx context.Context, tx *gorm.DB, id, 
 	return res.RowsAffected, nil
 }
 
-// SetPaid records that a payment attempt's money now belongs to the booking.
-// Expired bookings can be paid too (late payment) — they are refunded right after.
+// Expired bookings can be paid too (late payment); they are refunded right after.
 func (r *bookingRepository) SetPaid(ctx context.Context, tx *gorm.DB, id, paymentID string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET paid_at = NOW(), payment_id = ?, updated_at = NOW()
 		WHERE id = ? AND paid_at IS NULL AND status IN (?, ?)`,
@@ -289,8 +271,7 @@ func (r *bookingRepository) SetPaid(ctx context.Context, tx *gorm.DB, id, paymen
 	return res.RowsAffected, nil
 }
 
-// ConfirmBooking is the PENDING -> CONFIRMED CAS; 0 rows means someone else
-// already moved the booking.
+// PENDING -> CONFIRMED CAS; 0 rows means someone else already moved the booking.
 func (r *bookingRepository) ConfirmBooking(ctx context.Context, tx *gorm.DB, id string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET status = ?, status_reason = NULL, updated_at = NOW()
 		WHERE id = ? AND status = ? AND paid_at IS NOT NULL`,
@@ -301,7 +282,6 @@ func (r *bookingRepository) ConfirmBooking(ctx context.Context, tx *gorm.DB, id 
 	return res.RowsAffected, nil
 }
 
-// RefundBooking moves a PAID booking that could not be confirmed to REFUNDED.
 // A confirmed booking never matches, so a late refund can not undo a sale.
 func (r *bookingRepository) RefundBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET status = ?, status_reason = ?, updated_at = NOW()
@@ -313,8 +293,7 @@ func (r *bookingRepository) RefundBooking(ctx context.Context, tx *gorm.DB, id, 
 	return res.RowsAffected, nil
 }
 
-// LockSeats locks showtime seats in id order, so concurrent holds and
-// confirms never deadlock on each other (R-HO2).
+// Seats are locked in id order so concurrent holds and confirms never deadlock.
 func (r *bookingRepository) LockSeats(ctx context.Context, tx *gorm.DB, showtimeID string, ids []string) ([]models.ShowtimeSeat, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -328,7 +307,7 @@ func (r *bookingRepository) LockSeats(ctx context.Context, tx *gorm.DB, showtime
 	return seats, nil
 }
 
-// HoldSeat marks a locked seat HELD and returns its new fencing version.
+// HoldSeat returns the seat's new fencing version.
 func (r *bookingRepository) HoldSeat(ctx context.Context, tx *gorm.DB, id, userID string, heldUntil time.Time) (int64, error) {
 	var version int64
 	res := r.conn(ctx, tx).Raw(`UPDATE showtime_seats
@@ -344,8 +323,7 @@ func (r *bookingRepository) HoldSeat(ctx context.Context, tx *gorm.DB, id, userI
 	return version, nil
 }
 
-// ReleaseHeldSeat frees a seat only while it is still held by the same hold
-// (user + version); a seat swept or taken over is left alone.
+// Frees the seat only while it is still the same hold (user + version); a seat swept or taken over is left alone.
 func (r *bookingRepository) ReleaseHeldSeat(ctx context.Context, tx *gorm.DB, id, userID string, version int64) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE showtime_seats
 		SET status = ?, held_by = NULL, held_until = NULL, version = version + 1, updated_at = NOW()
@@ -357,7 +335,7 @@ func (r *bookingRepository) ReleaseHeldSeat(ctx context.Context, tx *gorm.DB, id
 	return res.RowsAffected, nil
 }
 
-// SellSeat is the HELD -> SOLD CAS fenced by the hold version (R-C1).
+// HELD -> SOLD CAS fenced by the hold version.
 func (r *bookingRepository) SellSeat(ctx context.Context, tx *gorm.DB, id, userID string, version int64) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE showtime_seats
 		SET status = ?, held_by = NULL, held_until = NULL, version = version + 1, updated_at = NOW()
@@ -369,7 +347,6 @@ func (r *bookingRepository) SellSeat(ctx context.Context, tx *gorm.DB, id, userI
 	return res.RowsAffected, nil
 }
 
-// SeatsByIDs maps physical seat ids to their seat (type, label, gap).
 func (r *bookingRepository) SeatsByIDs(ctx context.Context, tx *gorm.DB, ids []string) (map[string]models.Seat, error) {
 	byID := make(map[string]models.Seat, len(ids))
 	if len(ids) == 0 {
@@ -418,8 +395,7 @@ func (r *bookingRepository) TicketRows(ctx context.Context, bookingID string) ([
 	return rows, nil
 }
 
-// ShowtimeInfos loads movie, hall and times of showtimes in one query
-// (deleted movies/halls included: an old order still shows what was bought).
+// Deleted movies and halls are included so an old order still shows what was bought.
 func (r *bookingRepository) ShowtimeInfos(ctx context.Context, ids []string) (map[string]ShowtimeInfoRow, error) {
 	out := make(map[string]ShowtimeInfoRow, len(ids))
 	if len(ids) == 0 {
@@ -440,12 +416,11 @@ func (r *bookingRepository) ShowtimeInfos(ctx context.Context, ids []string) (ma
 	return out, nil
 }
 
-// TicketForGate resolves a scanned reference: a ticket id or its QR code.
+// ref is a ticket id or its code; nil means not found.
 func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*TicketGateRow, error) {
 	ref = strings.TrimSpace(ref)
 	where, arg := "t.code = ?", strings.ToUpper(ref)
-	// uuid.Parse also accepts 32 bare hex chars — exactly a ticket code — so
-	// only the dashed form counts as an id.
+	// uuid.Parse also accepts 32 bare hex chars (a ticket code), so only the dashed form is an id.
 	if _, err := uuid.Parse(ref); err == nil && len(ref) == 36 {
 		where, arg = "t.id = ?", ref
 	}
@@ -469,7 +444,7 @@ func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*Tic
 	return &rows[0], nil
 }
 
-// RedeemTicket flips ISSUED -> REDEEMED once; 0 rows means already used.
+// 0 rows means the ticket was already used.
 func (r *bookingRepository) RedeemTicket(ctx context.Context, tx *gorm.DB, ticketID string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ? AND status = ?`,
 		models.TicketRedeemed, ticketID, models.TicketIssued)
@@ -479,14 +454,9 @@ func (r *bookingRepository) RedeemTicket(ctx context.Context, tx *gorm.DB, ticke
 	return res.RowsAffected, nil
 }
 
-// SweepExpiredHolds flips up to limit HELD seats whose hold expired (by DB
-// clock) back to AVAILABLE and returns them for broadcasting. Seats locked by
-// an in-flight hold/confirm are skipped (SKIP LOCKED), so the sweep never waits
-// and can not deadlock with them (they lock in id order, the sweep would not);
-// skipped seats are picked up by the next tick. The outer WHERE is re-checked
-// under the row lock, so a seat a confirm just sold or a hold just re-took is
-// skipped (E-R1). One audit row per showtime is written by the same statement
-// (F13: grouped per business event, not one row per seat).
+// SKIP LOCKED: seats locked by an in-flight hold/confirm are left to the next tick, so the sweep
+// never waits or deadlocks with them (it does not lock in id order). The outer WHERE is re-checked
+// under the row lock, so a seat just sold or re-held is skipped. One audit row per showtime.
 func (r *bookingRepository) SweepExpiredHolds(ctx context.Context, limit int) ([]models.ShowtimeSeat, error) {
 	var seats []models.ShowtimeSeat
 	if err := r.db.WithContext(ctx).Raw(`
@@ -520,9 +490,7 @@ func (r *bookingRepository) SweepExpiredHolds(ctx context.Context, limit int) ([
 	return seats, nil
 }
 
-// ExpireOverdueUnpaid expires PENDING bookings past their hold that were never
-// paid. Rows locked by an in-flight payment are skipped and re-checked. Each
-// expired booking gets its audit row in the same statement (T39).
+// Rows locked by an in-flight payment are skipped (SKIP LOCKED) and re-checked on the next run.
 func (r *bookingRepository) ExpireOverdueUnpaid(ctx context.Context, limit int) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(`
 		WITH expired AS (
@@ -548,8 +516,7 @@ func (r *bookingRepository) ExpireOverdueUnpaid(ctx context.Context, limit int) 
 	return res.RowsAffected, nil
 }
 
-// StuckPaidIDs lists paid bookings still PENDING: overdue, or paid more than
-// a minute ago (the confirm after payment crashed). They must be finalized.
+// Paid bookings still PENDING: overdue, or paid over a minute ago (the confirm after payment crashed).
 func (r *bookingRepository) StuckPaidIDs(ctx context.Context, limit int) ([]string, error) {
 	var ids []string
 	if err := r.db.WithContext(ctx).Model(&models.Booking{}).
@@ -562,9 +529,7 @@ func (r *bookingRepository) StuckPaidIDs(ctx context.Context, limit int) ([]stri
 	return ids, nil
 }
 
-// DeferFinalize schedules the next try of a paid booking the sweep could not
-// settle (1 minute doubled per failure, at most 1 hour) and returns the number
-// of failed tries so far.
+// Backoff: 1 minute doubled per failure, at most 1 hour. Returns the failed tries so far.
 func (r *bookingRepository) DeferFinalize(ctx context.Context, id string) (int, error) {
 	var attempts int
 	if err := r.db.WithContext(ctx).Raw(`UPDATE bookings
@@ -576,13 +541,11 @@ func (r *bookingRepository) DeferFinalize(ctx context.Context, id string) (int, 
 	return attempts, nil
 }
 
-// MaxTicketEmailAttempts is how many times a ticket email is tried before it
-// is given up (the tickets stay on the web, R-ML1).
+// After this many tries the email is given up; the tickets stay on the web.
+// idx_bookings_email_pending hardcodes the same limit.
 const MaxTicketEmailAttempts = 6
 
-// PendingEmailIDs lists confirmed bookings whose ticket email is due: not sent,
-// not held by a running try or waiting for its retry, tries left. Given-up
-// emails drop out, so they never starve newer ones.
+// Given-up emails drop out, so they never starve newer ones.
 func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]string, error) {
 	var ids []string
 	if err := r.db.WithContext(ctx).Model(&models.Booking{}).
@@ -594,9 +557,8 @@ func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]s
 	return ids, nil
 }
 
-// ClaimEmail leases a due ticket email for 5 minutes and counts the try, so
-// two workers never mail the same booking at once (E-ML2) and a worker that
-// dies mid-send leaves it to be retried after the lease. 0 rows = nothing to do.
+// The 5-minute lease keeps two workers from mailing the same booking; a worker dying mid-send
+// leaves it for retry after the lease. 0 rows means nothing to do.
 func (r *bookingRepository) ClaimEmail(ctx context.Context, id string) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(`UPDATE bookings
 		SET email_claimed_until = NOW() + INTERVAL '5 minutes', email_attempts = email_attempts + 1
@@ -609,7 +571,6 @@ func (r *bookingRepository) ClaimEmail(ctx context.Context, id string) (int64, e
 	return res.RowsAffected, nil
 }
 
-// MarkEmailSent records a delivered ticket email.
 func (r *bookingRepository) MarkEmailSent(ctx context.Context, id string) error {
 	if err := r.db.WithContext(ctx).Exec(`UPDATE bookings SET email_sent_at = NOW(), email_claimed_until = NULL
 		WHERE id = ?`, id).Error; err != nil {
@@ -618,8 +579,7 @@ func (r *bookingRepository) MarkEmailSent(ctx context.Context, id string) error 
 	return nil
 }
 
-// ReleaseEmailClaim schedules the next try after a failed send (1 minute
-// doubled per try, at most 1 hour) and returns the tries made so far.
+// Backoff: 1 minute doubled per try, at most 1 hour. Returns the tries made so far.
 func (r *bookingRepository) ReleaseEmailClaim(ctx context.Context, id string) (int, error) {
 	var attempts int
 	if err := r.db.WithContext(ctx).Raw(`UPDATE bookings

@@ -43,7 +43,6 @@ func TestHub_IsolatesShowtimes(t *testing.T) {
 	}
 }
 
-// R-S4: a client that stops reading is dropped, others keep receiving.
 func TestHub_DropsSlowClient(t *testing.T) {
 	hub := NewHub()
 	slow := subscribe(t, hub, "show", "u1")
@@ -122,7 +121,6 @@ func TestTokenStore(t *testing.T) {
 	}
 }
 
-// M13: one user can not open streams without bound, nor the whole server.
 func TestHub_StreamLimits(t *testing.T) {
 	hub := NewHub()
 	hub.MaxStreamsPerUser, hub.MaxStreams = 2, 3
@@ -142,7 +140,6 @@ func TestHub_StreamLimits(t *testing.T) {
 	}
 }
 
-// M13: expired tokens are swept at most once per TTL, not on every issue.
 func TestTokenStore_PrunesLazily(t *testing.T) {
 	now := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 	store := NewTokenStore(30*time.Second, func() time.Time { return now })
@@ -154,7 +151,7 @@ func TestTokenStore_PrunesLazily(t *testing.T) {
 		t.Fatalf("tokens after sweep = %d, want 1", n)
 	}
 	now = now.Add(31 * time.Second)
-	store.Issue("u", "s", "h") // within the same sweep window? no: 31s later, sweeps again
+	store.Issue("u", "s", "h") // a TTL later: sweeps again
 	if n := store.size(); n != 1 {
 		t.Fatalf("tokens after second sweep = %d, want 1", n)
 	}

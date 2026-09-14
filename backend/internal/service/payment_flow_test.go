@@ -12,8 +12,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment/mock"
 )
 
-// The customer picks a provider; empty uses the default; a disabled one is
-// refused; paying again with the same provider reuses the open checkout.
+// Empty uses the default, a disabled provider is refused, the same provider reuses the open checkout.
 func TestPay_ProviderChoice(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -40,9 +39,7 @@ func TestPay_ProviderChoice(t *testing.T) {
 	}
 }
 
-// A second provider next to the mock is a full peer: the customer switches
-// provider mid-way, pays on both pages, the first settled payment confirms
-// the booking and the other one is refunded automatically.
+// The first settled payment confirms the booking; the other provider's payment is refunded.
 func TestTwoProviders_SwitchAndDoublePayment(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -84,7 +81,6 @@ func TestTwoProviders_SwitchAndDoublePayment(t *testing.T) {
 	e.checkInvariants()
 }
 
-// A declined card fails the attempt only; the booking can be paid again.
 func TestNotify_DeclinedThenRetry(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -112,8 +108,6 @@ func TestNotify_DeclinedThenRetry(t *testing.T) {
 	e.checkInvariants()
 }
 
-// The return redirect is verified, and the booking is settled by asking the
-// provider — no IPN needed, and a forged redirect is refused.
 func TestReturn_ReconcilesAndRejectsForgery(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -139,8 +133,6 @@ func TestReturn_ReconcilesAndRejectsForgery(t *testing.T) {
 	e.checkInvariants()
 }
 
-// The sweep reconciles checkouts whose IPN got lost and gives up on those
-// nobody paid long after their hold ended.
 func TestSweep_ReconcilesAndAbandonsAttempts(t *testing.T) {
 	e := newEnv(t)
 	paid := e.mustHold(e.users[0], "A1")
@@ -174,8 +166,6 @@ func TestSweep_ReconcilesAndAbandonsAttempts(t *testing.T) {
 	e.checkInvariants()
 }
 
-// Notifications for transactions we never opened, or that are not provider
-// messages at all, are refused and leave an audit trail.
 func TestNotify_UnknownAndMalformedAreAudited(t *testing.T) {
 	e := newEnv(t)
 	_, err := e.mockP.CreatePayment(e.ctx, payment.CreateRequest{

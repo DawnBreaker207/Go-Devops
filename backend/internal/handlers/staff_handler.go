@@ -7,8 +7,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// StaffHandler serves the staff board (F17, MVP part): today's showtimes and
-// the tickets of one showtime. No money is exposed.
 type StaffHandler struct {
 	reports service.ReportService
 }

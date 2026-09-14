@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// DefaultTokenTTL is how long a realtime token opens its stream.
 const DefaultTokenTTL = 30 * time.Second
 
 type tokenEntry struct {
@@ -17,9 +16,8 @@ type tokenEntry struct {
 	expires    time.Time
 }
 
-// TokenStore issues realtime tokens: bound to one showtime, reusable until
-// they expire so EventSource reconnects with the same URL still work (T20),
-// and never a JWT in the URL (R-S2).
+// TokenStore issues showtime-bound stream tokens so no JWT goes in the URL. Tokens stay
+// reusable until expiry so EventSource reconnects with the same URL still work.
 type TokenStore struct {
 	ttl time.Duration
 	now func() time.Time
@@ -29,8 +27,7 @@ type TokenStore struct {
 	nextPrune time.Time
 }
 
-// NewTokenStore builds a store; ttl <= 0 uses DefaultTokenTTL and a nil clock
-// uses time.Now.
+// NewTokenStore uses DefaultTokenTTL when ttl <= 0 and time.Now when now is nil.
 func NewTokenStore(ttl time.Duration, now func() time.Time) *TokenStore {
 	if ttl <= 0 {
 		ttl = DefaultTokenTTL
@@ -41,8 +38,7 @@ func NewTokenStore(ttl time.Duration, now func() time.Time) *TokenStore {
 	return &TokenStore{ttl: ttl, now: now, tokens: make(map[string]tokenEntry)}
 }
 
-// Issue mints a token for one user watching one showtime. Expired tokens are
-// swept at most once per TTL, not on every call (M13).
+// Issue sweeps expired tokens at most once per TTL, not on every call.
 func (s *TokenStore) Issue(userID, showtimeID, hallID string) (string, time.Duration) {
 	buf := make([]byte, 24)
 	if _, err := rand.Read(buf); err != nil {
@@ -65,8 +61,6 @@ func (s *TokenStore) Issue(userID, showtimeID, hallID string) (string, time.Dura
 	return token, s.ttl
 }
 
-// Validate accepts a live token for the showtime it was issued for and
-// returns that showtime's hall and the user the token belongs to.
 func (s *TokenStore) Validate(token, showtimeID string) (hallID, userID string, ok bool) {
 	if token == "" {
 		return "", "", false
@@ -87,7 +81,7 @@ func (s *TokenStore) Validate(token, showtimeID string) (hallID, userID string, 
 	return e.hallID, e.userID, true
 }
 
-// size counts stored tokens (tests).
+// size is used by tests.
 func (s *TokenStore) size() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

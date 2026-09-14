@@ -18,13 +18,11 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// RateLimit rejects requests over the per-IP frequency cap with 429.
 func RateLimit(lim *ratelimit.Limiter) gin.HandlerFunc {
 	return rateLimitBy(lim, func(c *gin.Context) string { return c.ClientIP() })
 }
 
-// RateLimitByUser rejects requests over the per-user frequency cap with 429;
-// anonymous requests are keyed by IP. Must run after Auth.
+// RateLimitByUser must run after Auth.
 func RateLimitByUser(lim *ratelimit.Limiter) gin.HandlerFunc {
 	return rateLimitBy(lim, func(c *gin.Context) string {
 		if id := CurrentUserID(c); id != "" {
@@ -50,22 +48,17 @@ func rateLimitBy(lim *ratelimit.Limiter, key func(*gin.Context) string) gin.Hand
 }
 
 const (
-	// dbGuardFreshFor is how long one database probe answers for.
 	dbGuardFreshFor = time.Second
 	// dbGuardSlowProbes is how many timed-out probes in a row mean "down".
 	dbGuardSlowProbes = 3
 )
 
-// DBGuard answers 503 fast while the database is down instead of letting every
-// request hang or fail one by one.
 func DBGuard(db *gorm.DB, timeout time.Duration) gin.HandlerFunc {
 	return NewDBGuard(func(ctx context.Context) error { return database.Ping(ctx, db) }, timeout)
 }
 
-// NewDBGuard is DBGuard over any probe. The result is reused for a second and
-// only one probe runs at a time, so a busy pool does not turn every request
-// into an extra ping or into false 503s (M18): a closed or refused database is
-// down at once, a slow one only after several timed-out probes in a row.
+// Probe results are cached and only one probe runs at a time, so a busy pool causes
+// neither extra pings nor false 503s. A refused DB is down at once, a slow one after several timeouts.
 func NewDBGuard(probe func(ctx context.Context) error, timeout time.Duration) gin.HandlerFunc {
 	return newDBGuard(probe, timeout, dbGuardFreshFor)
 }

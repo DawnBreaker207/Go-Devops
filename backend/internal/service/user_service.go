@@ -14,8 +14,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// UserService handles accounts: the current user and the admin side of F18
-// (create staff, lock/unlock, change role).
 type UserService interface {
 	GetByID(ctx context.Context, id string) (*dto.UserResponse, error)
 	List(ctx context.Context, query dto.UserListQuery) ([]dto.UserResponse, int64, error)
@@ -29,8 +27,8 @@ type userService struct {
 	onChange []func(userID string)
 }
 
-// NewUserService builds the service; onChange callbacks run after an account's
-// active flag or role changed (e.g. AccountStatusCache.Invalidate).
+// NewUserService: onChange callbacks run after an account's active flag or role
+// changed (e.g. AccountStatusCache.Invalidate).
 func NewUserService(db *gorm.DB, userRepo repository.UserRepository, onChange ...func(userID string)) UserService {
 	return &userService{db: db, userRepo: userRepo, onChange: onChange}
 }
@@ -52,7 +50,6 @@ func (s *userService) List(ctx context.Context, query dto.UserListQuery) ([]dto.
 	return dto.NewUserResponses(users), total, nil
 }
 
-// Create opens a staff or admin account (E-U1 duplicate email -> 409).
 func (s *userService) Create(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
 	email := normalizeEmail(req.Email)
 	exists, err := s.userRepo.ExistsByEmail(ctx, email)
@@ -94,10 +91,8 @@ func (s *userService) Create(ctx context.Context, req dto.CreateUserRequest) (*d
 	return &result, nil
 }
 
-// Update locks/unlocks an account and/or changes its role (USR-02). An admin
-// can not lock itself or change its own role, and the last active admin can
-// not be locked or demoted (E-U2, T16). Active admins are locked first, in id
-// order, so two admins acting on each other can not both win.
+// Update locks active admins first, in id order, so two admins acting on each other
+// can not both win.
 func (s *userService) Update(ctx context.Context, actorID, userID string, req dto.UpdateUserRequest) (*dto.UserResponse, error) {
 	if req.Active == nil && req.Role == nil {
 		return nil, apperrors.Validation("nothing to update: send active and/or role")

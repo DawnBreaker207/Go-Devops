@@ -10,7 +10,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// ShowtimeBoardRow is one showtime on the staff board (no money).
 type ShowtimeBoardRow struct {
 	ID         string    `gorm:"column:id"`
 	StartAt    time.Time `gorm:"column:start_at"`
@@ -24,7 +23,6 @@ type ShowtimeBoardRow struct {
 	CheckedIn  int       `gorm:"column:checked_in"`
 }
 
-// ShowtimeTicketRow is one sold ticket of a showtime for the gate list.
 type ShowtimeTicketRow struct {
 	ID        string    `gorm:"column:id"`
 	BookingID string    `gorm:"column:booking_id"`
@@ -35,7 +33,6 @@ type ShowtimeTicketRow struct {
 	SeatType  string    `gorm:"column:seat_type"`
 }
 
-// ReportRepository reads operational numbers and writes daily rollups.
 type ReportRepository interface {
 	UpsertDailyAggregate(ctx context.Context, reportDate string, from, to time.Time) error
 	DailyAggregate(ctx context.Context, reportDate string) (*models.DailyAggregate, error)
@@ -52,12 +49,8 @@ func NewReportRepository(db *gorm.DB) ReportRepository {
 	return &reportRepository{db: db}
 }
 
-// upsertDailyAggregateSQL computes one day [from, to):
-//   - total_revenue / tickets_sold: CONFIRMED bookings paid in the day (I4, E-D4);
-//   - capacity / seats_sold / occupancy: showtimes starting in the day;
-//   - breakdown.showtimes: per showtime of the day (revenue = its confirmed bookings).
-//
-// ON CONFLICT (report_date) makes a re-run replace the numbers, never add (E-B2).
+// Revenue and tickets count CONFIRMED bookings paid in [from, to); seats and occupancy count
+// showtimes starting in it. ON CONFLICT makes a re-run replace the day's numbers, never add to them.
 const upsertDailyAggregateSQL = `
 WITH paid AS (
 	SELECT b.id, b.total_amount

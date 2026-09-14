@@ -21,7 +21,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment"
 )
 
-// TxnState is the gateway-side state of a fake transaction.
 type TxnState string
 
 const (
@@ -32,7 +31,6 @@ const (
 	TxnRefunded TxnState = "refunded"
 )
 
-// Txn is one fake transaction held by the gateway.
 type Txn struct {
 	Ref          string
 	GatewayTxnID string
@@ -44,23 +42,18 @@ type Txn struct {
 	NotifyURL    string
 	ReturnURL    string
 	CreatedAt    time.Time
-	// ExpiresAt is the payment deadline the merchant sent.
-	ExpiresAt time.Time
+	ExpiresAt    time.Time
 }
 
-// lateCaptureGrace is how long past its deadline a checkout still accepts a
-// payment, like real gateways that close a transaction a while after expiry.
+// Like real gateways, a checkout still accepts payment for a while after its deadline.
 const lateCaptureGrace = 20 * time.Minute
 
-// CaptureOptions shapes a simulated payment.
 type CaptureOptions struct {
-	// AmountDelta makes the gateway settle a different amount (E-P4 drill).
+	// AmountDelta makes the gateway settle a different amount (wrong-amount drill).
 	AmountDelta int64
-	// Decline makes the payment fail instead of succeed.
-	Decline bool
+	Decline     bool
 }
 
-// notification is the IPN body the gateway sends.
 type notification struct {
 	TxnRef       string `json:"txn_ref"`
 	Amount       int64  `json:"amount"`
@@ -69,11 +62,8 @@ type notification struct {
 	Signature    string `json:"signature"`
 }
 
-// Gateway is the simulated payment service provider: it keeps transactions in
-// memory, serves the checkout page, sends signed IPNs over HTTP to the
-// merchant notify URL and redirects the browser to the signed return URL —
-// the same things a real gateway does from its own servers. A restart forgets
-// every transaction.
+// Gateway simulates a payment provider in memory: checkout page, signed IPNs over HTTP
+// and signed return redirects. A restart forgets every transaction.
 type Gateway struct {
 	secret   string
 	baseURL  string
@@ -85,7 +75,6 @@ type Gateway struct {
 	down    bool
 	refunds int
 
-	// Refund drills: failing refunds, slow refunds, and a count of calls.
 	refundErr   error
 	refundDelay time.Duration
 	refundCalls int
@@ -128,12 +117,10 @@ func (g *Gateway) open(req payment.CreateRequest) (Txn, error) {
 	return *t, nil
 }
 
-// CheckoutURL is the page the customer is redirected to.
 func (g *Gateway) CheckoutURL(ref string) string {
 	return g.baseURL + g.basePath + "/checkout?ref=" + url.QueryEscape(ref)
 }
 
-// Lookup returns a copy of a transaction.
 func (g *Gateway) Lookup(ref string) (Txn, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -144,8 +131,7 @@ func (g *Gateway) Lookup(ref string) (Txn, bool) {
 	return *t, true
 }
 
-// Capture settles a pending transaction the way the customer's action on the
-// checkout page would. Pressing again on a settled transaction changes nothing.
+// Capture settles a pending transaction; calling it again on a settled one changes nothing.
 func (g *Gateway) Capture(ref string, opts CaptureOptions) (Txn, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -171,7 +157,7 @@ func (g *Gateway) Capture(ref string, opts CaptureOptions) (Txn, error) {
 	return *t, nil
 }
 
-// Cancel abandons a pending checkout (E-P6): no IPN is sent.
+// Cancel abandons a pending checkout; no IPN is sent.
 func (g *Gateway) Cancel(ref string) (Txn, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -185,8 +171,7 @@ func (g *Gateway) Cancel(ref string) (Txn, error) {
 	return *t, nil
 }
 
-// NotificationRequest builds the signed IPN of a settled transaction, exactly
-// as Deliver sends it.
+// NotificationRequest builds the signed IPN exactly as Deliver sends it.
 func (g *Gateway) NotificationRequest(ctx context.Context, ref string) (*http.Request, error) {
 	t, ok := g.Lookup(ref)
 	if !ok {
@@ -219,8 +204,7 @@ func (g *Gateway) NotificationRequest(ctx context.Context, ref string) (*http.Re
 	return req, nil
 }
 
-// Deliver posts the IPN to the merchant, retrying network errors and 5xx
-// answers like a real gateway. It returns the last HTTP status.
+// Deliver retries network errors and 5xx answers like a real gateway and returns the last HTTP status.
 func (g *Gateway) Deliver(ctx context.Context, ref string) (int, error) {
 	status := 0
 	var lastErr error
@@ -252,7 +236,6 @@ func (g *Gateway) Deliver(ctx context.Context, ref string) (int, error) {
 	return status, lastErr
 }
 
-// ReturnRedirect is the merchant return URL carrying the signed result.
 func (g *Gateway) ReturnRedirect(ref string) (string, error) {
 	t, ok := g.Lookup(ref)
 	if !ok {
@@ -307,21 +290,21 @@ func (g *Gateway) refund(ctx context.Context, ref string, amount int64) error {
 	}
 }
 
-// SetDown makes new payments fail, simulating an outage (E-P10).
+// SetDown makes new payments fail, simulating an outage.
 func (g *Gateway) SetDown(down bool) {
 	g.mu.Lock()
 	g.down = down
 	g.mu.Unlock()
 }
 
-// Refunds counts refunds the gateway accepted.
+// Refunds counts accepted refunds only; see RefundCalls.
 func (g *Gateway) Refunds() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.refunds
 }
 
-// FailRefunds makes every refund call fail with err; nil restores them.
+// FailRefunds makes every refund fail with err; nil restores them.
 func (g *Gateway) FailRefunds(err error) {
 	g.mu.Lock()
 	g.refundErr = err

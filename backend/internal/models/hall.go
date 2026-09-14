@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Hall seat types.
 const (
 	SeatStandard = "standard"
 	SeatVIP      = "vip"
@@ -15,10 +14,8 @@ const (
 	SeatRecliner = "recliner"
 )
 
-// AllSeatTypes lists supported seat types.
 var AllSeatTypes = []string{SeatStandard, SeatVIP, SeatCouple, SeatRecliner}
 
-// Hall is a projection room; its seat grid is generated from these params.
 type Hall struct {
 	ID          string              `gorm:"type:uuid;primaryKey" json:"id"`
 	Name        string              `gorm:"type:varchar(255);not null" json:"name"`
@@ -40,7 +37,6 @@ func (h *Hall) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// Seat is the physical position in a hall (independent of showtimes).
 type Seat struct {
 	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
 	HallID    string    `gorm:"type:uuid;not null;uniqueIndex:uq_seat_hall_row_col" json:"hall_id"`
@@ -61,7 +57,6 @@ func (s *Seat) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// HallPrice is the price of a seat type for one hall, read at hold time.
 type HallPrice struct {
 	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
 	HallID    string    `gorm:"type:uuid;not null;uniqueIndex:uq_hall_prices_seat_type" json:"hall_id"`

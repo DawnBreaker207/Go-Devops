@@ -8,30 +8,26 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// HallRequest creates a hall; the seat grid is generated from these params.
+// The seat grid is generated from these params.
 type HallRequest struct {
 	Name        string              `json:"name" binding:"required,min=1,max=255" example:"Phong 2"`
 	Rows        int                 `json:"rows" binding:"required,min=1,max=50" example:"8"`
 	SeatsPerRow int                 `json:"seats_per_row" binding:"required,min=1,max=50" example:"12"`
-SeatTypes map[string][]string `json:"seat_types" binding:"required" example:"vip:7,8"`
+	SeatTypes   map[string][]string `json:"seat_types" binding:"required" example:"vip:7,8"`
 	Gaps        []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
-	// Prices is required: a hall is never created without a positive price for
-	// each of the 4 seat types (E-H6, FR-HALL-02).
+	// Must hold a positive price for each of the 4 seat types.
 	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
 }
 
-// PriceRequest sets the price for every seat type of a hall.
 type PriceRequest struct {
 	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:80000,vip:120000"`
 }
 
-// SeatUpdateRequest changes one seat's type or gap flag.
 type SeatUpdateRequest struct {
 	SeatType string `json:"seat_type" binding:"omitempty,oneof=standard vip couple recliner"`
 	IsGap    bool   `json:"is_gap"`
 }
 
-// HallResponse is a hall returned to the client.
 type HallResponse struct {
 	ID          string              `json:"id"`
 	Name        string              `json:"name"`
@@ -64,7 +60,6 @@ func NewHallResponses(halls []models.Hall) []HallResponse {
 	return result
 }
 
-// SeatResponse is a seat returned to the client.
 type SeatResponse struct {
 	ID       string `json:"id"`
 	HallID   string `json:"hall_id"`
@@ -75,7 +70,6 @@ type SeatResponse struct {
 	IsGap    bool   `json:"is_gap"`
 }
 
-// SeatLabel builds a label such as "D5" from a row label and column number.
 func SeatLabel(rowLabel string, col int) string {
 	return rowLabel + strconv.Itoa(col)
 }
@@ -100,13 +94,12 @@ func NewSeatResponses(seats []models.Seat) []SeatResponse {
 	return result
 }
 
-// HallPriceResponse is a single seat-type price for a hall.
 type HallPriceResponse struct {
 	SeatType string `json:"seat_type"`
 	Price    int64  `json:"price"`
 }
 
-// RowNumber parses an Excel-like row label ("A" -> 1) into its index.
+// Excel-like row label to index: "A" -> 1, "AA" -> 27; 0 for an invalid label.
 func RowNumber(label string) int {
 	n := 0
 	for _, ch := range strings.ToUpper(label) {
@@ -118,7 +111,7 @@ func RowNumber(label string) int {
 	return n
 }
 
-// RowLabel converts a 1-based row index into an Excel-like label (1 -> "A").
+// 1-based row index to Excel-like label: 1 -> "A", 27 -> "AA".
 func RowLabel(n int) string {
 	var b strings.Builder
 	for n > 0 {

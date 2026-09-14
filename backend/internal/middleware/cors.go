@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORS allows only configured origins.
 // "*" in allowedOrigins allows every origin (dev only).
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	allowAll := false

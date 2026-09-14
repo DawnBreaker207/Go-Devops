@@ -1,6 +1,4 @@
-// Package storage keeps uploaded images (movie posters). Like payments, the
-// backend is chosen by config: "local" writes files served under /media (dev),
-// "cloudinary" uploads to Cloudinary. The database only stores the URL.
+// Package storage saves uploaded images locally or on Cloudinary; the database keeps only the URL.
 package storage
 
 import (
@@ -8,21 +6,18 @@ import (
 	"errors"
 )
 
-// MediaPath is where the local store's files are served.
 const MediaPath = "/media"
 
 // ErrUnavailable wraps every failure to store an image.
 var ErrUnavailable = errors.New("image storage unavailable")
 
-// Image is one validated upload.
 type Image struct {
-	Folder      string // e.g. "posters"
+	Folder      string
 	Filename    string // original name, informative only
 	ContentType string // sniffed, never trusted from the client
 	Data        []byte
 }
 
-// Store saves an image and returns its public URL.
 type Store interface {
 	Name() string
 	Upload(ctx context.Context, img Image) (url string, err error)

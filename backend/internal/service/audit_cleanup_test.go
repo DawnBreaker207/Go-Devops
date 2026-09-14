@@ -14,9 +14,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// T39 (FR-AUDIT-01): every way a booking leaves PENDING — confirm, refund,
-// replaced by a new hold, customer cancel, sweep — and every payment state
-// change leaves an audit row written with it.
+// T39: every way a booking leaves PENDING and every payment state change writes an audit row.
 func TestAudit_EveryStateChangeIsLogged(t *testing.T) {
 	e := newEnv(t)
 	confirmed := e.confirmed(e.users[0], "A1")
@@ -79,8 +77,7 @@ func TestAudit_EveryStateChangeIsLogged(t *testing.T) {
 	e.checkInvariants()
 }
 
-// T40 (FR-AUDIT-02): cleanup deletes audit rows past the retention only, and
-// refresh tokens dead for a day.
+// T40: cleanup deletes only audit rows and batch runs past retention and refresh tokens dead for a day.
 func TestCleanupJob_RemovesOnlyExpiredData(t *testing.T) {
 	e := newEnv(t)
 	insertAudit := func(action string, daysAgo int) {
@@ -118,8 +115,7 @@ func TestCleanupJob_RemovesOnlyExpiredData(t *testing.T) {
 	}
 }
 
-// T44 (FR-BATCH-01) / E-B6: every run gets its own batch_jobs row with its
-// counts, and a second run while one is RUNNING is refused.
+// T44 / E-B6: every run gets its own batch_jobs row with counts; a run while one is RUNNING is refused.
 func TestBatch_EveryRunLogged(t *testing.T) {
 	e := newEnv(t)
 	manager := batch.NewManager(e.db, repository.NewBatchJobRepository(e.db))

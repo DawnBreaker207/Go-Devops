@@ -67,8 +67,7 @@ func run() error {
 		}
 	}()
 
-	// The well-known seed admin exists only in development (never staging or
-	// production).
+	// The well-known seed admin must never exist outside development.
 	if cfg.App.Env == "development" {
 		if err := database.SeedAdmin(context.Background(), db, cfg.App.AdminEmail, cfg.App.AdminPassword); err != nil {
 			return err
@@ -88,7 +87,6 @@ func run() error {
 		return fmt.Errorf("load timezone %q: %w", cfg.Database.TimeZone, err)
 	}
 
-	// Wire the layers: repository -> service -> handler.
 	userRepo := repository.NewUserRepository(db)
 	movieRepo := repository.NewMovieRepository(db)
 	hallRepo := repository.NewHallRepository(db)
@@ -98,8 +96,7 @@ func run() error {
 
 	loginGuard := ratelimit.NewFailureLimiter(cfg.RateLimit.Login.MaxFailures, cfg.RateLimit.Login.Lockout, nil)
 	authService := service.NewAuthService(db, userRepo, repository.NewRefreshTokenRepository(db), jwtManager, loginGuard)
-	// Locking an account or changing its role applies to tokens already issued
-	// within accountStatusTTL (L4).
+	// Locks and role changes reach already-issued tokens within accountStatusTTL.
 	accountStatus := service.NewAccountStatusCache(userRepo, accountStatusTTL)
 	userService := service.NewUserService(db, userRepo, accountStatus.Invalidate)
 	movieService := service.NewMovieService(db, movieRepo)
@@ -111,8 +108,7 @@ func run() error {
 		return fmt.Errorf("payment providers: %w", err)
 	}
 
-	// The broker must not block startup: without it ticket emails are sent by
-	// the sendTicketEmails cron instead of right after confirm.
+	// The broker must not block startup: without it the sendTicketEmails cron sends the emails.
 	var queueClient *queue.Client
 	if conn, dialErr := queue.Dial(cfg.Queue.URL); dialErr == nil {
 		queueClient = conn
@@ -121,7 +117,6 @@ func run() error {
 		logger.Warn("rabbitmq unavailable; ticket emails fall back to the cron job", logger.Err(dialErr))
 	}
 
-	// Realtime seat-map: one SSE hub + short-lived connection tokens.
 	hub := sse.NewHub()
 	tokens := sse.NewTokenStore(sse.DefaultTokenTTL, nil)
 
@@ -144,20 +139,15 @@ func run() error {
 	}
 	bookingService := service.NewBookingService(bookingOpts)
 
-	// Ticket emails: mock mailer, each email lands as .html in the outbox dir.
 	mailer := notify.NewMockMailer(cfg.Mail.OutboxDir)
 	emailService := service.NewTicketEmailService(db, bookingRepo, mailer, location)
 
-	// Daily rollups (closeDay) and the staff board.
 	reportService := service.NewReportService(repository.NewReportRepository(db), showtimeRepo, location)
 
-	// Poster uploads: local files (dev) or Cloudinary, chosen by config.
 	imageStore, mediaDir := buildImageStore(cfg)
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
 	mediaService := service.NewMediaService(imageStore, maxUpload)
 
-	// Rate limits: /auth against brute force, /orders/hold against seat bots,
-	// the public catalog per IP, realtime tokens per user.
 	limits := router.Limiters{
 		Auth:   ratelimit.New(cfg.RateLimit.Auth.Capacity, cfg.RateLimit.Auth.RefillPerSecond),
 		Hold:   ratelimit.New(cfg.RateLimit.Hold.Capacity, cfg.RateLimit.Hold.RefillPerSecond),
@@ -165,8 +155,6 @@ func run() error {
 		Events: ratelimit.New(cfg.RateLimit.Events.Capacity, cfg.RateLimit.Events.RefillPerSecond),
 	}
 
-	// Background jobs: registry + cron + batch_jobs log. Start first closes the
-	// runs a crashed process left RUNNING (H1).
 	batchRepo := repository.NewBatchJobRepository(db)
 	batchManager := batch.NewManager(db, batchRepo)
 	batchManager.Register(jobs.NewSweepExpiredHolds(bookingService))
@@ -224,7 +212,6 @@ func run() error {
 		}
 	}()
 
-	// Wait for a shutdown signal or a fatal server error.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -236,8 +223,7 @@ func run() error {
 		logger.Info("shutdown signal received", logger.String("signal", sig.String()))
 	}
 
-	// One deadline for the whole shutdown (NFR-DEP-03): stop taking requests,
-	// then stop jobs and workers, all before the deferred database close.
+	// One deadline covers the whole shutdown, all before the deferred database close.
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 	if runErr == nil {
@@ -253,13 +239,8 @@ func run() error {
 	return runErr
 }
 
-// accountStatusTTL bounds how long a locked account or a changed role may
-// still pass the auth middleware on one server.
 const accountStatusTTL = 30 * time.Second
 
-// buildPaymentProviders registers every enabled payment provider. A real
-// gateway is added here exactly like the mock: build its adapter from its
-// config block and register it.
 func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 	registry := payment.NewRegistry()
 	if m := cfg.Payment.Providers.Mock; m.Enabled {
@@ -292,8 +273,6 @@ func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 	return registry, nil
 }
 
-// buildImageStore picks the poster store; the returned dir is served under
-// /media for the local store and empty for Cloudinary.
 func buildImageStore(cfg *config.Config) (storage.Store, string) {
 	if cfg.Storage.Driver == "cloudinary" {
 		c := cfg.Storage.Cloudinary
@@ -306,7 +285,6 @@ func buildImageStore(cfg *config.Config) (storage.Store, string) {
 	return storage.NewLocal(cfg.Storage.LocalDir, cfg.Storage.PublicBaseURL), cfg.Storage.LocalDir
 }
 
-// configPath resolves the directory holding config.yaml/.env via CONFIG_PATH.
 func configPath() string {
 	if path := os.Getenv("CONFIG_PATH"); path != "" {
 		return path

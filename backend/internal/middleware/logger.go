@@ -10,11 +10,9 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// sensitiveQueryKeys are credentials that travel in URLs (realtime token,
-// payment return signatures) and must not be logged (RT-01).
+// Credentials that travel in URLs (realtime token, payment signatures) must not be logged.
 var sensitiveQueryKeys = map[string]bool{"token": true, "sig": true, "signature": true}
 
-// redactQuery masks credential values of a raw query string.
 func redactQuery(raw string) string {
 	if raw == "" {
 		return ""
@@ -31,7 +29,6 @@ func redactQuery(raw string) string {
 	return values.Encode()
 }
 
-// Logger logs each request with latency and status.
 func Logger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()

@@ -2,15 +2,13 @@ package dto
 
 import "time"
 
-// PaymentProviderResponse is one way to pay offered to customers.
 type PaymentProviderResponse struct {
 	Name        string `json:"name" example:"mock"`
 	DisplayName string `json:"display_name"`
 	Default     bool   `json:"default"`
 }
 
-// PaymentSummary is the payment attempt shown with an order: the one whose
-// money the booking carries, else the latest attempt.
+// The attempt whose money the booking carries, else the latest attempt.
 type PaymentSummary struct {
 	ID           string     `json:"id"`
 	Provider     string     `json:"provider"`

@@ -14,9 +14,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// MovieRepository accesses the movies table. Writes take the database (or
-// transaction) to execute on so the service can persist audit rows in the
-// same transaction.
+// Writes take a db/tx so the service can write audit rows in the same transaction.
 type MovieRepository interface {
 	Create(ctx context.Context, db *gorm.DB, movie *models.Movie) error
 	Update(ctx context.Context, db *gorm.DB, movie *models.Movie) error
@@ -24,12 +22,9 @@ type MovieRepository interface {
 	FindByID(ctx context.Context, id string) (*models.Movie, error)
 	List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]models.Movie, int64, error)
 
-	// LockForUpdate locks a movie row to change it; LockForShare to schedule a
-	// showtime of it. Both answer ErrMovieNotFound for a missing movie.
+	// LockForUpdate is for changing a movie, LockForShare for scheduling a showtime of it.
 	LockForUpdate(ctx context.Context, tx *gorm.DB, id string) (*models.Movie, error)
 	LockForShare(ctx context.Context, tx *gorm.DB, id string) (*models.Movie, error)
-	// HasUpcomingShowtimes reports whether showtimes of the movie are still to
-	// start: open ones, and closed ones too with includeClosed.
 	HasUpcomingShowtimes(ctx context.Context, tx *gorm.DB, id string, includeClosed bool) (bool, error)
 }
 

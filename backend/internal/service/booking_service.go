@@ -22,26 +22,20 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// maxTxAttempts bounds re-runs of a transaction lost to a race (unique
-// violation, deadlock, serialization failure).
 const maxTxAttempts = 4
 
-// TicketEmailQueue is the durable queue confirm publishes ticket emails to.
 const TicketEmailQueue = "email.tickets"
 
-// Sources recorded in audit rows of confirm/refund, to trace who settled a booking.
 const (
 	sourceCustomer  = "customer"
 	sourceReconcile = "reconcile"
 	sourceSweep     = "sweep"
 )
 
-// JobPublisher pushes background jobs onto the queue (RabbitMQ).
 type JobPublisher interface {
 	Publish(ctx context.Context, queueName string, body []byte) error
 }
 
-// SweepResult counts what one sweep pass changed.
 type SweepResult struct {
 	ReleasedSeats      int
 	ExpiredBookings    int
@@ -52,15 +46,13 @@ type SweepResult struct {
 	LateCaptures       int
 }
 
-// Total is the number of rows the pass touched.
 func (r SweepResult) Total() int {
 	return r.ReleasedSeats + r.ExpiredBookings + r.FinalizedPaid + r.SettledRefunds +
 		r.ReconciledPayments + r.AbandonedPayments + r.LateCaptures
 }
 
-// BookingService runs the money core: hold -> pay -> confirm (or refund).
-// Payment goes through payment.Provider only, so the mock and real gateways
-// take exactly the same path.
+// BookingService: payment goes through payment.Provider only, so the mock and real
+// gateways take exactly the same path.
 type BookingService interface {
 	Hold(ctx context.Context, userID string, req dto.HoldRequest) (*dto.HoldResponse, error)
 	Pay(ctx context.Context, userID, bookingID string, req dto.PayRequest) (*dto.PayResponse, error)
@@ -77,28 +69,20 @@ type BookingService interface {
 
 // BookingOptions wires the booking service.
 type BookingOptions struct {
-	DB       *gorm.DB
-	Repo     repository.BookingRepository
-	Payments repository.PaymentRepository
-	// Providers holds every enabled payment provider; the mock and real
-	// gateways are registered the same way.
-	Providers *payment.Registry
-	// PublicBaseURL is how providers and browsers reach this API (IPN and
-	// return URLs).
+	DB            *gorm.DB
+	Repo          repository.BookingRepository
+	Payments      repository.PaymentRepository
+	Providers     *payment.Registry
 	PublicBaseURL string
 	HoldTTL       time.Duration
 	MaxSeats      int
-	// Publisher enqueues ticket emails after confirm. Nil (no broker) is fine:
-	// the sendTicketEmails cron picks unsent emails up.
+	// Publisher may be nil: the sendTicketEmails cron picks unsent emails up.
 	Publisher JobPublisher
-	// Hub broadcasts seat changes to realtime seat maps; nil disables it.
+	// Hub may be nil (no realtime seat updates).
 	Hub *sse.Hub
-	// LateCaptureWindow is how long given-up payment attempts are rechecked
-	// for money the provider collected late; 0 means 24 hours.
+	// LateCaptureWindow: how long given-up attempts are rechecked for late money; 0 means 24h.
 	LateCaptureWindow time.Duration
-	// CheckinOpenBefore and CheckinCloseAfter bound when a ticket gets in at
-	// the gate around the showtime start (E-T4); both zero means 30 and 20
-	// minutes.
+	// Check-in window around the showtime start; both zero means 30 and 20 minutes.
 	CheckinOpenBefore time.Duration
 	CheckinCloseAfter time.Duration
 }
@@ -141,8 +125,7 @@ func NewBookingService(opts BookingOptions) BookingService {
 	}
 }
 
-// inTx runs fn in a transaction, re-running it from the top when it lost a
-// race. fn must reset whatever it captures on every attempt.
+// inTx re-runs fn when the transaction lost a race; fn must reset what it captures on every attempt.
 func (s *bookingService) inTx(ctx context.Context, fn func(tx *gorm.DB) error) error {
 	var err error
 	for attempt := 0; attempt < maxTxAttempts; attempt++ {
@@ -154,13 +137,8 @@ func (s *bookingService) inTx(ctx context.Context, fn func(tx *gorm.DB) error) e
 	return err
 }
 
-// ---------------------------------------------------------------------------
-// Hold (F7)
-// ---------------------------------------------------------------------------
-
-// Hold reserves seats in one transaction: seat rows locked in id order, expiry
-// by DB clock, prices locked from hall_prices into booking_seats. A previous
-// unpaid hold of the same user/show is replaced without extending its expiry.
+// Hold locks seat rows in id order and takes expiry from the DB clock. A previous unpaid
+// hold of the same user and show is replaced without extending its expiry.
 func (s *bookingService) Hold(ctx context.Context, userID string, req dto.HoldRequest) (*dto.HoldResponse, error) {
 	seatIDs := uniqueStrings(req.SeatIDs)
 	if len(seatIDs) == 0 {
@@ -202,7 +180,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		return nil, nil, err
 	}
 	if !active {
-		return nil, nil, apperrors.ErrAccountLocked // E-U3
+		return nil, nil, apperrors.ErrAccountLocked
 	}
 	now, err := s.repo.Now(ctx, tx)
 	if err != nil {
@@ -216,9 +194,9 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		return nil, nil, apperrors.ErrShowtimeNotFound
 	}
 	if showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now) {
-		return nil, nil, apperrors.ErrShowtimeClosed // E-HO7
+		return nil, nil, apperrors.ErrShowtimeClosed
 	}
-	// H6: a movie taken off the schedule sells nothing, whatever its showtimes say.
+	// A movie taken off the schedule sells nothing, whatever its showtimes say.
 	showing, err := s.repo.MovieShowing(ctx, tx, showtime.MovieID)
 	if err != nil {
 		return nil, nil, err
@@ -227,9 +205,8 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		return nil, nil, apperrors.ErrShowtimeClosed
 	}
 
-	// E-HO3: a retry with the same key gets back the booking it created. The
-	// key is spent by that request: reused by another user, show or seat lot,
-	// or once its booking ended, it is refused (L6).
+	// A retry with the same key gets back the booking it created. The key is spent by that
+	// request: reused by another user, show or seat set, or once its booking ended, it is refused.
 	if key != "" {
 		existing, err := s.repo.LockLatestByKey(ctx, tx, key)
 		if err != nil {
@@ -258,16 +235,16 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	ownVersions := map[string]int64{}
 	replacedID := ""
 
-	// E-HO10..12: one PENDING booking per user per show. The new hold replaces
-	// the old one, keeping the old expiry so tabs can not extend a hold forever.
+	// One PENDING booking per user per show. The new hold replaces the old one,
+	// keeping the old expiry so tabs can not extend a hold forever.
 	old, err := s.repo.LockPendingByUserShow(ctx, tx, userID, showID)
 	if err != nil {
 		return nil, nil, err
 	}
 	if old != nil {
 		stillValid := old.ExpiresAt != nil && old.ExpiresAt.After(now)
-		// Money may already be on its way for the old booking: replacing it
-		// would silently drop a paid order. IPN/reconcile/sweep settle it first.
+		// Money may already be on its way for the old booking: replacing it would
+		// silently drop a paid order.
 		if old.PaidAt != nil {
 			return nil, nil, apperrors.ErrPaymentInProgress
 		}
@@ -339,7 +316,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		return nil, nil, err
 	}
 
-	// E-HO2: all or nothing, and report exactly which seats failed.
+	// All or nothing: report every seat that failed.
 	var taken, gaps []string
 	for _, id := range seatIDs {
 		seat := byID[id]
@@ -446,9 +423,6 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	}, released, nil
 }
 
-// holdable reports whether a locked seat can go to this hold: free, a hold
-// that already expired by DB clock (E-HO5), or the user's own seat from the
-// booking being replaced (E-HO4).
 func holdable(seat models.ShowtimeSeat, userID string, own map[string]int64, now time.Time) bool {
 	switch seat.Status {
 	case models.SeatStatusAvailable:
@@ -508,11 +482,6 @@ func (s *bookingService) holdResponse(ctx context.Context, tx *gorm.DB, b *model
 	}, nil
 }
 
-// ---------------------------------------------------------------------------
-// Orders (F14)
-// ---------------------------------------------------------------------------
-
-// Status reconciles a booking then returns its state.
 func (s *bookingService) Status(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error) {
 	b, err := s.ownedBooking(ctx, userID, bookingID)
 	if err != nil {
@@ -530,7 +499,6 @@ func (s *bookingService) Status(ctx context.Context, userID, bookingID string) (
 	return &st, nil
 }
 
-// Order returns the e-ticket view of one order (F14).
 func (s *bookingService) Order(ctx context.Context, userID, bookingID string) (*dto.OrderDetailResponse, error) {
 	b, err := s.ownedBooking(ctx, userID, bookingID)
 	if err != nil {
@@ -539,8 +507,7 @@ func (s *bookingService) Order(ctx context.Context, userID, bookingID string) (*
 	return s.orderDetail(ctx, b)
 }
 
-// ownedBooking loads a reconciled booking scoped to its owner: another user
-// gets 403, not 404 (E-O1).
+// ownedBooking reconciles before returning; another user's booking is 403, not 404.
 func (s *bookingService) ownedBooking(ctx context.Context, userID, bookingID string) (*models.Booking, error) {
 	b, err := s.repo.FindByID(ctx, bookingID)
 	if err != nil {
@@ -558,7 +525,6 @@ func (s *bookingService) ownedBooking(ctx context.Context, userID, bookingID str
 	return s.repo.FindByID(ctx, bookingID)
 }
 
-// List returns the current user's orders, newest first.
 func (s *bookingService) List(ctx context.Context, userID string, q dto.PageQuery) ([]dto.OrderStatusResponse, int64, error) {
 	bookings, total, err := s.repo.ListByUser(ctx, userID, q.Page, q.PageSize)
 	if err != nil {
@@ -583,7 +549,6 @@ func (s *bookingService) List(ctx context.Context, userID string, q dto.PageQuer
 	return items, total, nil
 }
 
-// showtimeOf loads the showtime info shown with one order.
 func (s *bookingService) showtimeOf(ctx context.Context, showtimeID string) (*repository.ShowtimeInfoRow, error) {
 	infos, err := s.repo.ShowtimeInfos(ctx, []string{showtimeID})
 	if err != nil {
@@ -595,9 +560,8 @@ func (s *bookingService) showtimeOf(ctx context.Context, showtimeID string) (*re
 	return nil, nil
 }
 
-// Cancel releases an unpaid hold right away instead of waiting for its TTL
-// (E-R2). A checkout still open at a provider is left alone: if it gets paid
-// later, the money arrives for an expired booking and is refunded (E-P3).
+// Cancel leaves a checkout still open at a provider alone: if it gets paid later,
+// the money arrives for an expired booking and is refunded.
 func (s *bookingService) Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error) {
 	var (
 		released []string
@@ -663,8 +627,6 @@ func (s *bookingService) Cancel(ctx context.Context, userID, bookingID string) (
 	return &st, nil
 }
 
-// paymentFor is the attempt shown with an order: the one the booking carries,
-// else the latest.
 func (s *bookingService) paymentFor(ctx context.Context, b *models.Booking) (*models.Payment, error) {
 	if b.PaymentID != nil {
 		return s.payments.FindByID(ctx, *b.PaymentID)
@@ -672,22 +634,14 @@ func (s *bookingService) paymentFor(ctx context.Context, b *models.Booking) (*mo
 	return s.payments.LatestForBooking(ctx, b.ID)
 }
 
-// ---------------------------------------------------------------------------
-// Gate (F12)
-// ---------------------------------------------------------------------------
-
-// Default check-in window around the showtime start (E-T4).
 const (
 	defaultCheckinOpenBefore = 30 * time.Minute
 	defaultCheckinCloseAfter = 20 * time.Minute
 )
 
-// Redeem checks a ticket in at the gate. ticketRef is the ticket id or the
-// code read from the QR. Verdicts go in this order: not_found, wrong_show,
-// used, too_early, closed, ok. Only an ISSUED ticket of the staffed showtime
-// inside its check-in window flips to REDEEMED, exactly once (E-T1); a closed
-// showtime still lets its tickets in (E-T5). Any other verdict changes nothing
-// and is audited as a failure (E-T6).
+// Redeem takes a ticket id or QR code. Only an ISSUED ticket of this showtime inside its
+// check-in window flips to REDEEMED, exactly once; a closed showtime still lets its tickets in.
+// Any other verdict changes nothing and is audited as a failure.
 func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error) {
 	row, err := s.repo.TicketForGate(ctx, ticketRef)
 	if err != nil {
@@ -716,7 +670,7 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 	}
 	switch {
 	case row.ShowtimeID != showtimeID:
-		res.Status = models.RedeemWrongShow // E-T2
+		res.Status = models.RedeemWrongShow
 	case row.Status != models.TicketIssued:
 		res.Status = models.RedeemUsed
 	case now.Before(opensAt):
@@ -753,9 +707,7 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 	return res, nil
 }
 
-// auditScan records a gate scan that let nobody in, outside any transaction
-// (E-T6). The scanned code is never logged: the ticket id, when known, stands
-// for it.
+// auditScan never logs the scanned code: the ticket id, when known, stands for it.
 func (s *bookingService) auditScan(ctx context.Context, ticketID, showtimeID, verdict string) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
@@ -773,7 +725,6 @@ func (s *bookingService) auditScan(ctx context.Context, ticketID, showtimeID, ve
 	}
 }
 
-// sameSeats reports whether a booking holds exactly the requested seats.
 func (s *bookingService) sameSeats(ctx context.Context, tx *gorm.DB, bookingID string, seatIDs []string) (bool, error) {
 	held, err := s.repo.BookingSeats(ctx, tx, bookingID)
 	if err != nil {
@@ -790,11 +741,6 @@ func (s *bookingService) sameSeats(ctx context.Context, tx *gorm.DB, bookingID s
 	return true, nil
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-// broadcast pushes seat status changes to viewers of that showtime only.
 func (s *bookingService) broadcast(showtimeID, status string, ids []string) {
 	if s.hub == nil || len(ids) == 0 {
 		return
@@ -806,9 +752,6 @@ func (s *bookingService) broadcast(showtimeID, status string, ids []string) {
 	s.hub.Broadcast(showtimeID, sse.SeatEvent{ShowtimeID: showtimeID, Seats: updates})
 }
 
-// audit writes a success row in the business transaction. WHO/IP come from
-// the request when there is one (middleware.Audit / payment handler); jobs are
-// "system".
 func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourceType, resourceID string, after map[string]any) error {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
@@ -824,8 +767,7 @@ func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourc
 	return audit.In(ctx, tx, rec)
 }
 
-// auditRejected records a refused provider request outside any transaction
-// (R-P1: forged callbacks leave a trace).
+// auditRejected runs outside any transaction so forged callbacks still leave a trace.
 func (s *bookingService) auditRejected(ctx context.Context, provider, txnRef, message string) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
@@ -894,7 +836,7 @@ func orderStatus(b *models.Booking, pay *models.Payment, show *repository.Showti
 			StartAt:    show.StartAt,
 			EndAt:      show.EndAt,
 			Started:    !show.StartAt.After(now),
-			Ended:      show.EndAt.Before(now), // UC-03: "đã diễn ra"
+			Ended:      show.EndAt.Before(now),
 		}
 	}
 	if pay != nil {
@@ -945,5 +887,4 @@ func randomHex(n int) string {
 	return strings.ToUpper(hex.EncodeToString(buf))
 }
 
-// newTicketCode returns the 32-hex-char random code rendered as the QR.
 func newTicketCode() string { return randomHex(16) }

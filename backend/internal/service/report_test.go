@@ -13,8 +13,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment/mock"
 )
 
-// T24 / E-B2 / E-D4: closing the same days twice keeps one row per day with
-// the same numbers; only CONFIRMED money counts (no pending, no refunded).
+// T24 / E-B2 / E-D4: closing a day twice keeps one row with the same numbers; only confirmed money counts.
 func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 	e := newEnv(t)
 	confirmed := e.confirmed(e.users[0], "A1", "B1")
@@ -68,7 +67,7 @@ func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 		t.Fatalf("totals = %+v, want %+v", got, want)
 	}
 
-	// I4: the stored revenue equals confirmed money by payment time, recounted by SQL.
+	// I4: stored revenue equals confirmed money by payment time.
 	if n := e.count(`SELECT COUNT(*) FROM daily_aggregates d WHERE d.total_revenue <> COALESCE((
 		SELECT SUM(b.total_amount) FROM bookings b WHERE b.status = 'confirmed'
 		  AND b.paid_at >= (d.report_date::timestamp AT TIME ZONE 'UTC')
@@ -76,7 +75,7 @@ func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 		t.Fatalf("I4 broken on %d days", n)
 	}
 
-	// The admin report reads the same numbers (T15 service side, E-D1).
+	// T15 (service side) / E-D1: the admin report reads the same numbers.
 	dates := make([]string, 0, len(days))
 	for d := range days {
 		dates = append(dates, d)
@@ -103,7 +102,7 @@ func TestCloseDayJob(t *testing.T) {
 	}
 }
 
-// F17 (staff part): seat counts per showtime of the day and the gate list.
+// Seat counts per showtime of the day and the gate list.
 func TestStaffBoard(t *testing.T) {
 	e := newEnv(t)
 	id := e.confirmed(e.users[0], "A1", "A2")

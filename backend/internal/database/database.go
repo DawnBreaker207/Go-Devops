@@ -1,4 +1,4 @@
-// Package database initializes the Postgres connection for GORM.
+// Package database opens the Postgres connection for GORM.
 package database
 
 import (
@@ -15,15 +15,13 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/config"
 )
 
-// Connect opens the Postgres connection and tunes the connection pool.
 func Connect(cfg *config.Config) (*gorm.DB, error) {
 	logLevel := gormlogger.Info
 	if cfg.App.IsProduction() {
 		logLevel = gormlogger.Warn
 	}
 
-	// ParameterizedQueries: SQL is logged with placeholders only, so emails,
-	// password hashes and tokens never reach logs (NFR-LEG-01/02).
+	// ParameterizedQueries logs placeholders only, so emails, password hashes and tokens never reach logs.
 	sqlLogger := gormlogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormlogger.Config{
 		SlowThreshold:             200 * time.Millisecond,
 		LogLevel:                  logLevel,
@@ -56,7 +54,6 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// Close releases the connection, used on shutdown.
 func Close(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
@@ -65,14 +62,12 @@ func Close(db *gorm.DB) error {
 	return sqlDB.Close()
 }
 
-// Healthy pings the DB, bounded by timeout, for health endpoints.
 func Healthy(db *gorm.DB, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return Ping(ctx, db)
 }
 
-// Ping checks the DB answers within ctx.
 func Ping(ctx context.Context, db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {

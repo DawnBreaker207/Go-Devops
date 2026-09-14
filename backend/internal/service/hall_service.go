@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// HallService manages halls, their seat grids and prices.
 type HallService interface {
 	List(ctx context.Context, query dto.PageQuery) ([]dto.HallResponse, int64, error)
 	GetByID(ctx context.Context, id string) (*dto.HallResponse, error)
@@ -84,8 +83,7 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 		SeatTypes:   req.SeatTypes,
 		Gaps:        req.Gaps,
 	}
-	// A nil slice would serialize to SQL NULL then `''` for the not-null
-	// jsonb column; an empty list is the correct "no gaps" value.
+	// A nil slice would be stored as NULL in the not-null jsonb column.
 	if hall.Gaps == nil {
 		hall.Gaps = []string{}
 	}
@@ -123,9 +121,8 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req dto.SeatUpdateRequest) (*dto.SeatResponse, error) {
 	var seat *models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock first, check after: a hold in flight share-locks its showtime, so
-		// it commits (and is seen by the check) before the layout changes, and a
-		// hold arriving later sees the new layout (E-H4).
+		// Lock first, check after: an in-flight hold share-locks its showtime, so it commits
+		// and is seen by the check; a later hold sees the new layout.
 		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
 			return err
 		}
@@ -198,7 +195,6 @@ func (s *hallService) SetPrices(ctx context.Context, hallID string, req dto.Pric
 	return response, nil
 }
 
-// generateSeats builds the seat grid for a hall.
 func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps []string) ([]models.Seat, error) {
 	if len(seatTypes) == 0 {
 		return nil, apperrors.ErrSeatValidation
@@ -237,7 +233,6 @@ func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps []
 	return seats, nil
 }
 
-// rowTypeMap maps a 1-based row index to its seat type.
 func rowTypeMap(seatTypes map[string][]string, rows int) (map[int]string, error) {
 	res := make(map[int]string, len(seatTypes))
 	for seatType, list := range seatTypes {
@@ -258,7 +253,6 @@ func rowTypeMap(seatTypes map[string][]string, rows int) (map[int]string, error)
 	return res, nil
 }
 
-// parseGapLabel parses a gap such as "D5" into its row label and column.
 func parseGapLabel(label string, rows, seatsPerRow int) (string, int, error) {
 	i := 0
 	for i < len(label) && (label[i] >= 'A' && label[i] <= 'Z' || label[i] >= 'a' && label[i] <= 'z') {
@@ -275,7 +269,6 @@ func parseGapLabel(label string, rows, seatsPerRow int) (string, int, error) {
 	return strings.ToUpper(label[:i]), col, nil
 }
 
-// validatePrices requires a positive price for every seat type.
 func validatePrices(prices map[string]int64) error {
 	if len(prices) != len(models.AllSeatTypes) {
 		return apperrors.ErrSeatValidation

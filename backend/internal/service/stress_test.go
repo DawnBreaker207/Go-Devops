@@ -18,12 +18,7 @@ func deref[T any](p *T) any {
 	return *p
 }
 
-// Double-sell storm: every customer keeps grabbing random overlapping lots in
-// random order (opposite lock orders included) while the sweep runs non-stop.
-// Holds expire mid-storm so seats keep changing hands, and half the payments
-// land after their hold expired — maybe after someone else took the seat.
-// Whatever interleaving happens, a seat is never sold or held twice and money
-// follows the seats.
+// Random overlapping holds, expiring holds, late payments and a non-stop sweep never double-sell a seat.
 func TestStress_NoSeatSoldTwice(t *testing.T) {
 	labels := []string{"A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "B5"}
 	const rounds, attempts = 10, 15
@@ -84,8 +79,7 @@ func TestStress_NoSeatSoldTwice(t *testing.T) {
 					}
 					e.capture(res.TxnRef)
 					if rand.IntN(2) == 0 {
-						// the money arrives after the hold expired: the sweep or another
-						// customer may take the seat first, then it must be refunded
+						// paid after the hold expired: the seat may be gone and need a refund
 						e.shiftHold(h.BookingID, -1)
 						late.Add(1)
 					}
@@ -98,9 +92,7 @@ func TestStress_NoSeatSoldTwice(t *testing.T) {
 		close(stop)
 		<-sweepDone
 
-		// Right after the storm an expired hold may still read HELD (its booking
-		// already expired) until the next sweep tick — hold and confirm treat it
-		// as free. A seat whose hold is still running must always have its booking.
+		// An expired hold may read HELD until the next sweep; only running holds must have their booking.
 		orphanHeld := `SELECT COUNT(*) FROM showtime_seats ss WHERE ss.status = 'held' AND %s AND (
 			SELECT COUNT(*) FROM booking_seats bs JOIN bookings b ON b.id = bs.booking_id
 			WHERE bs.showtime_seat_id = ss.id AND b.status = 'pending' AND b.user_id = ss.held_by AND bs.hold_version = ss.version) <> 1`

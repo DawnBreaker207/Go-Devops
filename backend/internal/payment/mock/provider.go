@@ -1,7 +1,4 @@
-// Package mock is the demo payment provider. Its adapter implements
-// payment.Provider exactly like a real gateway adapter would (signed IPN,
-// signed return, query, refund); the gateway it talks to is simulated in
-// process (see Gateway). Enable it with payment.providers.mock in config.
+// Package mock is a demo payment provider backed by an in-process simulated gateway.
 package mock
 
 import (
@@ -16,20 +13,18 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment"
 )
 
-// Options configures one mock provider instance.
 type Options struct {
-	// Name defaults to "mock"; a second instance can take another name.
+	// Name defaults to "mock".
 	Name        string
 	DisplayName string
 	// Secret signs IPNs and return redirects (HMAC-SHA256).
 	Secret string
-	// PublicBaseURL is where the checkout page is reachable by browsers.
+	// PublicBaseURL is where browsers reach the checkout page.
 	PublicBaseURL string
-	// HTTPClient delivers IPNs; defaults to a 5s timeout client.
+	// HTTPClient delivers IPNs; defaults to a client with a 5s timeout.
 	HTTPClient *http.Client
 }
 
-// Provider is the mock adapter.
 type Provider struct {
 	name    string
 	display string
@@ -56,7 +51,6 @@ func New(opts Options) *Provider {
 	}
 }
 
-// Gateway exposes the simulated gateway (drills and tests).
 func (p *Provider) Gateway() *Gateway { return p.gw }
 
 func (p *Provider) Name() string        { return p.name }
@@ -93,8 +87,8 @@ func (p *Provider) ParseNotification(r *http.Request) (*payment.Notification, er
 	return &payment.Notification{TxnRef: n.TxnRef, Status: state, Amount: n.Amount, ProviderTxnID: n.GatewayTxnID}, nil
 }
 
-// AckNotification answers with an HTTP status plus a VNPay-like code, so the
-// gateway retries only temporary failures.
+// AckNotification answers with an HTTP status and a VNPay-like code so the gateway
+// retries only temporary failures.
 func (p *Provider) AckNotification(w http.ResponseWriter, ack payment.AckStatus) {
 	status, code := http.StatusOK, "00"
 	switch ack {

@@ -9,8 +9,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// RefreshTokenRepository stores issued refresh tokens for rotation and replay
-// detection.
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, token *models.RefreshToken) error
 	Lock(ctx context.Context, tx *gorm.DB, id string) (*models.RefreshToken, error)

@@ -21,9 +21,7 @@ import (
 
 var errGatewayBusy = errors.New("gateway busy")
 
-// refundPendingAfterMismatch pays a booking with a wrong amount while the
-// provider refuses refunds, leaving the attempt REFUND_PENDING after one
-// failed try.
+// refundPendingAfterMismatch overpays a booking; with refunds failing the payment stays REFUND_PENDING.
 func (e *env) refundPendingAfterMismatch(user, seat string) string {
 	e.t.Helper()
 	h := e.mustHold(user, seat)
@@ -38,8 +36,6 @@ func (e *env) refundPendingAfterMismatch(user, seat string) string {
 	return ref
 }
 
-// H2: money collected on an attempt we already gave up on, with its IPN lost,
-// is found by the sweep and refunded (the booking expired in between).
 func TestSweep_RefundsLateCaptureOfAbandonedAttempt(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -55,7 +51,7 @@ func TestSweep_RefundsLateCaptureOfAbandonedAttempt(t *testing.T) {
 		t.Fatalf("first sweep = %+v", res)
 	}
 
-	// The checkout page was still open: the customer pays, the IPN never comes.
+	// The checkout page was still open: the customer pays but no IPN arrives.
 	e.capture(ref)
 	res, err = e.svc.SweepExpired(e.ctx, 500)
 	e.must(err)
@@ -79,8 +75,6 @@ func TestSweep_RefundsLateCaptureOfAbandonedAttempt(t *testing.T) {
 	e.checkInvariants()
 }
 
-// H2: a given-up attempt collected after another provider already sold the
-// tickets is refunded as a duplicate; the sold tickets stay.
 func TestSweep_LateCaptureAfterOtherProviderPaid_RefundsDuplicate(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -112,7 +106,6 @@ func TestSweep_LateCaptureAfterOtherProviderPaid_RefundsDuplicate(t *testing.T) 
 	e.checkInvariants()
 }
 
-// H2: attempts given up longer ago than the late capture window are left alone.
 func TestSweep_FailedAttemptOutsideWindowIgnored(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -130,8 +123,6 @@ func TestSweep_FailedAttemptOutsideWindowIgnored(t *testing.T) {
 	}
 }
 
-// L5: a notification locks the booking before its payment, like Pay does, so
-// the two can never deadlock.
 func TestNotify_LocksBookingBeforePayment(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -161,7 +152,6 @@ func TestNotify_LocksBookingBeforePayment(t *testing.T) {
 	e.wantStatus(h.BookingID, models.BookingConfirmed)
 }
 
-// M10: sweeps racing on the same due refund call the provider exactly once.
 func TestRefund_ConcurrentSettleCallsProviderOnce(t *testing.T) {
 	e := newEnv(t)
 	e.gw.FailRefunds(errGatewayBusy)
@@ -185,8 +175,6 @@ func TestRefund_ConcurrentSettleCallsProviderOnce(t *testing.T) {
 	e.checkInvariants()
 }
 
-// M9: a failed refund waits for its retry time instead of hammering the
-// provider on every sweep.
 func TestSweep_RefundFailureBacksOff(t *testing.T) {
 	e := newEnv(t)
 	e.gw.FailRefunds(errGatewayBusy)
@@ -211,7 +199,6 @@ func TestSweep_RefundFailureBacksOff(t *testing.T) {
 	e.checkInvariants()
 }
 
-// M9: a refund that keeps failing does not starve the refunds behind it.
 func TestSweep_FailingRefundDoesNotStarveQueue(t *testing.T) {
 	e := newEnv(t)
 	other := e.addProvider("mock2")
@@ -243,7 +230,6 @@ func TestSweep_FailingRefundDoesNotStarveQueue(t *testing.T) {
 	}
 }
 
-// M9: a paid booking the sweep can not settle is retried with backoff.
 func TestSweep_StuckFinalizeBacksOff(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -273,7 +259,6 @@ func TestSweep_StuckFinalizeBacksOff(t *testing.T) {
 	}
 }
 
-// M11: no money is taken for a showtime that stopped selling or started.
 func TestPay_RefusedOnceShowtimeClosedOrStarted(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -291,8 +276,7 @@ func TestPay_RefusedOnceShowtimeClosedOrStarted(t *testing.T) {
 	}
 }
 
-// M16: an attempt that never got its checkout URL is opened again by the
-// next pay request once the grace period passed; a fresh one still answers 409.
+// An attempt without a checkout URL is resumed after the grace period; before that it answers 409.
 func TestPay_ResumesOrphanCheckout(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -319,7 +303,6 @@ func TestPay_ResumesOrphanCheckout(t *testing.T) {
 	}
 }
 
-// M16: an orphan attempt does not block a new hold until the booking expires.
 func TestHold_OrphanCheckoutDoesNotBlockNewHold(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -335,7 +318,6 @@ func TestHold_OrphanCheckoutDoesNotBlockNewHold(t *testing.T) {
 	e.checkInvariants()
 }
 
-// blockingPublisher never confirms: it waits for the caller to give up.
 type blockingPublisher struct{}
 
 func (blockingPublisher) Publish(ctx context.Context, _ string, _ []byte) error {
@@ -343,7 +325,6 @@ func (blockingPublisher) Publish(ctx context.Context, _ string, _ []byte) error 
 	return ctx.Err()
 }
 
-// M12: a broker that never confirms does not hold the confirm up.
 func TestConfirm_SlowPublisherDoesNotBlock(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -374,7 +355,6 @@ func TestConfirm_SlowPublisherDoesNotBlock(t *testing.T) {
 	e.wantStatus(h.BookingID, models.BookingConfirmed)
 }
 
-// H7: a User-Agent longer than its audit column must not roll the hold back.
 func TestHTTP_LongUserAgentDoesNotBreakHold(t *testing.T) {
 	h := newHTTPEnv(t)
 	token, _ := h.login(models.RoleCustomer)

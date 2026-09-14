@@ -13,7 +13,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// UserRepository accesses the users table.
 type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
 	CreateTx(ctx context.Context, tx *gorm.DB, user *models.User) error
@@ -58,7 +57,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*models.User,
 	return &user, nil
 }
 
-// StatusByID reads only what the auth middleware checks on every request.
+// Reads only what the auth middleware checks on every request.
 func (r *userRepository) StatusByID(ctx context.Context, id string) (bool, string, bool, error) {
 	var rows []struct {
 		Active bool
@@ -121,8 +120,7 @@ func (r *userRepository) LockByID(ctx context.Context, tx *gorm.DB, id string) (
 	return firstOrNil[models.User](tx.WithContext(ctx).Clauses(forUpdate()).Where("id = ?", id), "lock user")
 }
 
-// LockActiveAdmins locks every active admin in id order, so concurrent
-// lockouts of admins serialize and can not remove the last one (E-U2).
+// Locks active admins in id order so concurrent lockouts serialize and can not remove the last admin.
 func (r *userRepository) LockActiveAdmins(ctx context.Context, tx *gorm.DB) ([]string, error) {
 	var ids []string
 	if err := tx.WithContext(ctx).Raw(`SELECT id FROM users

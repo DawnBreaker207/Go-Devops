@@ -8,7 +8,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// AuthHandler handles auth requests, no business logic.
 type AuthHandler struct {
 	authService service.AuthService
 }

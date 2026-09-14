@@ -51,7 +51,6 @@ func deleteQueue(url, name string) {
 	_, _ = ch.QueueDelete(name, false, false, false)
 }
 
-// consumeN consumes until n messages arrived or the timeout passed.
 func consumeN(c *Client, queueName string, n int, timeout time.Duration) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -82,8 +81,7 @@ func consumeN(c *Client, queueName string, n int, timeout time.Duration) []strin
 
 func mustPublish(t *testing.T, c *Client, queueName, body string) {
 	t.Helper()
-	// Generous: under `go test -race ./...` the broker confirm of a cold queue
-	// took over 10s while the other packages loaded the machine.
+	// Generous: under -race the broker confirm of a cold queue took over 10s.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := c.Publish(ctx, queueName, []byte(body)); err != nil {
@@ -103,7 +101,6 @@ func TestPublishConsume_Durable(t *testing.T) {
 	}
 }
 
-// The broker dropping the connection must not break the next publish.
 func TestPublish_RedialsAfterConnectionDrop(t *testing.T) {
 	url := testURL()
 	c := dialOrSkip(t, url)
@@ -141,14 +138,9 @@ func restartBroker(t *testing.T, container, url string) {
 	waitForBroker(t, url, 90*time.Second)
 }
 
-// T26 drill: the broker restarts mid-way. Messages already queued survive, the
-// same client publishes again, and a running consumer reconnects by itself.
-// It restarts a container, so it only runs against a disposable broker:
-//
-//	docker run -d --name cp-rabbitmq-chaos -p 5673:5672 rabbitmq:3.13-management-alpine
-//	QUEUE_CHAOS_CONTAINER=cp-rabbitmq-chaos QUEUE_CHAOS_URL=amqp://guest:guest@localhost:5673/ \
-//	  go test ./pkg/queue -run TestBrokerRestart -v
+// T26: after a broker restart queued messages survive and publisher and consumer reconnect.
 func TestBrokerRestart_NoMessageLost(t *testing.T) {
+	// It restarts the container, so point it at a disposable broker only.
 	container, url := os.Getenv("QUEUE_CHAOS_CONTAINER"), os.Getenv("QUEUE_CHAOS_URL")
 	if container == "" || url == "" {
 		t.Skip("set QUEUE_CHAOS_CONTAINER and QUEUE_CHAOS_URL to run the broker restart drill")

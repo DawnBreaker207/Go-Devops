@@ -6,10 +6,8 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// DateLayout is the date format used by the API.
 const DateLayout = "2006-01-02"
 
-// MovieRequest is the shared body for creating and updating movies.
 type MovieRequest struct {
 	Title       string `json:"title" binding:"required,min=1,max=255" example:"Inception"`
 	Genre       string `json:"genre" binding:"required,max=100" example:"Sci-Fi"`
@@ -21,19 +19,17 @@ type MovieRequest struct {
 	Status      string `json:"status" binding:"required,oneof=draft showing ended" example:"showing"`
 }
 
-// ParseReleaseDate parses the date string into time.Time.
 // Binding validates the format, so errors only occur on direct calls.
 func (r MovieRequest) ParseReleaseDate() (time.Time, error) {
 	return time.Parse(DateLayout, r.ReleaseDate)
 }
 
-// MovieListQuery filters the movie list. Customers never see drafts.
+// Customers never see drafts.
 type MovieListQuery struct {
 	PageQuery
 	Status string `form:"status" binding:"omitempty,oneof=draft showing ended"`
 }
 
-// MovieResponse is a movie returned to the client.
 type MovieResponse struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`

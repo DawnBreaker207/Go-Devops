@@ -21,7 +21,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
 
-// AuthService handles register, login, and token refresh.
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
@@ -36,7 +35,7 @@ type authService struct {
 	loginGuard *ratelimit.FailureLimiter
 }
 
-// NewAuthService wires auth. loginGuard may be nil (no failed-login lockout).
+// NewAuthService: loginGuard may be nil (no failed-login lockout).
 func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, tokens repository.RefreshTokenRepository,
 	jwtManager *jwt.Manager, loginGuard *ratelimit.FailureLimiter) AuthService {
 	return &authService{db: db, userRepo: userRepo, tokens: tokens, jwtManager: jwtManager, loginGuard: loginGuard}
@@ -68,9 +67,7 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
-	// Auth events are activity records, not handled by the middleware's
-	// failure path; written after the fact, best-effort — a failed audit row
-	// must not take the user's session down.
+	// Best-effort audit after the fact: a failed audit row must not fail the request.
 	s.auditSuccess(ctx, "auth.register", user.ID, user.Role,
 		map[string]any{"email": user.Email, "full_name": user.FullName})
 
@@ -78,14 +75,12 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	return &result, nil
 }
 
-// Login checks the password, then the lockout state of the account. Wrong
-// passwords count per email+IP; the 5th in a row locks that pair out (T14).
+// Login counts wrong passwords per email+IP; the 5th in a row locks that pair out.
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
 	email := normalizeEmail(req.Email)
 	guardKey := email + "|" + req.ClientIP
 	if s.loginGuard != nil {
 		if blocked, left := s.loginGuard.Blocked(guardKey); blocked {
-			// FR-AUTH-03: tell the client how long to wait.
 			return nil, apperrors.ErrTooManyLoginAttempts.WithDetails(map[string]string{
 				"retry_after_seconds": strconv.Itoa(int(math.Ceil(left.Seconds()))),
 			})
@@ -110,7 +105,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		s.loginGuard.Reset(guardKey)
 	}
 	if !user.Active {
-		return nil, apperrors.ErrAccountLocked // E-U3
+		return nil, apperrors.ErrAccountLocked
 	}
 
 	pair, err := s.issueTokens(ctx, s.db, user, "")
@@ -125,9 +120,8 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	}, nil
 }
 
-// Refresh rotates the refresh token: the presented token is consumed and a
-// new one issued in the same family. A token presented twice is a replay:
-// the whole family is revoked and the user must log in again (E-C4, T13).
+// Refresh rotates the refresh token. A token presented twice is a replay: its whole
+// family is revoked and the user must log in again.
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.TokenResponse, error) {
 	claims, err := s.jwtManager.ParseRefresh(refreshToken)
 	if err != nil {
@@ -184,8 +178,7 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 	return &result, nil
 }
 
-// issueTokens signs a pair and stores its refresh token; an empty familyID
-// starts a new family (a fresh login).
+// issueTokens: an empty familyID starts a new token family (a fresh login).
 func (s *authService) issueTokens(ctx context.Context, tx *gorm.DB, user *models.User, familyID string) (*jwt.TokenPair, error) {
 	pair, err := s.jwtManager.GeneratePair(user.ID, user.Email, user.Role)
 	if err != nil {
@@ -205,16 +198,14 @@ func (s *authService) issueTokens(ctx context.Context, tx *gorm.DB, user *models
 	return pair, nil
 }
 
-// loginFailed counts a failure. The log carries the IP only: emails stay out
-// of logs (NFR-LEG-01).
+// loginFailed logs the IP only: emails stay out of logs.
 func (s *authService) loginFailed(key, ip string) {
 	if s.loginGuard != nil && s.loginGuard.Fail(key) {
 		logger.Warn("login locked out after repeated failures", logger.String("ip", ip))
 	}
 }
 
-// auditSuccess writes an auth event row. The middleware stashes the route's
-// action and network info into the context; here we only complete it.
+// auditSuccess completes the audit record the middleware put in the context.
 func (s *authService) auditSuccess(ctx context.Context, action, userID, role string, after map[string]any) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {

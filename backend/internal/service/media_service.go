@@ -11,7 +11,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// MediaService validates and stores uploaded images (movie posters).
 type MediaService interface {
 	UploadPoster(ctx context.Context, filename string, body io.Reader) (*dto.UploadResponse, error)
 }
@@ -27,8 +26,7 @@ func NewMediaService(store storage.Store, maxBytes int64) MediaService {
 
 var allowedImageTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/webp": true}
 
-// UploadPoster reads at most maxBytes, sniffs the real content type (the
-// client's is not trusted) and stores the image.
+// UploadPoster sniffs the content type itself: the client's is not trusted.
 func (s *mediaService) UploadPoster(ctx context.Context, filename string, body io.Reader) (*dto.UploadResponse, error) {
 	data, err := io.ReadAll(io.LimitReader(body, s.maxBytes+1))
 	if err != nil {
@@ -43,7 +41,7 @@ func (s *mediaService) UploadPoster(ctx context.Context, filename string, body i
 	}
 	u, err := s.store.Upload(ctx, storage.Image{Folder: "posters", Filename: filename, ContentType: contentType, Data: data})
 	if err != nil {
-		return nil, apperrors.ErrImageStoreUnavailable.Wrap(err) // E-AR3: 502, retry later
+		return nil, apperrors.ErrImageStoreUnavailable.Wrap(err)
 	}
 	return &dto.UploadResponse{URL: u, ContentType: contentType, Size: int64(len(data))}, nil
 }

@@ -7,9 +7,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// AuditLog records key state changes. Success rows are written INSIDE the
-// business transaction so a log row never exists without its data; failure
-// rows are written after the fact by the audit middleware (nothing changed).
+// Success rows are written inside the business transaction, so a log row never exists without
+// its data; failure rows are written afterwards by the audit middleware.
 type AuditLog struct {
 	ID           string         `gorm:"type:uuid;primaryKey" json:"id"`
 	ActorID      *string        `gorm:"type:uuid" json:"actor_id,omitempty"`

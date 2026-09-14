@@ -11,7 +11,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// HealthHandler reports service status.
 type HealthHandler struct {
 	db      *gorm.DB
 	appName string
@@ -21,7 +20,6 @@ func NewHealthHandler(db *gorm.DB, appName string) *HealthHandler {
 	return &HealthHandler{db: db, appName: appName}
 }
 
-// HealthStatus is the /health payload.
 type HealthStatus struct {
 	Status   string `json:"status" example:"ok"`
 	Service  string `json:"service" example:"BackEnd-CP"`

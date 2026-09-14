@@ -11,7 +11,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// PaymentRepository stores payment attempts, whatever the provider.
 type PaymentRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, p *models.Payment) error
 	FindByID(ctx context.Context, id string) (*models.Payment, error)
@@ -79,7 +78,7 @@ func (r *paymentRepository) FindByRef(ctx context.Context, provider, txnRef stri
 	return firstOrNil[models.Payment](r.db.WithContext(ctx).Where("provider = ? AND txn_ref = ?", provider, txnRef), "find payment by ref")
 }
 
-// LockByRef serializes every notification/reconcile of one attempt.
+// Every notification and reconcile of an attempt takes this row lock.
 func (r *paymentRepository) LockByRef(ctx context.Context, tx *gorm.DB, provider, txnRef string) (*models.Payment, error) {
 	return firstOrNil[models.Payment](r.conn(ctx, tx).Clauses(forUpdate()).
 		Where("provider = ? AND txn_ref = ?", provider, txnRef), "lock payment by ref")
@@ -90,9 +89,8 @@ func (r *paymentRepository) LockOpen(ctx context.Context, tx *gorm.DB, bookingID
 		Where("booking_id = ? AND provider = ? AND status = ?", bookingID, provider, models.PaymentPending), "lock open payment")
 }
 
-// HasOpen reports a checkout the customer may be paying right now. An attempt
-// that never got its checkout URL (orphan) stops counting after a short grace
-// period, so it can not block a new hold until the booking expires.
+// An attempt that never got its checkout URL stops counting after orphanGrace, so it can not
+// block a new hold until the booking expires.
 func (r *paymentRepository) HasOpen(ctx context.Context, tx *gorm.DB, bookingID string) (bool, error) {
 	var n int64
 	if err := r.conn(ctx, tx).Model(&models.Payment{}).
@@ -104,13 +102,9 @@ func (r *paymentRepository) HasOpen(ctx context.Context, tx *gorm.DB, bookingID 
 	return n > 0, nil
 }
 
-// orphanGrace is how long a stored attempt may wait for its checkout URL
-// before it counts as orphaned.
 const orphanGrace = 30 * time.Second
 
-// ReconcilableForBooking lists the attempts of a booking worth asking the
-// provider about: every open attempt, plus given-up ones still inside the late
-// capture window that were not queried in the last couple of minutes.
+// Failed attempts are included while inside the late capture window: a gateway may still collect the money.
 func (r *paymentRepository) ReconcilableForBooking(ctx context.Context, bookingID string, lateWindow time.Duration) ([]models.Payment, error) {
 	var out []models.Payment
 	if err := r.db.WithContext(ctx).Where("booking_id = ?", bookingID).
@@ -123,8 +117,7 @@ func (r *paymentRepository) ReconcilableForBooking(ctx context.Context, bookingI
 	return out, nil
 }
 
-// ClaimOrphanCheckout takes over an open attempt that never got its checkout
-// URL for longer than after; 0 rows means it is too recent or already taken.
+// 0 rows means the orphan attempt is too recent or already taken over.
 func (r *paymentRepository) ClaimOrphanCheckout(ctx context.Context, tx *gorm.DB, id string, after time.Duration) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE payments SET updated_at = NOW()
 		WHERE id = ? AND status = ? AND redirect_url IS NULL AND updated_at < NOW() - make_interval(secs => ?)`,
@@ -158,8 +151,7 @@ func (r *paymentRepository) MarkFailed(ctx context.Context, tx *gorm.DB, id, rea
 	return res.RowsAffected, nil
 }
 
-// MarkCaptured records money the provider collected. A failed attempt can
-// still be captured: a gateway may settle after we gave up on it.
+// A failed attempt can still be captured: a gateway may settle after we gave up on it.
 func (r *paymentRepository) MarkCaptured(ctx context.Context, tx *gorm.DB, id, status string, amount int64, providerTxnID string, data map[string]string, reason string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE payments SET status = ?, status_reason = NULLIF(?, ''),
 			paid_amount = ?, paid_at = NOW(),
@@ -198,9 +190,8 @@ func (r *paymentRepository) TouchChecked(ctx context.Context, id string) error {
 	return nil
 }
 
-// ClaimRefund reserves a REFUND_PENDING attempt that is due for the lease time
-// before its provider is called, and counts the try. nil means nothing to do:
-// settled already, claimed by another worker, or waiting for its retry time.
+// ClaimRefund leases the refund before the provider call. nil means nothing to do:
+// already settled, claimed by another worker, or waiting for its retry time.
 func (r *paymentRepository) ClaimRefund(ctx context.Context, id string, lease time.Duration) (*models.Payment, error) {
 	res := r.db.WithContext(ctx).Exec(`UPDATE payments
 		SET next_retry_at = NOW() + make_interval(secs => ?), refund_attempts = refund_attempts + 1, updated_at = NOW()
@@ -215,8 +206,7 @@ func (r *paymentRepository) ClaimRefund(ctx context.Context, id string, lease ti
 	return r.FindByID(ctx, id)
 }
 
-// DeferRefund schedules the next try of a failed refund: 1 minute doubled on
-// every failure, at most 1 hour.
+// Backoff: 1 minute doubled per failure, at most 1 hour.
 func (r *paymentRepository) DeferRefund(ctx context.Context, id, lastError string) error {
 	if err := r.db.WithContext(ctx).Exec(`UPDATE payments
 		SET next_retry_at = NOW() + LEAST(INTERVAL '1 hour', INTERVAL '1 minute' * power(2, GREATEST(refund_attempts - 1, 0))),
@@ -227,8 +217,7 @@ func (r *paymentRepository) DeferRefund(ctx context.Context, id, lastError strin
 	return nil
 }
 
-// RefundPending lists refunds due for a try, the longest waiting first, so a
-// refund failing for good never starves newer ones.
+// Longest waiting first, so a refund failing for good never starves newer ones.
 func (r *paymentRepository) RefundPending(ctx context.Context, limit int) ([]models.Payment, error) {
 	var out []models.Payment
 	if err := r.db.WithContext(ctx).Where("status = ?", models.PaymentRefundPending).
@@ -239,9 +228,7 @@ func (r *paymentRepository) RefundPending(ctx context.Context, limit int) ([]mod
 	return out, nil
 }
 
-// FailedForRecheck lists given-up attempts still inside the late capture
-// window, not queried in the last 10 minutes: a gateway may collect the money
-// after we stopped waiting, and it must then be confirmed or refunded (E-P3).
+// A gateway may collect the money after we gave up; such a payment must then be confirmed or refunded.
 func (r *paymentRepository) FailedForRecheck(ctx context.Context, lateWindow time.Duration, limit int) ([]models.Payment, error) {
 	var out []models.Payment
 	if err := r.db.WithContext(ctx).Where("status = ?", models.PaymentFailed).
@@ -253,8 +240,7 @@ func (r *paymentRepository) FailedForRecheck(ctx context.Context, lateWindow tim
 	return out, nil
 }
 
-// DueForReconcile lists open attempts old enough that their IPN may be lost
-// and not queried in the last couple of minutes.
+// Open attempts old enough that their IPN may have been lost.
 func (r *paymentRepository) DueForReconcile(ctx context.Context, limit int) ([]models.Payment, error) {
 	var out []models.Payment
 	if err := r.db.WithContext(ctx).

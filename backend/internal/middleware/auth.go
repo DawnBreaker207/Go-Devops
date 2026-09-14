@@ -11,21 +11,17 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// Keys storing authenticated user info in the gin context.
 const (
 	ContextUserID    = "user_id"
 	ContextUserEmail = "user_email"
 	ContextUserRole  = "user_role"
 )
 
-// AccountChecker reports the current state of an account, so locking it or
-// changing its role takes effect before its access token expires (L4).
+// AccountChecker lets a lock or role change take effect before the access token expires.
 type AccountChecker interface {
 	Status(ctx context.Context, userID string) (active bool, role string, err error)
 }
 
-// Auth validates the access token in the Authorization: Bearer <token> header
-// and, with accounts set, that the account is still active with the same role.
 func Auth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.GetHeader("Authorization") == "" {
@@ -38,10 +34,8 @@ func Auth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	}
 }
 
-// OptionalAuth lets a request without an Authorization header through as an
-// anonymous visitor (public catalog). A header that is sent must still be
-// valid: a wrong or expired token answers 401 instead of silently browsing as
-// a guest, so the client knows to refresh it (E-CAT6).
+// OptionalAuth lets anonymous requests through, but a sent token must be valid:
+// the client gets 401 and refreshes instead of silently browsing as a guest.
 func OptionalAuth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.GetHeader("Authorization") == "" || authenticate(c, jwtManager, accounts) {
@@ -50,8 +44,6 @@ func OptionalAuth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerF
 	}
 }
 
-// authenticate checks the bearer token and stores the user in the context. On
-// failure it aborts the request with the error and returns false.
 func authenticate(c *gin.Context, jwtManager *jwt.Manager, accounts AccountChecker) bool {
 	parts := strings.Fields(c.GetHeader("Authorization"))
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -86,7 +78,7 @@ func authenticate(c *gin.Context, jwtManager *jwt.Manager, accounts AccountCheck
 	return true
 }
 
-// RequireRoles allows only the listed roles. Must run after Auth.
+// RequireRoles must run after Auth.
 func RequireRoles(roles ...string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, role := range roles {
@@ -103,10 +95,8 @@ func RequireRoles(roles ...string) gin.HandlerFunc {
 	}
 }
 
-// CurrentUserID returns the authenticated user's id.
 func CurrentUserID(c *gin.Context) string { return contextString(c, ContextUserID) }
 
-// CurrentUserRole returns the authenticated user's role.
 func CurrentUserRole(c *gin.Context) string { return contextString(c, ContextUserRole) }
 
 func contextString(c *gin.Context, key string) string {

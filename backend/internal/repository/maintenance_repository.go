@@ -7,14 +7,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// MaintenanceRepository removes data past its retention (job cleanup).
 type MaintenanceRepository interface {
-	// DeleteAuditOlderThan deletes up to limit audit rows older than days (by DB clock).
 	DeleteAuditOlderThan(ctx context.Context, days, limit int) (int64, error)
-	// DeleteDeadRefreshTokens deletes up to limit refresh tokens expired for a day.
 	DeleteDeadRefreshTokens(ctx context.Context, limit int) (int64, error)
-	// DeleteFinishedRunsOlderThan deletes up to limit batch runs started more
-	// than days ago that are no longer running.
 	DeleteFinishedRunsOlderThan(ctx context.Context, days, limit int) (int64, error)
 }
 

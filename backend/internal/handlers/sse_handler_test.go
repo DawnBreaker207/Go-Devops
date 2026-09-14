@@ -53,8 +53,7 @@ func startSSEServer(t *testing.T, writeTimeout time.Duration, tune ...func(*SSEH
 	return srv, hub, tokens
 }
 
-// readFrames parses the stream into events; comment lines become ":" frames
-// and the retry field a "retry" frame.
+// readFrames turns comment lines into ":" frames and the retry field into a "retry" frame.
 func readFrames(body *bufio.Reader, out chan<- sseFrame) {
 	defer close(out)
 	var cur sseFrame
@@ -100,9 +99,7 @@ func nextFrame(t *testing.T, frames <-chan sseFrame, want string, within time.Du
 	}
 }
 
-// F11 end to end over HTTP: no JWT, token in URL, stream outlives the server
-// WriteTimeout, keepalive pings, debounced batches, show isolation, and
-// hub.Close ends the stream (graceful shutdown).
+// End to end: URL token, outlives WriteTimeout, keepalive, debounce, show isolation, hub.Close ends it.
 func TestSSEStream(t *testing.T) {
 	srv, hub, tokens := startSSEServer(t, 300*time.Millisecond)
 	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
@@ -162,8 +159,6 @@ func TestSSEStream(t *testing.T) {
 	}
 }
 
-// M13: a client that stops reading is let go after the write deadline instead
-// of holding its goroutine and connection forever.
 func TestSSEStream_StalledClientIsDropped(t *testing.T) {
 	srv, hub, tokens := startSSEServer(t, 0, func(h *SSEHandler) {
 		h.debounce = 5 * time.Millisecond
@@ -176,8 +171,7 @@ func TestSSEStream_StalledClientIsDropped(t *testing.T) {
 	}
 	defer resp.Body.Close() // never read: the client stalls
 
-	// Distinct seat ids: the debounce keeps one update per seat, so the payload
-	// stays large enough to fill the socket buffers of a client that stopped reading.
+	// Distinct seat ids so the debounce does not merge them and the payload fills the socket buffers.
 	seats := make([]sse.SeatUpdate, 4000)
 	for i := range seats {
 		seats[i] = sse.SeatUpdate{ID: fmt.Sprintf("%036d", i), Status: "held"}
@@ -192,7 +186,6 @@ func TestSSEStream_StalledClientIsDropped(t *testing.T) {
 	}
 }
 
-// M13: a stream ends after its max age; the client reconnects with a new token.
 func TestSSEStream_MaxAgeEndsStream(t *testing.T) {
 	srv, _, tokens := startSSEServer(t, 0, func(h *SSEHandler) { h.maxAge = 300 * time.Millisecond })
 	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
@@ -218,7 +211,6 @@ func TestSSEStream_MaxAgeEndsStream(t *testing.T) {
 	}
 }
 
-// M13: over the per-user stream limit the stream is refused with 429.
 func TestSSEStream_PerUserLimit(t *testing.T) {
 	srv, hub, tokens := startSSEServer(t, 0)
 	hub.MaxStreamsPerUser = 1
@@ -241,7 +233,6 @@ func TestSSEStream_PerUserLimit(t *testing.T) {
 	}
 }
 
-// R-S2 / R-S3: a token for another show, a forged or missing token is 401.
 func TestSSEStream_RejectsBadTokens(t *testing.T) {
 	srv, _, tokens := startSSEServer(t, 0)
 	token, _ := tokens.Issue("user-1", "show-a", "hall-1")

@@ -22,7 +22,6 @@ func NewLocal(dir, publicBaseURL string) *Local {
 
 func (l *Local) Name() string { return "local" }
 
-// Dir is the directory served under MediaPath.
 func (l *Local) Dir() string { return l.dir }
 
 func (l *Local) Upload(_ context.Context, img Image) (string, error) {

@@ -1,6 +1,4 @@
-// Package notify sends customer notifications. This build ships a mock mailer
-// only: messages are kept in memory and written as .html files to an outbox
-// directory so they can be opened in a browser (no SMTP, no Mailtrap).
+// Package notify sends emails; this build only has a mock mailer that writes .html files to an outbox.
 package notify
 
 import (
@@ -16,19 +14,16 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Message is one email.
 type Message struct {
 	To      string
 	Subject string
 	HTML    string
 }
 
-// Mailer delivers emails.
 type Mailer interface {
 	Send(ctx context.Context, msg Message) error
 }
 
-// MockMailer records messages instead of sending them.
 type MockMailer struct {
 	outboxDir string
 
@@ -37,14 +32,12 @@ type MockMailer struct {
 	fail error
 }
 
-// NewMockMailer builds a mock mailer; an empty outboxDir keeps messages in
-// memory only.
+// NewMockMailer keeps messages in memory only when outboxDir is empty.
 func NewMockMailer(outboxDir string) *MockMailer {
 	return &MockMailer{outboxDir: outboxDir}
 }
 
-// Send stores the message, or returns the configured failure. Recipient
-// addresses never reach logs or file names (NFR-LEG-01).
+// Recipient addresses never reach logs or file names.
 func (m *MockMailer) Send(_ context.Context, msg Message) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -68,15 +61,14 @@ func (m *MockMailer) Send(_ context.Context, msg Message) error {
 	return nil
 }
 
-// Sent returns a copy of every delivered message.
+// Sent returns a copy of the sent messages.
 func (m *MockMailer) Sent() []Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]Message(nil), m.sent...)
 }
 
-// FailWith makes every Send fail with err until called again with nil
-// (simulates a broken mail server, E-ML1).
+// FailWith makes every Send fail with err until called again with nil.
 func (m *MockMailer) FailWith(err error) {
 	m.mu.Lock()
 	m.fail = err

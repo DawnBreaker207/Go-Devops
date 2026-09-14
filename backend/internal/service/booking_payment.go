@@ -20,37 +20,22 @@ import (
 )
 
 const (
-	// abandonAfter is how long past the booking hold an unpaid attempt is
-	// still queried before it is given up as abandoned.
+	// How long past the hold an unpaid attempt is still queried before it is abandoned.
 	abandonAfter = 15 * time.Minute
-	// orphanCheckoutAfter is how long a stored attempt may wait for its
-	// checkout URL before a new pay request takes it over.
+	// How long a stored attempt may wait for its checkout URL before a new pay request takes it over.
 	orphanCheckoutAfter = 30 * time.Second
-	// providerCallTimeout bounds opening a checkout with a provider.
 	providerCallTimeout = 20 * time.Second
-	// refundLease reserves a refund while its provider is called; it outlives
-	// refundTimeout so two workers never call the provider at once.
+	// refundLease outlives refundTimeout so two workers never call the provider at once.
 	refundLease   = 2 * time.Minute
 	refundTimeout = 30 * time.Second
-	// stuckAlertAttempts is the failed try count that raises an alert for a
-	// refund or a paid booking that keeps failing (retries go on).
-	stuckAlertAttempts = 8
-	// publishTimeout bounds enqueueing a ticket email after confirm.
-	publishTimeout = 3 * time.Second
-	// defaultLateCaptureWindow is how long given-up attempts are rechecked
-	// for money collected late.
+	// Failed tries after which a refund or paid booking raises an alert; retries go on.
+	stuckAlertAttempts       = 8
+	publishTimeout           = 3 * time.Second
 	defaultLateCaptureWindow = 24 * time.Hour
 )
 
-// ---------------------------------------------------------------------------
-// Pay (F8)
-// ---------------------------------------------------------------------------
-
-// Pay opens a checkout with the chosen provider for a pending, unexpired
-// booking. The amount comes from the booking (R-P4). Paying again with the
-// same provider returns the open checkout (E-P11); another provider opens a
-// new attempt. The attempt row is stored before the provider is called, so an
-// immediate IPN finds it; the provider is never called inside a transaction.
+// Pay stores the attempt row before calling the provider, so an immediate IPN finds it;
+// the provider is never called inside a transaction.
 func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req dto.PayRequest) (*dto.PayResponse, error) {
 	name := strings.TrimSpace(req.Provider)
 	if name == "" {
@@ -86,7 +71,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 			return apperrors.ErrBookingNotFound
 		}
 		if !active {
-			return apperrors.ErrAccountLocked // E-U3: no new purchase
+			return apperrors.ErrAccountLocked
 		}
 		if b.Status != models.BookingPending {
 			return notPayable(b)
@@ -99,10 +84,10 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 			return err
 		}
 		if b.ExpiresAt == nil || !b.ExpiresAt.After(now) {
-			return apperrors.ErrBookingExpired // E-P7
+			return apperrors.ErrBookingExpired
 		}
 		// No money for a show that stopped selling or already started: the
-		// confirm could only refund it (E-C5).
+		// confirm could only refund it.
 		showtime, err := s.repo.LockShowtime(ctx, tx, b.ShowtimeID)
 		if err != nil {
 			return err
@@ -119,9 +104,8 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		if open != nil {
 			attempt, reused = open, true
 			if open.RedirectURL == nil {
-				// Stored but never opened (the provider call or saving its URL
-				// failed, or the process died): after a grace period this
-				// request takes it over and opens it again, same reference.
+				// Stored but never opened (provider call failed or the process died): after a
+				// grace period this request takes it over with the same reference.
 				n, err := s.payments.ClaimOrphanCheckout(ctx, tx, open.ID, orphanCheckoutAfter)
 				if err != nil {
 					return err
@@ -185,7 +169,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		}); ferr != nil {
 			logger.Warn("failed checkout not recorded", logger.String("payment_id", attempt.ID), logger.Err(ferr))
 		}
-		return nil, apperrors.ErrPaymentGateway.Wrap(createErr) // E-P10: booking untouched, pay again later
+		return nil, apperrors.ErrPaymentGateway.Wrap(createErr) // booking untouched: pay again later
 	}
 	if err := s.payments.SetCheckout(bg, attempt.ID, checkout.RedirectURL, checkout.ProviderTxnID, checkout.Data); err != nil {
 		return nil, err
@@ -203,7 +187,6 @@ func payResponse(p *models.Payment, redirectURL string) *dto.PayResponse {
 	}
 }
 
-// callbackURL is the public IPN or return URL of a provider.
 func (s *bookingService) callbackURL(provider, kind string) string {
 	return fmt.Sprintf("%s/api/v1/payments/%s/%s", s.publicBaseURL, url.PathEscape(provider), kind)
 }
@@ -219,19 +202,12 @@ func notPayable(b *models.Booking) error {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Provider callbacks
-// ---------------------------------------------------------------------------
-
-// HandleNotification processes an IPN of any provider. A valid "paid" notice
-// means money was collected: the booking is confirmed or refunded right away.
-// Duplicates are no-ops (E-P2); a database failure asks the provider to retry
-// (E-P12).
+// HandleNotification: duplicates are no-ops; a database failure asks the provider to retry.
 func (s *bookingService) HandleNotification(ctx context.Context, provider payment.Provider, r *http.Request) payment.AckStatus {
 	n, err := provider.ParseNotification(r)
 	switch {
 	case errors.Is(err, payment.ErrInvalidSignature):
-		s.auditRejected(ctx, provider.Name(), "", "invalid signature") // E-P1
+		s.auditRejected(ctx, provider.Name(), "", "invalid signature")
 		return payment.AckInvalidSignature
 	case err != nil:
 		s.auditRejected(ctx, provider.Name(), "", err.Error())
@@ -249,8 +225,8 @@ func (s *bookingService) HandleNotification(ctx context.Context, provider paymen
 	return ack
 }
 
-// HandleReturn processes the browser coming back from a provider. The redirect
-// only tells which attempt it was; the real state is asked from the provider.
+// HandleReturn trusts the redirect only to identify the attempt; the real state is
+// queried from the provider.
 func (s *bookingService) HandleReturn(ctx context.Context, provider payment.Provider, r *http.Request) (*dto.PaymentReturnResponse, error) {
 	ref, err := provider.ParseReturn(r)
 	if errors.Is(err, payment.ErrInvalidSignature) {
@@ -288,8 +264,6 @@ func (s *bookingService) HandleReturn(ctx context.Context, provider payment.Prov
 	}, nil
 }
 
-// applyNotification applies a verified provider notice (IPN or query result)
-// under the attempt row lock.
 func (s *bookingService) applyNotification(ctx context.Context, providerName string, n *payment.Notification, source string) (payment.AckStatus, error) {
 	var (
 		ack       payment.AckStatus
@@ -378,7 +352,7 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 
 		reason := ""
 		if n.Amount != attempt.Amount {
-			reason = models.ReasonAmountMismatch // E-P4
+			reason = models.ReasonAmountMismatch
 		}
 		return s.finalizeTx(ctx, tx, b, reason, source, &out)
 	})
@@ -389,13 +363,7 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 	return ack, nil
 }
 
-// ---------------------------------------------------------------------------
-// Confirm / refund (F9)
-// ---------------------------------------------------------------------------
-
-// Confirm lets the customer (or the frontend after returning from the
-// checkout) settle a paid booking. It reconciles with the provider first, so
-// a lost IPN does not block the ticket (E-P5).
+// Confirm reconciles with the provider first, so a lost IPN does not block the ticket.
 func (s *bookingService) Confirm(ctx context.Context, userID, bookingID string) (*dto.OrderDetailResponse, error) {
 	b, err := s.ownedBooking(ctx, userID, bookingID)
 	if err != nil {
@@ -417,7 +385,6 @@ func (s *bookingService) Confirm(ctx context.Context, userID, bookingID string) 
 	}
 }
 
-// finalizeOutcome is what one finalize transaction did.
 type finalizeOutcome struct {
 	confirmed bool
 	sold      []string
@@ -425,8 +392,6 @@ type finalizeOutcome struct {
 	refunds   []string // payment ids to refund at the provider after commit
 }
 
-// finalize settles a paid booking found by id (customer confirm, crash
-// recovery). Confirmed and refunded bookings are returned untouched.
 func (s *bookingService) finalize(ctx context.Context, bookingID, source string) (*models.Booking, error) {
 	var (
 		out    finalizeOutcome
@@ -460,20 +425,17 @@ func (s *bookingService) finalize(ctx context.Context, bookingID, source string)
 	return s.repo.FindByID(context.WithoutCancel(ctx), bookingID)
 }
 
-// finalizeTx is the only place a paid booking leaves PENDING. With the booking
-// locked and its payment recorded, in ONE transaction it either sells every
-// held seat (fenced by hold version, TTL and showtime state) and issues the
-// tickets, or releases what is left and marks booking REFUNDED + payment
-// REFUND_PENDING. The provider refund runs after commit (R-HO3). Because the
-// booking row is locked, concurrent IPN / reconcile / confirm converge on one
-// outcome (E-C3). A non-empty reason forces the refund.
+// finalizeTx is the only place a paid booking leaves PENDING. It sells every held seat (fenced
+// by hold version, TTL and showtime state) or refunds, in one transaction; the provider refund
+// runs after commit. The locked booking row makes concurrent IPN, reconcile and confirm converge.
+// A non-empty reason forces the refund.
 func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.Booking, reason, source string, out *finalizeOutcome) error {
 	switch b.Status {
 	case models.BookingConfirmed, models.BookingRefunded:
 		return nil
 	case models.BookingExpired:
 		if reason == "" {
-			reason = models.ReasonPaidAfterExpiry // E-P3
+			reason = models.ReasonPaidAfterExpiry
 		}
 	}
 
@@ -497,9 +459,9 @@ func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.
 		}
 		switch {
 		case showtime == nil || showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now):
-			reason = models.ReasonShowtimeClosed // E-C5
+			reason = models.ReasonShowtimeClosed
 		case b.ExpiresAt == nil || !b.ExpiresAt.After(now):
-			reason = models.ReasonHoldExpired // E-C1, E-C4
+			reason = models.ReasonHoldExpired
 		}
 	}
 
@@ -519,7 +481,7 @@ func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.
 			seat, ok := byID[bs.ShowtimeSeatID]
 			if !ok || seat.Status != models.SeatStatusHeld || seat.HeldBy == nil || *seat.HeldBy != b.UserID ||
 				seat.Version != bs.HoldVersion || seat.HeldUntil == nil || !seat.HeldUntil.After(now) {
-				reason = models.ReasonSeatsLost // E-C2: swept or taken over
+				reason = models.ReasonSeatsLost // swept or taken over
 				break
 			}
 		}
@@ -569,8 +531,6 @@ func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.
 	})
 }
 
-// refundTx releases the seats still held by the booking, marks it REFUNDED
-// and its payment REFUND_PENDING, in the caller's transaction.
 func (s *bookingService) refundTx(ctx context.Context, tx *gorm.DB, b *models.Booking, bseats []models.BookingSeat, reason, source string, out *finalizeOutcome) error {
 	if b.PaymentID == nil {
 		return fmt.Errorf("refund booking %s: no payment carries its money", b.ID)
@@ -604,8 +564,7 @@ func (s *bookingService) refundTx(ctx context.Context, tx *gorm.DB, b *models.Bo
 	})
 }
 
-// afterFinalize runs the side effects of a committed finalize. They must not
-// die with the request context.
+// afterFinalize runs post-commit side effects; they must not die with the request context.
 func (s *bookingService) afterFinalize(ctx context.Context, bookingID, showID string, out finalizeOutcome) {
 	bg := context.WithoutCancel(ctx)
 	for _, id := range out.refunds {
@@ -618,11 +577,10 @@ func (s *bookingService) afterFinalize(ctx context.Context, bookingID, showID st
 	}
 }
 
-// settleRefund asks the provider to return the money of a REFUND_PENDING
-// attempt. A failure leaves it pending; the sweep retries.
+// settleRefund: a failure leaves the refund pending; the sweep retries.
 func (s *bookingService) settleRefund(ctx context.Context, paymentID string) bool {
 	// Claim first: the IPN path and the sweep may both get here, and a provider
-	// must never be asked twice at the same time (M10).
+	// must never be asked twice at the same time.
 	attempt, err := s.payments.ClaimRefund(ctx, paymentID, refundLease)
 	if err != nil {
 		logger.Warn("claim refund failed", logger.String("payment_id", paymentID), logger.Err(err))
@@ -664,8 +622,6 @@ func (s *bookingService) settleRefund(ctx context.Context, paymentID string) boo
 	return true
 }
 
-// deferRefund schedules the next try of a failed refund with backoff (M9) and
-// raises an alert once it keeps failing; retries go on.
 func (s *bookingService) deferRefund(ctx context.Context, attempt *models.Payment, reason string) {
 	logger.Warn("provider refund failed; will retry", logger.String("payment_id", attempt.ID),
 		logger.String("attempt", fmt.Sprint(attempt.RefundAttempts)), logger.String("error", reason))
@@ -685,13 +641,8 @@ func (s *bookingService) deferRefund(ctx context.Context, attempt *models.Paymen
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Reconcile
-// ---------------------------------------------------------------------------
-
-// reconcile pulls the real payment state of a booking's open attempts from
-// their providers (the IPN may be lost) and settles a paid booking whose
-// confirm never completed.
+// reconcile queries providers because the IPN may be lost, and settles a paid
+// booking whose confirm never completed.
 func (s *bookingService) reconcile(ctx context.Context, b *models.Booking) error {
 	if b.Status == models.BookingPending && b.PaidAt != nil {
 		_, err := s.finalize(ctx, b.ID, sourceReconcile)
@@ -720,8 +671,6 @@ const (
 	reconcileAbandoned
 )
 
-// reconcilePayment queries one open attempt and applies what the provider
-// reports; an attempt still unpaid long after its hold is marked abandoned.
 func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.Payment) (reconcileResult, error) {
 	switch attempt.Status {
 	case models.PaymentPending, models.PaymentFailed:
@@ -741,7 +690,7 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 		return reconcileNothing, nil
 	}
 	if attempt.Status == models.PaymentFailed {
-		// Money collected after we gave up on the attempt (H2): settling it
+		// Money collected after we gave up on the attempt: settling it
 		// confirms the booking or refunds the money. Never abandoned again.
 		if qerr == nil && n.Status == payment.StatePaid {
 			n.TxnRef = attempt.TxnRef
@@ -786,14 +735,6 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 	return reconcileNothing, nil
 }
 
-// ---------------------------------------------------------------------------
-// Sweep (F10)
-// ---------------------------------------------------------------------------
-
-// SweepExpired is one pass of the sweepExpiredHolds job, each step bounded by
-// limit: release expired seat holds, expire unpaid overdue bookings, finalize
-// paid bookings stuck in PENDING, retry provider refunds, reconcile open
-// payment attempts whose IPN may be lost.
 func (s *bookingService) SweepExpired(ctx context.Context, limit int) (SweepResult, error) {
 	var res SweepResult
 
@@ -881,12 +822,7 @@ func (s *bookingService) SweepExpired(ctx context.Context, limit int) (SweepResu
 	return res, nil
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-// publishTicketEmail enqueues the ticket email; failures only log because the
-// sendTicketEmails cron sends whatever is still unsent (R-ML1).
+// publishTicketEmail failures only log: the sendTicketEmails cron sends whatever is still unsent.
 func (s *bookingService) publishTicketEmail(ctx context.Context, bookingID string) {
 	if s.publisher == nil {
 		return
@@ -895,7 +831,7 @@ func (s *bookingService) publishTicketEmail(ctx context.Context, bookingID strin
 	if err != nil {
 		return
 	}
-	// A broker that does not confirm must not hold the confirm request (M12).
+	// A broker that does not confirm must not hold the confirm request.
 	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 	if err := s.publisher.Publish(ctx, TicketEmailQueue, body); err != nil {
@@ -919,8 +855,7 @@ func transactionOf(p *models.Payment) payment.Transaction {
 	return t
 }
 
-// newTxnRef is the merchant reference sent to providers: 24 alphanumeric
-// chars, accepted by the common Vietnamese gateways' reference rules.
+// newTxnRef: 24 alphanumeric chars, accepted by common Vietnamese gateways' reference rules.
 func newTxnRef() string {
 	return "CP" + time.Now().UTC().Format("060102150405") + randomHex(5)
 }

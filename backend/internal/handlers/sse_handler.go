@@ -16,23 +16,19 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// ShowtimeLookup resolves an open showtime for token issuance.
 type ShowtimeLookup interface {
 	OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
 }
 
-// SSEHandler serves the realtime seat-map stream (F11).
 type SSEHandler struct {
 	hub       *sse.Hub
 	tokens    *sse.TokenStore
 	showtimes ShowtimeLookup
 	debounce  time.Duration
 	keepalive time.Duration
-	// writeTimeout bounds every single write: a client that stops reading
-	// frees its connection instead of holding a goroutine forever (M13).
+	// writeTimeout bounds each write so a client that stops reading does not hold a goroutine forever.
 	writeTimeout time.Duration
-	// maxAge ends a stream so the client comes back through /events/token,
-	// which rechecks the account and the showtime.
+	// maxAge forces a return through /events/token, which rechecks the account and showtime.
 	maxAge time.Duration
 }
 
@@ -48,7 +44,6 @@ func NewSSEHandler(hub *sse.Hub, tokens *sse.TokenStore, showtimes ShowtimeLooku
 	}
 }
 
-// seatsPayload is the data of one "seats" event.
 type seatsPayload struct {
 	ShowtimeID string           `json:"showtime_id"`
 	HallID     string           `json:"hall_id"`
@@ -100,7 +95,7 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 	showtimeID := c.Param("id")
 	hallID, userID, ok := h.tokens.Validate(c.Query("token"), showtimeID)
 	if !ok {
-		// R-S3: the page requests a fresh token and reconnects.
+		// The page requests a fresh token and reconnects.
 		response.Error(c, apperrors.Unauthorized("invalid or expired realtime token"))
 		return
 	}
@@ -115,11 +110,11 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no") // R-S1: nginx must not buffer
+	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
-	// The server-wide WriteTimeout would cut this long-lived response; every
-	// write gets its own short deadline instead, so a stalled client is let go.
+	// The server-wide WriteTimeout would cut this long-lived response, so each
+	// write gets its own short deadline instead.
 	rc := http.NewResponseController(c.Writer)
 	w := c.Writer
 	write := func(chunk string) bool {
@@ -137,7 +132,7 @@ func (h *SSEHandler) Stream(c *gin.Context) {
 		return write(fmt.Sprintf("event: %s\ndata: %s\n\n", name, body))
 	}
 
-	// R-S8: clients reconnecting together spread out over 3 seconds.
+	// Clients reconnecting together spread out over 3 seconds.
 	if !write("retry: 3000\n\n") || !event("connected", gin.H{"showtime_id": showtimeID, "hall_id": hallID}) {
 		return
 	}

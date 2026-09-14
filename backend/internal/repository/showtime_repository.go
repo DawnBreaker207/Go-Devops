@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ShowtimeRow is a showtime joined with its hall name and movie title.
 type ShowtimeRow struct {
 	models.Showtime
 	HallName    string `gorm:"column:hall_name"`
@@ -18,7 +17,6 @@ type ShowtimeRow struct {
 	MovieStatus string `gorm:"column:movie_status"`
 }
 
-// ShowtimePickRow is a showtime in the customer picker, with price.
 type ShowtimePickRow struct {
 	ID         string    `gorm:"column:id"`
 	MovieID    string    `gorm:"column:movie_id"`
@@ -31,7 +29,6 @@ type ShowtimePickRow struct {
 	FromPrice  int64     `gorm:"column:from_price"`
 }
 
-// SeatMapRow is a seat of a showtime with its state and price.
 type SeatMapRow struct {
 	ShowtimeID     string    `gorm:"column:showtime_id"`
 	SeatShowtimeID string    `gorm:"column:showtime_seat_id"`
@@ -51,7 +48,6 @@ type SeatMapRow struct {
 	Price          int64     `gorm:"column:price"`
 }
 
-// ShowtimeRepository persists showtimes and showtime seats.
 type ShowtimeRepository struct {
 	db *gorm.DB
 }
@@ -60,18 +56,16 @@ func NewShowtimeRepository(db *gorm.DB) *ShowtimeRepository {
 	return &ShowtimeRepository{db: db}
 }
 
-// LockHall serialises showtime scheduling for a hall.
+// Advisory lock serializing showtime scheduling in a hall; HallRepository.LockSchedule uses the same key.
 func (r *ShowtimeRepository) LockHall(tx *gorm.DB, hallID string) error {
 	return tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", hallID).Error
 }
 
-// Create inserts a showtime. It must run inside a transaction.
 func (r *ShowtimeRepository) Create(tx *gorm.DB, showtime *models.Showtime) error {
 	return tx.Create(showtime).Error
 }
 
-// CreateSeatStates initialises one per-seat state row per hall seat so the
-// grid is lockable from the first second. Idempotent per seat.
+// Rows are created up front so every seat is lockable from the start.
 func (r *ShowtimeRepository) CreateSeatStates(tx *gorm.DB, showtimeID string, seats []models.Seat) error {
 	if len(seats) == 0 {
 		return nil
@@ -90,21 +84,18 @@ func (r *ShowtimeRepository) CreateSeatStates(tx *gorm.DB, showtimeID string, se
 	}).Create(&rows).Error
 }
 
-// Update persists a showtime. It must run inside a transaction.
 func (r *ShowtimeRepository) Update(tx *gorm.DB, showtime *models.Showtime) error {
 	return tx.Model(showtime).
 		Select("movie_id", "hall_id", "start_at", "end_at", "status", "updated_at").
 		Updates(showtime).Error
 }
 
-// Delete soft-deletes a showtime. It must run inside a transaction.
 func (r *ShowtimeRepository) Delete(tx *gorm.DB, showtimeID string) error {
 	return tx.Delete(&models.Showtime{}, "id = ?", showtimeID).Error
 }
 
-// LockForUpdate locks a (not deleted) showtime row for an admin change. Holds
-// and confirms share-lock the same row, so each side waits for the other and
-// sees what the other committed.
+// Holds and confirms share-lock the same row, so an admin change and a sale wait for each other.
+// nil means not found.
 func (r *ShowtimeRepository) LockForUpdate(tx *gorm.DB, id string) (*models.Showtime, error) {
 	var showtime models.Showtime
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Take(&showtime).Error
@@ -117,13 +108,11 @@ func (r *ShowtimeRepository) LockForUpdate(tx *gorm.DB, id string) (*models.Show
 	return &showtime, nil
 }
 
-// DeleteSeatStates drops the seat grid of a showtime that never had a booking,
-// before it is rebuilt for another hall.
+// Only for a showtime that never had a booking, before its grid is rebuilt for another hall.
 func (r *ShowtimeRepository) DeleteSeatStates(tx *gorm.DB, showtimeID string) error {
 	return tx.Exec(`DELETE FROM showtime_seats WHERE showtime_id = ?`, showtimeID).Error
 }
 
-// FindByID returns a showtime joined with hall name and movie title.
 func (r *ShowtimeRepository) FindByID(ctx context.Context, id string) (*ShowtimeRow, error) {
 	var row ShowtimeRow
 	err := r.db.WithContext(ctx).
@@ -141,10 +130,7 @@ func (r *ShowtimeRepository) FindByID(ctx context.Context, id string) (*Showtime
 	return &row, err
 }
 
-// OverlapCount returns how many showtimes in the hall collide with one running
-// [start, end]. The cleaning buffer applies on both sides: after the earlier
-// showtime and before the later one (H5). excludeID is the showtime being
-// changed (empty on create).
+// The cleaning buffer applies on both sides. excludeID is the showtime being changed (empty on create).
 func (r *ShowtimeRepository) OverlapCount(tx *gorm.DB, hallID string, start, end time.Time, buffer time.Duration, excludeID string) (int64, error) {
 	var count int64
 	q := tx.Model(&models.Showtime{}).
@@ -156,16 +142,12 @@ func (r *ShowtimeRepository) OverlapCount(tx *gorm.DB, hallID string, start, end
 	return count, err
 }
 
-// ShowtimeHasBookings reports whether any booking references the showtime.
-// Uses a raw query because the bookings model is not kept in the codebase.
 func (r *ShowtimeRepository) ShowtimeHasBookings(tx *gorm.DB, showtimeID string) (bool, error) {
 	var count int64
 	err := tx.Raw(`SELECT 1 FROM bookings WHERE showtime_id = ? LIMIT 1`, showtimeID).Scan(&count).Error
 	return count > 0, err
 }
 
-// ShowtimeHasLiveBookings reports whether a PENDING or CONFIRMED booking holds
-// or bought seats of the showtime.
 func (r *ShowtimeRepository) ShowtimeHasLiveBookings(tx *gorm.DB, showtimeID string) (bool, error) {
 	var count int64
 	err := tx.Raw(`SELECT 1 FROM bookings WHERE showtime_id = ? AND status IN ('pending', 'confirmed') LIMIT 1`,
@@ -173,9 +155,7 @@ func (r *ShowtimeRepository) ShowtimeHasLiveBookings(tx *gorm.DB, showtimeID str
 	return count > 0, err
 }
 
-// PickingList returns open, not yet started showtimes inside [start, end) of
-// movies that are showing (one movie, or all when movieID is empty), only in
-// halls that have a price for every seat type (FR-CAT-01..03).
+// An empty movieID lists all movies.
 func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, start, end, now time.Time) ([]ShowtimePickRow, error) {
 	var rows []ShowtimePickRow
 	q := r.db.WithContext(ctx).
@@ -202,7 +182,6 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 	return rows, err
 }
 
-// SeatMap returns every seat of a showtime with state and price.
 func (r *ShowtimeRepository) SeatMap(ctx context.Context, showtimeID string) ([]SeatMapRow, error) {
 	var rows []SeatMapRow
 	err := r.db.WithContext(ctx).

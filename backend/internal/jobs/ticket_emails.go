@@ -13,10 +13,8 @@ import (
 
 const emailChunk = 500
 
-// NewSendTicketEmails builds the sendTicketEmails job (F19/F21): every 2
-// minutes it mails confirmed bookings still without a ticket email, chunk by
-// chunk with retry/skip. It is the retry path for failed sends and the only
-// path when the broker is down.
+// NewSendTicketEmails mails confirmed bookings still without a ticket email. It retries
+// failed sends and is the only path while the broker is down.
 func NewSendTicketEmails(emails service.TicketEmailService) *batch.Job {
 	return &batch.Job{
 		Name:     "sendTicketEmails",
@@ -35,9 +33,8 @@ func NewSendTicketEmails(emails service.TicketEmailService) *batch.Job {
 	}
 }
 
-// ConsumeTicketEmails sends ticket emails as soon as confirm publishes them.
-// It blocks until ctx is canceled. Every message is acked: a failed send is
-// left to the sendTicketEmails cron instead of looping at the queue head.
+// ConsumeTicketEmails blocks until ctx is canceled. Every message is acked: a failed send
+// is left to the sendTicketEmails cron instead of looping at the queue head.
 func ConsumeTicketEmails(ctx context.Context, q *queue.Client, emails service.TicketEmailService) {
 	err := q.Consume(ctx, service.TicketEmailQueue, func(ctx context.Context, body []byte) error {
 		var msg struct {

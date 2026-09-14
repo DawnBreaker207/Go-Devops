@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Booking status. Lifecycle: PENDING -> CONFIRMED | EXPIRED | REFUNDED.
+// Lifecycle: PENDING -> CONFIRMED | EXPIRED | REFUNDED.
 const (
 	BookingPending   = "pending"
 	BookingConfirmed = "confirmed"
@@ -15,20 +15,17 @@ const (
 	BookingRefunded  = "refunded"
 )
 
-// Reasons stored in bookings.status_reason when a booking leaves PENDING
-// without being confirmed.
 const (
-	ReasonReplaced        = "replaced"          // a newer hold of the same user/show replaced it (E-HO12)
-	ReasonHoldExpired     = "hold_expired"      // TTL passed before payment/confirm (E-C1, E-C4)
-	ReasonSeatsLost       = "seats_lost"        // a held seat was swept or taken over (E-C2)
-	ReasonShowtimeClosed  = "showtime_closed"   // showtime closed or started before confirm (E-C5)
-	ReasonAmountMismatch  = "amount_mismatch"   // provider settled a different amount (E-P4)
-	ReasonPaidAfterExpiry = "paid_after_expiry" // payment arrived for an expired booking (E-P3)
-	ReasonCanceled        = "canceled"          // the customer released the hold (E-R2)
+	ReasonReplaced        = "replaced" // a newer hold of the same user/show replaced it
+	ReasonHoldExpired     = "hold_expired"
+	ReasonSeatsLost       = "seats_lost"      // a held seat was swept or taken over
+	ReasonShowtimeClosed  = "showtime_closed" // showtime closed or started before confirm
+	ReasonAmountMismatch  = "amount_mismatch"
+	ReasonPaidAfterExpiry = "paid_after_expiry"
+	ReasonCanceled        = "canceled" // the customer released the hold
 )
 
-// Booking holds seats for a user before payment. At most one PENDING booking
-// per user per showtime (enforced by partial unique index at the DB level).
+// At most one PENDING booking per user per showtime (partial unique index).
 type Booking struct {
 	ID             string     `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID         string     `gorm:"type:uuid;not null" json:"user_id"`
@@ -39,13 +36,11 @@ type Booking struct {
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	IdempotencyKey *string    `gorm:"type:varchar(128)" json:"idempotency_key,omitempty"`
 	// PaymentID is the attempt whose collected money this booking carries.
-	PaymentID *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
-	PaidAt    *time.Time `json:"paid_at,omitempty"`
-	// A paid booking the sweep could not settle waits until NextFinalizeAt.
-	FinalizeAttempts int        `gorm:"not null;default:0" json:"-"`
-	NextFinalizeAt   *time.Time `json:"-"`
-	EmailSentAt      *time.Time `json:"email_sent_at,omitempty"`
-	// Ticket email tries; a try holds the booking until EmailClaimedUntil.
+	PaymentID         *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
+	PaidAt            *time.Time `json:"paid_at,omitempty"`
+	FinalizeAttempts  int        `gorm:"not null;default:0" json:"-"`
+	NextFinalizeAt    *time.Time `json:"-"`
+	EmailSentAt       *time.Time `json:"email_sent_at,omitempty"`
 	EmailAttempts     int        `gorm:"not null;default:0" json:"-"`
 	EmailClaimedUntil *time.Time `json:"-"`
 	CreatedAt         time.Time  `json:"created_at"`
@@ -61,8 +56,7 @@ func (b *Booking) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// BookingSeat is the seat snapshot of a booking taken at hold time: the price
-// is locked (E-HO9) and HoldVersion is the fencing token confirm must match.
+// Snapshot taken at hold time: the price is locked and HoldVersion is the fencing token confirm must match.
 type BookingSeat struct {
 	ID             string    `gorm:"type:uuid;primaryKey" json:"id"`
 	BookingID      string    `gorm:"type:uuid;not null" json:"booking_id"`
@@ -82,13 +76,11 @@ func (s *BookingSeat) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// Ticket status.
 const (
 	TicketIssued   = "issued"
 	TicketRedeemed = "redeemed"
 )
 
-// Redeem outcomes returned by POST /tickets/:id/redeem.
 const (
 	RedeemOK        = "ok"
 	RedeemUsed      = "used"
@@ -98,7 +90,6 @@ const (
 	RedeemClosed    = "closed"    // after the check-in window closed
 )
 
-// Ticket represents one seat sold within a booking.
 type Ticket struct {
 	ID             string    `gorm:"type:uuid;primaryKey" json:"id"`
 	BookingID      string    `gorm:"type:uuid;not null" json:"booking_id"`

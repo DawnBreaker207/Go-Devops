@@ -7,14 +7,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// Trang thai vong doi cua mot bo phim.
 const (
 	MovieStatusDraft   = "draft"
 	MovieStatusShowing = "showing"
 	MovieStatusEnded   = "ended"
 )
 
-// Movie la mot bo phim trong he thong.
 type Movie struct {
 	ID          string         `gorm:"type:uuid;primaryKey" json:"id"`
 	Title       string         `gorm:"type:varchar(255);not null;index" json:"title"`

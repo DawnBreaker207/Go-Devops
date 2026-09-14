@@ -9,7 +9,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// UserHandler handles user-related requests.
 type UserHandler struct {
 	userService service.UserService
 }

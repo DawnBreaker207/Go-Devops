@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config holds every service setting.
 type Config struct {
 	App       AppConfig       `mapstructure:"app"`
 	Server    ServerConfig    `mapstructure:"server"`
@@ -30,9 +29,8 @@ type Config struct {
 	Audit     AuditConfig     `mapstructure:"audit"`
 }
 
-// AuditConfig sets how long audit logs are kept (the cleanup job removes older
-// rows). Must be at least 90 days (FR-AUDIT-02).
 type AuditConfig struct {
+	// RetentionDays: the cleanup job deletes older audit logs; must be at least 90.
 	RetentionDays int `mapstructure:"retention_days"`
 }
 
@@ -40,11 +38,10 @@ type AppConfig struct {
 	Name     string `mapstructure:"name"`
 	Env      string `mapstructure:"env"`
 	LogLevel string `mapstructure:"log_level"`
-	// Default admin account seeded when the DB is empty (non-production only).
+	// Admin account seeded when the DB is empty (non-production only).
 	AdminEmail    string `mapstructure:"admin_email"`
 	AdminPassword string `mapstructure:"admin_password"`
-	// RoomCleanupMinutes is the buffer appended to a showtime's effective end
-	// when checking hall-schedule conflicts.
+	// RoomCleanupMinutes is added to a showtime's end when checking hall schedule conflicts.
 	RoomCleanupMinutes int `mapstructure:"room_cleanup_minutes"`
 }
 
@@ -57,8 +54,8 @@ type ServerConfig struct {
 	ShutdownTimeout   time.Duration `mapstructure:"shutdown_timeout"`
 	// MaxBodyBytes caps JSON request bodies; uploads enforce their own limit.
 	MaxBodyBytes int64 `mapstructure:"max_body_bytes"`
-	// TrustedProxies (IPs or CIDRs) may set X-Forwarded-For. Empty trusts none:
-	// the client IP is the TCP peer, so rate limits can not be dodged (H3).
+	// TrustedProxies (IPs or CIDRs) may set X-Forwarded-For. Empty trusts none, so the
+	// client IP is the TCP peer and rate limits can't be dodged.
 	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
@@ -87,92 +84,73 @@ type CORSConfig struct {
 	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
-// RateLimitConfig throttles each endpoint group per client.
 type RateLimitConfig struct {
 	Auth RateLimitRule `mapstructure:"auth"`
 	Hold RateLimitRule `mapstructure:"hold"`
-	// Public throttles the anonymous catalog reads per IP.
+	// Public throttles anonymous catalog reads per IP.
 	Public RateLimitRule `mapstructure:"public"`
 	// Events throttles realtime tokens per user.
 	Events RateLimitRule    `mapstructure:"events"`
 	Login  LoginGuardConfig `mapstructure:"login"`
 }
 
-// LoginGuardConfig locks an email+IP pair out after consecutive wrong
-// passwords (T14).
+// LoginGuardConfig locks an email+IP pair out for Lockout after MaxFailures consecutive wrong passwords.
 type LoginGuardConfig struct {
 	MaxFailures int           `mapstructure:"max_failures"`
 	Lockout     time.Duration `mapstructure:"lockout"`
 }
 
-// RateLimitRule is the parameter set of one token bucket.
+// RateLimitRule configures one token bucket.
 type RateLimitRule struct {
 	Capacity        int     `mapstructure:"capacity"`
 	RefillPerSecond float64 `mapstructure:"refill_per_second"`
 }
 
-// QueueConfig configures the RabbitMQ connection.
 type QueueConfig struct {
 	URL string `mapstructure:"url"`
 }
 
-// BookingConfig tunes the seat-hold flow.
 type BookingConfig struct {
-	// HoldTTLMinutes is how long a held seat stays reserved.
-	HoldTTLMinutes int `mapstructure:"hold_ttl_minutes"`
-	// MaxSeatsPerBooking caps how many seats one customer can hold at once.
+	HoldTTLMinutes     int `mapstructure:"hold_ttl_minutes"`
 	MaxSeatsPerBooking int `mapstructure:"max_seats_per_booking"`
 }
 
-// CheckinConfig is when a ticket gets in at the gate (E-T4): from
-// OpenBeforeMinutes before the showtime starts to CloseAfterMinutes after.
+// CheckinConfig: tickets are accepted from OpenBeforeMinutes before the showtime to CloseAfterMinutes after its start.
 type CheckinConfig struct {
 	OpenBeforeMinutes int `mapstructure:"open_before_minutes"`
 	CloseAfterMinutes int `mapstructure:"close_after_minutes"`
 }
 
-// PaymentConfig configures payments. Every provider — the mock as much as a
-// real gateway — has its own block under Providers and is enabled on its own.
 type PaymentConfig struct {
-	// PublicBaseURL is how providers and browsers reach this API (IPN and
-	// return URLs, mock checkout page).
+	// PublicBaseURL is how providers and browsers reach this API (IPN, return URLs, mock checkout).
 	PublicBaseURL string `mapstructure:"public_base_url"`
-	// ReturnRedirectURL is where the browser lands after the return URL is
-	// processed; empty answers with JSON.
+	// ReturnRedirectURL is where the browser lands after the return URL; empty answers with JSON.
 	ReturnRedirectURL string `mapstructure:"return_redirect_url"`
 	// DefaultProvider is used when a pay request names none; it must be enabled.
 	DefaultProvider string                 `mapstructure:"default_provider"`
 	Providers       PaymentProvidersConfig `mapstructure:"providers"`
-	// LateCaptureWindow is how long given-up attempts are rechecked with their
-	// provider for money collected late (then confirmed or refunded).
+	// LateCaptureWindow is how long given-up attempts are rechecked for money collected late.
 	LateCaptureWindow time.Duration `mapstructure:"late_capture_window"`
 }
 
-// PaymentProvidersConfig has one block per supported provider. A real gateway
-// adds its block here (e.g. VNPay: enabled, tmn_code, hash_secret, endpoint).
 type PaymentProvidersConfig struct {
 	Mock MockProviderConfig `mapstructure:"mock"`
 }
 
-// MockProviderConfig enables the simulated gateway.
 type MockProviderConfig struct {
 	Enabled     bool   `mapstructure:"enabled"`
 	DisplayName string `mapstructure:"display_name"`
-	// Secret signs the mock IPN and return redirect (HMAC-SHA256).
-	Secret string `mapstructure:"secret"`
-	// AllowInProduction must be set to run the mock in production: it
-	// collects no real money.
+	Secret      string `mapstructure:"secret"`
+	// AllowInProduction is required to run the mock in production, where it collects no real money.
 	AllowInProduction bool `mapstructure:"allow_in_production"`
 }
 
-// MailConfig configures ticket emails. This build only has a mock mailer:
-// every email is written as an .html file into OutboxDir.
+// MailConfig: the mock mailer writes every email as an .html file into OutboxDir.
 type MailConfig struct {
 	OutboxDir string `mapstructure:"outbox_dir"`
 }
 
-// StorageConfig selects where uploaded images go: "local" (files served under
-// /media) or "cloudinary".
+// StorageConfig.Driver is "local" (files served under /media) or "cloudinary".
 type StorageConfig struct {
 	Driver        string           `mapstructure:"driver"`
 	PublicBaseURL string           `mapstructure:"public_base_url"`
@@ -181,7 +159,6 @@ type StorageConfig struct {
 	Cloudinary    CloudinaryConfig `mapstructure:"cloudinary"`
 }
 
-// CloudinaryConfig holds the Cloudinary credentials (driver "cloudinary").
 type CloudinaryConfig struct {
 	CloudName string `mapstructure:"cloud_name"`
 	APIKey    string `mapstructure:"api_key"`
@@ -189,7 +166,6 @@ type CloudinaryConfig struct {
 	Folder    string `mapstructure:"folder"`
 }
 
-// DSN returns the Postgres connection string for GORM.
 func (d DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
@@ -197,7 +173,7 @@ func (d DatabaseConfig) DSN() string {
 	)
 }
 
-// MigrateURL returns the connection URL used by golang-migrate.
+// MigrateURL is the connection URL for golang-migrate.
 func (d DatabaseConfig) MigrateURL() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -205,7 +181,6 @@ func (d DatabaseConfig) MigrateURL() string {
 	)
 }
 
-// IsProduction reports whether we run in the production environment.
 func (a AppConfig) IsProduction() bool { return a.Env == "production" }
 
 // Load reads config in order: defaults -> config.yaml -> .env -> env vars.
@@ -241,7 +216,6 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// loadDotEnv loads .env into the process env, never overriding existing vars.
 func loadDotEnv(file string) error {
 	envViper := viper.New()
 	envViper.SetConfigFile(file)
@@ -270,12 +244,11 @@ func loadDotEnv(file string) error {
 	return nil
 }
 
-// devSecretMarkers are pieces of the placeholder secrets shipped in
-// config.yaml, .env.example and docker-compose.yml.
+// Fragments of the placeholder secrets shipped in config.yaml, .env.example and docker-compose.yml.
 var devSecretMarkers = []string{"change_me", "change-me", "changeme", "change-in-prod", "change_in_prod"}
 
-// productionSecret refuses a short or placeholder secret: with a public dev
-// secret anyone could sign admin tokens or fake payment notifications (H4).
+// productionSecret rejects short or placeholder secrets: with a public dev secret anyone
+// could sign admin tokens or fake payment notifications.
 func productionSecret(name, value string) error {
 	if len(value) < 32 {
 		return fmt.Errorf("%s must be at least 32 characters in production", name)

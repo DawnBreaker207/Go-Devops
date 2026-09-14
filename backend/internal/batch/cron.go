@@ -9,16 +9,13 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// cronScheduler wraps robfig/cron so the Manager doesn't depend on the
-// scheduler library directly. Schedules use 6 fields (seconds) to allow
-// 30-second sweeps.
+// Schedules use 6 fields (with seconds) so jobs can run every 30s.
 type cronScheduler struct {
 	cron *cron.Cron
 }
 
 func newCron() *cronScheduler {
-	// Recover is a second net under Manager's own recover: a panic in a
-	// scheduled func must never take the whole process down.
+	// Second net under Manager's recover: a panic in a cron func must not crash the process.
 	return &cronScheduler{cron: cron.New(cron.WithSeconds(), cron.WithChain(cron.Recover(cronLogger{})))}
 }
 
@@ -28,10 +25,9 @@ func (s *cronScheduler) addFunc(schedule string, fn func()) (cron.EntryID, error
 
 func (s *cronScheduler) start() { s.cron.Start() }
 
-// stop halts scheduling; the context is done once running jobs finished.
+// The returned context is done once running jobs have finished.
 func (s *cronScheduler) stop() context.Context { return s.cron.Stop() }
 
-// cronLogger forwards the scheduler's error lines (recovered panics) to zap.
 type cronLogger struct{}
 
 func (cronLogger) Info(string, ...any) {}

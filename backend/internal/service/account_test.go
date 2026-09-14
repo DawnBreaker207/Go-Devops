@@ -19,7 +19,7 @@ func setActive(v bool) dto.UpdateUserRequest { return dto.UpdateUserRequest{Acti
 
 func setRole(role string) dto.UpdateUserRequest { return dto.UpdateUserRequest{Role: &role} }
 
-// T27 / FR-AUTH-01: registering an existing email is refused, nothing created.
+// T27: registering an existing email is refused, nothing created.
 func TestRegister_DuplicateEmail(t *testing.T) {
 	e := newEnv(t)
 	u, err := e.auth.Register(e.ctx, dto.RegisterRequest{Email: "New@Test.local", Password: "secret123", FullName: "New User"})
@@ -35,8 +35,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 	}
 }
 
-// T13 / E-C4: a refresh token works once; replaying a used one revokes the
-// whole family, so even the newest token stops working.
+// T13 / E-C4: a refresh token works once; replaying a used one revokes the whole family.
 func TestRefreshToken_RotationAndReplay(t *testing.T) {
 	e := newEnv(t)
 	e.newUser(models.RoleCustomer, "c@test.local", "secret123")
@@ -66,9 +65,7 @@ func TestRefreshToken_RotationAndReplay(t *testing.T) {
 	}
 }
 
-// T14 / FR-AUTH-03: 5 wrong passwords in a row -> 429 with the wait time for
-// that email+IP, even with the right password; another IP is unaffected; the
-// lockout ends.
+// T14: 5 wrong passwords lock that email+IP with 429; another IP is unaffected; the lockout ends.
 func TestLogin_LockoutAfterFiveFailures(t *testing.T) {
 	e := newEnv(t)
 	e.newUser(models.RoleCustomer, "c@test.local", "secret123")
@@ -94,7 +91,7 @@ func TestLogin_LockoutAfterFiveFailures(t *testing.T) {
 	}
 }
 
-// F18 / E-U1: admin creates staff, duplicates are refused, staff can log in.
+// E-U1: admin creates staff, duplicates are refused, staff can log in.
 func TestAccounts_CreateStaffAndList(t *testing.T) {
 	e := newEnv(t)
 	staff, err := e.accounts.Create(e.ctx, dto.CreateUserRequest{
@@ -124,8 +121,7 @@ func TestAccounts_CreateStaffAndList(t *testing.T) {
 	}
 }
 
-// T16 / E-U2: an admin can not lock itself, and two admins locking each other
-// at the same time leave exactly one active admin.
+// T16 / E-U2: an admin can not lock itself; two admins locking each other leave one active.
 func TestAdmins_CanNotLockThemselvesOrTheLastAdmin(t *testing.T) {
 	e := newEnv(t)
 	a := e.newUser(models.RoleAdmin, "a@test.local", "secret123")
@@ -164,8 +160,7 @@ func TestAdmins_CanNotLockThemselvesOrTheLastAdmin(t *testing.T) {
 	}
 }
 
-// USR-02 / UC-07 / E-U2: roles change, nobody changes their own role, the
-// last active admin can not be demoted; the new role applies at next login.
+// E-U2: nobody changes their own role, the last admin stays, the new role applies at login.
 func TestAccounts_RoleChanges(t *testing.T) {
 	e := newEnv(t)
 	root := e.newUser(models.RoleAdmin, "root@test.local", "secret123")
@@ -195,8 +190,7 @@ func TestAccounts_RoleChanges(t *testing.T) {
 	}
 }
 
-// T25 / E-U3: a locked account can not log in, refresh, hold or pay, but the
-// ticket it already bought still gets in; unlocking restores access.
+// T25 / E-U3: a locked account can not log in, refresh, hold or pay, but its ticket still gets in.
 func TestLockedAccount_BlocksLoginRefreshAndPurchases(t *testing.T) {
 	e := newEnv(t)
 	admin := e.newUser(models.RoleAdmin, "admin@test.local", "secret123")

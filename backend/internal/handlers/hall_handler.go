@@ -8,7 +8,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// HallHandler handles hall, seat and price requests.
 type HallHandler struct {
 	hallService service.HallService
 }

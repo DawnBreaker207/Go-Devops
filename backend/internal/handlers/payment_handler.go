@@ -14,16 +14,13 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// PaymentHandler exposes the provider-agnostic payment endpoints. The mock and
-// real gateways are served by the same three routes.
 type PaymentHandler struct {
 	providers         *payment.Registry
 	bookings          service.BookingService
 	returnRedirectURL string
 }
 
-// NewPaymentHandler builds the handler; an empty returnRedirectURL answers the
-// return route with JSON instead of redirecting to the frontend.
+// An empty returnRedirectURL answers the return route with JSON instead of redirecting.
 func NewPaymentHandler(providers *payment.Registry, bookings service.BookingService, returnRedirectURL string) *PaymentHandler {
 	return &PaymentHandler{providers: providers, bookings: bookings, returnRedirectURL: returnRedirectURL}
 }
@@ -65,7 +62,7 @@ func (h *PaymentHandler) Notify(c *gin.Context) {
 		response.Error(c, apperrors.NotFound("unknown payment provider"))
 		return
 	}
-	// WHO/IP for the audit rows the service writes, accepted or rejected.
+	// The service writes audit rows for accepted and rejected notifications.
 	ctx := audit.Stash(c.Request.Context(), audit.FromGin(c, audit.Record{ActorRole: "provider:" + provider.Name()}))
 	ack := h.bookings.HandleNotification(ctx, provider, c.Request)
 	provider.AckNotification(c.Writer, ack)

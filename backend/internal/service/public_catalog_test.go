@@ -11,9 +11,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
 
-// T52 / E-CAT6 / E-CAT8: without a token movies and showtimes answer 200 and
-// drafts stay hidden; the seat map, holds and realtime tokens need an account;
-// a wrong token on a public route is 401, not a silent guest.
+// T52 / E-CAT6 / E-CAT8: the catalog is public without drafts; buying needs an account; a bad token is 401.
 func TestHTTP_PublicCatalog(t *testing.T) {
 	h := newHTTPEnv(t)
 	draft := &models.Movie{Title: "Draft Cut", Genre: "Drama", Duration: 90, Director: "Tester",

@@ -1,6 +1,4 @@
-// Package audit records an activity trail. Rows are written inside the same
-// transaction as the business change, so a log row never exists without its
-// data. Logs are read straight from the DB (no public endpoint yet).
+// Package audit writes audit rows in the same transaction as the business change.
 package audit
 
 import (
@@ -13,32 +11,29 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// Supported outcomes (kept in sync with ck_audit_outcome).
+// Must match the ck_audit_outcome check constraint.
 const (
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )
 
-// Record is one event to persist.
 type Record struct {
 	ActorID      string // empty for webhook/system events
 	ActorRole    string
-	Action       string // e.g. "hold_seats", "payment_confirmed", "admin.update_hall"
-	ResourceType string // e.g. "booking", "hall", "showtime", "user"
+	Action       string
+	ResourceType string
 	ResourceID   string
 	Before       map[string]any
 	After        map[string]any
 	IP           string
 	UserAgent    string
-	Outcome      string // OutcomeSuccess on writes in-transaction; set by failure writer
+	Outcome      string // defaults to OutcomeSuccess
 	ErrorMessage string
 }
 
-// ctxKey guards the per-request Record carried across middleware.
 type ctxKey struct{}
 
-// ErrorMsgKey is the gin Keys slot where response.Error stashes the message
-// a failing request should be audited with.
+// ErrorMsgKey is the gin key where response.Error stores the message to audit.
 const ErrorMsgKey = "audit_error_message"
 
 // FromContext returns the Record stashed by middleware.Audit, if any.
@@ -47,21 +42,18 @@ func FromContext(ctx context.Context) (Record, bool) {
 	return r, ok
 }
 
-// Stash returns a context carrying the Record for the request, so services
-// can pick it up with FromContext and write the success row.
 func Stash(ctx context.Context, r Record) context.Context {
 	return context.WithValue(ctx, ctxKey{}, r)
 }
 
-// ErrorMessage returns the error message stashed on a failed response.
 func ErrorMessage(c *gin.Context) string {
 	msg, _ := c.Get(ErrorMsgKey)
 	s, _ := msg.(string)
 	return s
 }
 
-// In writes an audit row to db (usually the open transaction). Errors bubble
-// up to roll back with the business change — never swallowed.
+// In writes an audit row, usually in the open transaction. Callers must return its
+// error so the business change rolls back with it.
 func In(ctx context.Context, db *gorm.DB, r Record) error {
 	if db == nil {
 		return nil
@@ -70,8 +62,7 @@ func In(ctx context.Context, db *gorm.DB, r Record) error {
 	if outcome == "" {
 		outcome = OutcomeSuccess
 	}
-	// Values are cut to their column sizes: an over-long header or message must
-	// never fail the insert and roll the business change back with it (E-A2).
+	// Cut to column sizes so an over-long value never fails the insert and rolls back the change.
 	entry := &models.AuditLog{
 		ActorID:      nullableUUID(r.ActorID),
 		ActorRole:    truncate(r.ActorRole, 32),
@@ -88,7 +79,7 @@ func In(ctx context.Context, db *gorm.DB, r Record) error {
 	return db.WithContext(ctx).Create(entry).Error
 }
 
-// FromGin fills IP and User-Agent from the current request if missing.
+// FromGin fills IP and User-Agent from the request only when they are empty.
 func FromGin(c *gin.Context, r Record) Record {
 	if r.IP == "" {
 		r.IP = c.ClientIP()
@@ -99,8 +90,7 @@ func FromGin(c *gin.Context, r Record) Record {
 	return r
 }
 
-// truncate keeps at most n characters (Postgres VARCHAR counts characters, not
-// bytes), never splitting a multi-byte character.
+// truncate counts runes because Postgres VARCHAR limits characters, not bytes.
 func truncate(s string, n int) string {
 	if utf8.RuneCountInString(s) <= n {
 		return s

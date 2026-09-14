@@ -8,16 +8,14 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 )
 
-// sweepChunk bounds each step of one pass, matching the batch chunk size.
 const sweepChunk = 500
 
 type holdSweeper interface {
 	SweepExpired(ctx context.Context, limit int) (service.SweepResult, error)
 }
 
-// NewSweepExpiredHolds builds the sweepExpiredHolds job (F10): every 30s it
-// releases expired holds, expires unpaid bookings, settles stuck paid
-// bookings and retries failed refunds, chunk by chunk until caught up.
+// NewSweepExpiredHolds also expires unpaid bookings, settles stuck paid bookings and
+// retries failed refunds, looping until caught up.
 func NewSweepExpiredHolds(sweeper holdSweeper) *batch.Job {
 	return &batch.Job{
 		Name:     "sweepExpiredHolds",

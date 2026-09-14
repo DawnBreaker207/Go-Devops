@@ -11,9 +11,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 )
 
-// T23 / E-ML1 / E-ML2: a confirmed booking gets one email with a QR per
-// ticket; a broken mailer never touches the sale, the job retries then skips,
-// and the next run sends it.
+// T23 / E-ML1 / E-ML2: one email with a QR per ticket; a broken mailer never touches the sale and is retried.
 func TestTicketEmails(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -48,7 +46,6 @@ func TestTicketEmails(t *testing.T) {
 		t.Fatalf("second run sent %d", sent)
 	}
 
-	// Mail server down.
 	id2 := e.confirmed(e.users[1], "B2")
 	e.mailer.FailWith(errors.New("smtp unavailable"))
 	sent, failed = e.runJob(job)
@@ -76,8 +73,6 @@ func TestTicketEmails(t *testing.T) {
 	}
 }
 
-// M17 / E-ML1: a mail that keeps failing is tried 6 times with backoff, then
-// given up with a single audit row and no longer picked up.
 func TestTicketEmails_FailureBacksOffAndCaps(t *testing.T) {
 	e := newEnv(t)
 	id := e.confirmed(e.users[0], "A1")
@@ -103,8 +98,6 @@ func TestTicketEmails_FailureBacksOffAndCaps(t *testing.T) {
 	e.wantStatus(id, models.BookingConfirmed)
 }
 
-// M17: a worker that died holding the lease (never marked sent) leaves the
-// email to be sent once the lease runs out.
 func TestTicketEmails_ExpiredClaimIsRetried(t *testing.T) {
 	e := newEnv(t)
 	id := e.confirmed(e.users[0], "A1")

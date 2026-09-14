@@ -1,5 +1,4 @@
-// Package sse is the realtime seat-map channel (F11): a hub fanning seat
-// changes out per showtime, plus short-lived connection tokens.
+// Package sse streams realtime seat changes per showtime.
 package sse
 
 import (
@@ -7,30 +6,25 @@ import (
 	"sync"
 )
 
-// SeatUpdate is one seat status change. ID is the showtime_seat id.
+// SeatUpdate.ID is the showtime_seat id.
 type SeatUpdate struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 }
 
-// SeatEvent is a batch of seat changes of one showtime.
 type SeatEvent struct {
 	ShowtimeID string       `json:"showtime_id"`
 	Seats      []SeatUpdate `json:"seats"`
 }
 
-// clientBuffer bounds queued events per connection; a client that falls this
-// far behind is dropped instead of slowing everyone down (R-S4).
+// A client that falls this far behind is dropped instead of slowing everyone down.
 const clientBuffer = 64
 
 const (
-	// DefaultMaxStreamsPerUser bounds the open streams of one user (tabs).
 	DefaultMaxStreamsPerUser = 5
-	// DefaultMaxStreams bounds all open streams of the server.
-	DefaultMaxStreams = 2000
+	DefaultMaxStreams        = 2000
 )
 
-// ErrTooManyStreams refuses a stream over the per-user or global limit.
 var ErrTooManyStreams = errors.New("too many realtime streams")
 
 type client struct {
@@ -42,23 +36,19 @@ type client struct {
 
 func (c *client) drop() { c.once.Do(func() { close(c.done) }) }
 
-// Subscription is one viewer of a showtime stream.
 type Subscription struct {
-	// Events delivers seat changes of the subscribed showtime only.
 	Events <-chan SeatEvent
-	// Done closes when the hub dropped this client (slow or shutdown).
+	// Done closes when the hub drops this client (too slow, or shutdown).
 	Done  <-chan struct{}
 	close func()
 }
 
-// Close detaches the subscription; safe to call more than once.
+// Close is safe to call more than once.
 func (s *Subscription) Close() { s.close() }
 
-// Hub keeps one client set per showtime, so an event can never reach viewers
-// of another showtime (R-S10).
+// Hub keeps one client set per showtime so an event never reaches viewers of another showtime.
 type Hub struct {
-	// MaxStreamsPerUser and MaxStreams limit open streams (M13); set them
-	// before the hub is used.
+	// Set the stream limits before the hub is used.
 	MaxStreamsPerUser int
 	MaxStreams        int
 
@@ -69,7 +59,6 @@ type Hub struct {
 	closed  bool
 }
 
-// NewHub creates the realtime hub with the default stream limits.
 func NewHub() *Hub {
 	return &Hub{
 		MaxStreamsPerUser: DefaultMaxStreamsPerUser,
@@ -79,8 +68,7 @@ func NewHub() *Hub {
 	}
 }
 
-// Subscribe attaches a viewer of userID to a showtime, or refuses it with
-// ErrTooManyStreams when the user or the server has too many streams open.
+// Subscribe returns ErrTooManyStreams when the user or the server has too many streams open.
 func (h *Hub) Subscribe(showtimeID, userID string) (*Subscription, error) {
 	c := &client{user: userID, ch: make(chan SeatEvent, clientBuffer), done: make(chan struct{})}
 	h.mu.Lock()
@@ -124,7 +112,7 @@ func (h *Hub) remove(showtimeID string, c *client) {
 	c.drop()
 }
 
-// release gives back a user's stream slot; the caller holds h.mu.
+// The caller must hold h.mu.
 func (h *Hub) release(user string) {
 	h.total--
 	if h.perUser[user] <= 1 {
@@ -134,8 +122,7 @@ func (h *Hub) release(user string) {
 	}
 }
 
-// Broadcast delivers an event to the viewers of exactly this showtime without
-// blocking; a client whose buffer is full is dropped.
+// Broadcast never blocks: a client whose buffer is full is dropped.
 func (h *Hub) Broadcast(showtimeID string, event SeatEvent) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -148,15 +135,14 @@ func (h *Hub) Broadcast(showtimeID string, event SeatEvent) {
 	}
 }
 
-// Viewers counts the connections attached to a showtime.
 func (h *Hub) Viewers(showtimeID string) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.shows[showtimeID])
 }
 
-// Close drops every client so open streams end and graceful shutdown is not
-// held up by long-lived connections. Later subscriptions end immediately.
+// Close drops every client so long-lived streams don't hold up graceful shutdown.
+// Later subscriptions end immediately.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

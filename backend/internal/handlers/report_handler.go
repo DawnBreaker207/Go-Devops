@@ -7,7 +7,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// ReportHandler serves admin reports (money: admin only).
 type ReportHandler struct {
 	reports service.ReportService
 }

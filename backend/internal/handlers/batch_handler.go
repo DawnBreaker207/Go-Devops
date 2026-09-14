@@ -15,8 +15,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// BatchHandler runs jobs manually and reads the batch_jobs log (API first;
-// a real admin UI comes later).
 type BatchHandler struct {
 	manager *batch.Manager
 	repo    repository.BatchJobRepository
@@ -71,8 +69,8 @@ func (h *BatchHandler) List(c *gin.Context) {
 //	@Router			/admin/batch/jobs/{name}/run [post]
 func (h *BatchHandler) Run(c *gin.Context) {
 	name := c.Param("name")
-	// The run must not live in this request: a long job would outlast the
-	// write timeout and a disconnected client would cancel it (M19).
+	// Not run in this request: a long job would outlast the write timeout and
+	// a disconnected client would cancel it.
 	runID, err := h.manager.Trigger(name, models.TriggerManual)
 	if err != nil {
 		response.Error(c, err)

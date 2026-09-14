@@ -18,10 +18,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// ---------------------------------------------------------------------------
-// Hold (F7)
-// ---------------------------------------------------------------------------
-
 // T1: many users race for one seat, exactly one wins.
 func TestHold_ConcurrentSameSeat_OneWins(t *testing.T) {
 	e := newEnv(t)
@@ -72,8 +68,7 @@ func TestHold_LotWithTakenSeat_AllOrNothing(t *testing.T) {
 	}
 }
 
-// T3: retries with the same idempotency key return the same booking, also
-// when they arrive concurrently.
+// T3: retries with the same idempotency key return the same booking, even concurrently.
 func TestHold_IdempotencyKey(t *testing.T) {
 	e := newEnv(t)
 	req := dto.HoldRequest{ShowID: e.showID, SeatIDs: e.ids("A1", "A2"), IdempotencyKey: "key-1"}
@@ -108,8 +103,7 @@ func TestHold_IdempotencyKey(t *testing.T) {
 	}
 }
 
-// T21 / E-HO10..12: a second tab replaces the first hold without extending
-// its expiry; seats kept across both lots stay held.
+// T21 / E-HO10..12: a second tab replaces the first hold without extending its expiry.
 func TestHold_SecondTabReplaces(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -154,7 +148,6 @@ func TestHold_SecondTabReplaces(t *testing.T) {
 	e.checkInvariants()
 }
 
-// Replacing a booking whose checkout is open would drop a payment in flight.
 func TestHold_BlockedWhilePaymentInProgress(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -168,7 +161,6 @@ func TestHold_BlockedWhilePaymentInProgress(t *testing.T) {
 	e.wantSeat("A1", models.SeatStatusHeld)
 }
 
-// E-HO5: a hold that expired by DB clock is taken over before the sweep runs.
 func TestHold_TakesOverExpiredHold(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -182,7 +174,7 @@ func TestHold_TakesOverExpiredHold(t *testing.T) {
 	}
 }
 
-// E-HO6, E-HO7, gaps, foreign seats.
+// E-HO6 / E-HO7: seat limit, gaps, foreign seats, closed or started shows are refused.
 func TestHold_Rejections(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -212,12 +204,7 @@ func TestHold_Rejections(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Pay / IPN / confirm (F8, F9)
-// ---------------------------------------------------------------------------
-
-// T10: hold 3 seats -> pay -> IPN -> 3 tickets with locked prices; realtime
-// viewers see held then sold; a ticket email job is published.
+// T10: hold -> pay -> IPN gives tickets at locked prices, realtime events and an email job.
 func TestPayConfirm_HappyPath(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -231,7 +218,7 @@ func TestPayConfirm_HappyPath(t *testing.T) {
 	}
 	expectEvent(t, sub.Events, models.SeatStatusHeld, 3)
 
-	// Prices changing after hold do not touch the booking (E-HO9).
+	// E-HO9: a price change after the hold must not touch the booking.
 	e.must(e.db.Exec(`UPDATE hall_prices SET price = price * 2 WHERE hall_id = ?`, e.hallID).Error)
 
 	pay, err := e.svc.Pay(e.ctx, u, h.BookingID, dto.PayRequest{Provider: "mock", ClientIP: "203.0.113.7"})
@@ -287,7 +274,6 @@ func TestPayConfirm_HappyPath(t *testing.T) {
 	e.checkInvariants()
 }
 
-// expectEvent waits for one realtime batch of n seats all in status.
 func expectEvent(t *testing.T, events <-chan sse.SeatEvent, status string, n int) {
 	t.Helper()
 	select {
@@ -366,8 +352,6 @@ func TestIPN_DuplicateCallbacks(t *testing.T) {
 	e.checkInvariants()
 }
 
-// E-C3 regression: IPN, reconcile and customer confirm racing each other must
-// converge on CONFIRMED — never refund a sold booking.
 func TestConfirm_ConcurrentPathsNeverRefundASale(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -407,8 +391,7 @@ func TestConfirm_ConcurrentPathsNeverRefundASale(t *testing.T) {
 	e.checkInvariants()
 }
 
-// T8 / E-P4: the gateway settles a different amount -> no sale, refund of
-// what was actually collected.
+// T8 / E-P4: a different settled amount is refunded and nothing is sold.
 func TestIPN_AmountMismatch_Refunds(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -467,7 +450,6 @@ func TestConfirm_SeatTakenOver_RefundsAndKeepsWinner(t *testing.T) {
 	e.checkInvariants()
 }
 
-// E-C2: the fencing version moved under an unexpired booking.
 func TestConfirm_FencingVersionMismatch_Refunds(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1", "A2")
@@ -484,7 +466,6 @@ func TestConfirm_FencingVersionMismatch_Refunds(t *testing.T) {
 	e.checkInvariants()
 }
 
-// E-C5: the show was closed between payment and confirm.
 func TestConfirm_ShowtimeClosed_Refunds(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -499,8 +480,7 @@ func TestConfirm_ShowtimeClosed_Refunds(t *testing.T) {
 	assertRefunded(t, e, h.BookingID, ref)
 }
 
-// T5 / E-R1: sweep and confirm race on the TTL boundary. Whoever wins, no seat
-// is both released and sold, and money is refunded exactly when not sold.
+// T5 / E-R1: sweep and confirm race on the TTL boundary; seats and money stay consistent.
 func TestSweepVsConfirm_Race(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		e := newEnv(t)
@@ -552,8 +532,7 @@ func TestSweepVsConfirm_Race(t *testing.T) {
 	}
 }
 
-// E-P10: gateway down -> 502, booking untouched, the failed attempt is kept
-// and a retry opens a new one.
+// E-P10: 502, booking untouched, the failed attempt is kept and a retry opens a new one.
 func TestPay_GatewayDown(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -586,7 +565,6 @@ func TestReconcile_LostIPN(t *testing.T) {
 	e.checkInvariants()
 }
 
-// E-O1: another customer's order is forbidden, not hidden.
 func TestOrder_OtherUserForbidden(t *testing.T) {
 	e := newEnv(t)
 	id := e.confirmed(e.users[0], "A1")
@@ -595,12 +573,7 @@ func TestOrder_OtherUserForbidden(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Sweep (F10)
-// ---------------------------------------------------------------------------
-
-// E-P7 / E-O2: unpaid overdue bookings expire, their seats free up, the order
-// stays in history and can not be paid anymore.
+// E-P7 / E-O2: expired bookings free their seats, stay in history and can not be paid.
 func TestSweep_ExpiresUnpaidBookings(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -626,7 +599,6 @@ func TestSweep_ExpiresUnpaidBookings(t *testing.T) {
 	}
 }
 
-// E-P3: money arrives for a booking the sweep already expired.
 func TestIPN_PaidAfterExpiry_Refunds(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
@@ -645,12 +617,12 @@ func TestIPN_PaidAfterExpiry_Refunds(t *testing.T) {
 	e.checkInvariants()
 }
 
-// Crash recovery: payment recorded but confirm never ran -> sweep confirms.
 func TestSweep_FinalizesStuckPaidBooking(t *testing.T) {
 	e := newEnv(t)
 	h := e.mustHold(e.users[0], "A1")
 	ref := e.pay(e.users[0], h.BookingID)
 	e.capture(ref)
+	// A crash left the payment recorded but the booking never confirmed.
 	e.must(e.db.Exec(`WITH p AS (
 			UPDATE payments SET status = 'paid', paid_amount = amount, paid_at = NOW() - INTERVAL '2 minutes'
 			WHERE txn_ref = ? RETURNING id, booking_id)
@@ -666,11 +638,7 @@ func TestSweep_FinalizesStuckPaidBooking(t *testing.T) {
 	e.checkInvariants()
 }
 
-// ---------------------------------------------------------------------------
-// Gate (F12)
-// ---------------------------------------------------------------------------
-
-// T11 / E-T1 / E-T2.
+// T11 / E-T1 / E-T2: a ticket gets in once; wrong show and unknown codes are refused.
 func TestRedeem(t *testing.T) {
 	e := newEnv(t)
 	id := e.confirmed(e.users[0], "A1", "A2")
@@ -720,8 +688,6 @@ func TestRedeem(t *testing.T) {
 	}
 }
 
-// assertRefunded checks the whole money trail of a refunded booking paid
-// through the mock provider.
 func assertRefunded(t *testing.T, e *env, bookingID, ref string) {
 	t.Helper()
 	b := e.wantStatus(bookingID, models.BookingRefunded)

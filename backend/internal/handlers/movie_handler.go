@@ -10,13 +10,11 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// canSeeDrafts: draft movies are for admin/staff only.
 func canSeeDrafts(c *gin.Context) bool {
 	role := middleware.CurrentUserRole(c)
 	return role == models.RoleAdmin || role == models.RoleStaff
 }
 
-// MovieHandler handles movie requests.
 type MovieHandler struct {
 	movieService service.MovieService
 }

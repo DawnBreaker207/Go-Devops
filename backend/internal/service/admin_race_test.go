@@ -10,7 +10,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// together starts n calls at the same instant and waits for all of them.
+// together starts n calls at the same instant and waits for them.
 func together(n int, fn func(i int)) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -28,9 +28,7 @@ func together(n int, fn func(i int)) {
 
 var oneSeatEach = [][]string{{"A1"}, {"A2"}, {"A3"}, {"A4"}, {"B1"}, {"B2"}, {"B3"}, {"B4"}}
 
-// E-S4 under concurrency: an admin deleting a showtime while customers hold
-// seats on it either deletes first (the holds find no showtime) or is refused
-// because a hold got in first. A deleted showtime never keeps a booking.
+// E-S4: either the delete or a hold wins; a deleted showtime never keeps a booking.
 func TestRace_DeleteShowtimeVsHolds(t *testing.T) {
 	deleted, refused := 0, 0
 	for round := 0; round < 20; round++ {
@@ -66,10 +64,7 @@ func TestRace_DeleteShowtimeVsHolds(t *testing.T) {
 	t.Logf("delete won %d rounds, refused %d rounds", deleted, refused)
 }
 
-// E-H4 under concurrency: turning a seat into a gap while customers hold seats
-// of the hall either happens before the holds (the seat can no longer be
-// held) or is refused because a hold got in first. A live booking never sits
-// on a gap.
+// E-H4: either the gap change or a hold wins; a live booking never sits on a gap.
 func TestRace_UpdateSeatVsHolds(t *testing.T) {
 	changed, refused := 0, 0
 	for round := 0; round < 20; round++ {
@@ -120,9 +115,7 @@ func TestRace_UpdateSeatVsHolds(t *testing.T) {
 	t.Logf("layout change won %d rounds, refused %d rounds", changed, refused)
 }
 
-// Changing a showtime (E-S4): with a pending/confirmed booking only opening and
-// closing is allowed; the hall can change only before any booking, and the
-// seat grid follows the new hall.
+// E-S4: with live bookings only open/close is allowed; the hall changes only before any booking.
 func TestShowtimeUpdate_ScheduleRules(t *testing.T) {
 	e := newEnv(t)
 	hall2, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Hall 2", Rows: 1, SeatsPerRow: 3,

@@ -19,14 +19,12 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// TicketEmailService sends the ticket email of a confirmed booking (F19).
-// Email is never on the money path: a failure leaves the booking CONFIRMED
-// and the ticket visible on the web (R-ML1).
+// TicketEmailService is never on the money path: a failed email leaves the booking
+// CONFIRMED and the tickets visible on the web.
 type TicketEmailService interface {
 	// Send mails one booking once. sent=false with nil error means there was
 	// nothing to send (not confirmed or already sent).
 	Send(ctx context.Context, bookingID string) (sent bool, err error)
-	// PendingIDs lists up to limit confirmed bookings still without email.
 	PendingIDs(ctx context.Context, limit int) ([]string, error)
 }
 
@@ -41,10 +39,8 @@ func NewTicketEmailService(db *gorm.DB, repo repository.BookingRepository, maile
 	return &ticketEmailService{db: db, repo: repo, mailer: mailer, location: location}
 }
 
-// Send leases the booking's ticket email, sends it and only then marks it sent
-// (at least once: a worker dying between send and mark sends again after the
-// lease, but never twice at the same time, E-ML2). A failed send backs off;
-// after the last try it is given up with one audit row (E-ML1).
+// Send leases the email and marks it sent only after sending: at least once, never twice
+// at the same time. A failed send backs off; after the last try it is given up and audited.
 func (s *ticketEmailService) Send(ctx context.Context, bookingID string) (bool, error) {
 	n, err := s.repo.ClaimEmail(ctx, bookingID)
 	if err != nil {

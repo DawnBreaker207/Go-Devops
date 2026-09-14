@@ -9,7 +9,6 @@ import (
 const realSecretA = "k2P9xQ7mV4tR8wZ1nB6cY3hJ5sD0fG2L"
 const realSecretB = "u7E4rT1yW9qA3zX6cV8bN2mK5jH0gF4D"
 
-// validConfig passes validate as a development config.
 func validConfig() *Config {
 	return &Config{
 		App:      AppConfig{Env: "development", RoomCleanupMinutes: 20},
@@ -50,8 +49,7 @@ func TestValidate_DevelopmentAcceptsDevSecrets(t *testing.T) {
 	}
 }
 
-// H4: production never starts with short, placeholder or dev secrets, nor with
-// the mock gateway unless explicitly allowed.
+// Production refuses short, placeholder or dev secrets and the mock gateway unless allowed.
 func TestValidate_ProductionRejectsDevSecrets(t *testing.T) {
 	cases := map[string]func(c *Config){
 		"dev jwt secret":     func(c *Config) { c.JWT.AccessSecret = "dev-access-secret-change-in-prod" },
@@ -83,7 +81,7 @@ func TestValidate_ProductionRejectsDevSecrets(t *testing.T) {
 	}
 }
 
-// H3: trusted proxies must be IPs or CIDRs.
+// Trusted proxies must be IPs or CIDRs.
 func TestValidate_TrustedProxies(t *testing.T) {
 	c := validConfig()
 	c.Server.TrustedProxies = []string{"10.0.0.1", "172.16.0.0/12", "::1"}
@@ -120,9 +118,7 @@ func TestValidate_Bounds(t *testing.T) {
 	}
 }
 
-// Production runs from environment variables only (no config.yaml in the
-// image); list values split on commas and the removed auto_migrate key is
-// simply ignored.
+// Lists split on commas and the removed auto_migrate key is ignored.
 func TestLoad_EnvOnlyProduction(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("JWT_ACCESS_SECRET", realSecretA)

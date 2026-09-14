@@ -23,7 +23,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// Handlers groups the handlers wired in main.
 type Handlers struct {
 	Health   *handlers.HealthHandler
 	Auth     *handlers.AuthHandler
@@ -40,17 +39,14 @@ type Handlers struct {
 	Media    *handlers.MediaHandler
 }
 
-// Limiters groups the rate limiters of the endpoint groups.
 type Limiters struct {
-	Auth   *ratelimit.Limiter // per IP, against password guessing
-	Hold   *ratelimit.Limiter // per IP, against seat bots
-	Public *ratelimit.Limiter // per IP, anonymous catalog reads
-	Events *ratelimit.Limiter // per user, realtime tokens
+	Auth   *ratelimit.Limiter
+	Hold   *ratelimit.Limiter
+	Public *ratelimit.Limiter
+	Events *ratelimit.Limiter
 }
 
-// New builds a gin.Engine with all middleware and routes attached. accounts
-// (may be nil) rechecks on every authenticated request that the account is
-// still active with the same role.
+// accounts may be nil; when set, every authenticated request rechecks the account.
 func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts middleware.AccountChecker,
 	limits Limiters, payments *payment.Registry, h Handlers) *gin.Engine {
 	if cfg.App.IsProduction() {
@@ -61,9 +57,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
-	// Only the configured proxies may set X-Forwarded-For; with none the client
-	// IP is the TCP peer, so rate limits and the login lockout can not be
-	// dodged with a forged header (H3). Entries are validated by config.
+	// Only configured proxies may set X-Forwarded-For, so rate limits and the
+	// login lockout can not be dodged with a forged header.
 	if err := engine.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
 		_ = engine.SetTrustedProxies(nil)
 	}
@@ -83,11 +78,9 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		response.Error(c, apperrors.BadRequest("method not allowed"))
 	})
 
-	// Infrastructure probes for k8s/docker healthchecks.
 	engine.GET("/health", h.Health.Check)
 	engine.GET("/healthz", h.Health.Healthz)
 
-	// Uploaded images of the local store (dev); Cloudinary serves its own.
 	if dir := h.Media.LocalDir(); dir != "" {
 		engine.Static(storage.MediaPath, dir)
 	}
@@ -96,33 +89,27 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		engine.GET("/swagger/*any", ginswagger.WrapHandler(swaggerfiles.Handler))
 	}
 
-	// DBGuard answers 503 fast when the DB is down.
 	v1 := engine.Group("/api/v1")
 	v1.Use(middleware.DBGuard(db, 500*time.Millisecond), middleware.NoStore())
 	v1.GET("/health", h.Health.Check)
-	v1.GET("/healthz", h.Health.Healthz) // HSL-01
+	v1.GET("/healthz", h.Health.Healthz)
 
 	auth := v1.Group("/auth")
 	auth.Use(middleware.RateLimit(limits.Auth))
 	{
-		// Auth routes are public: the audit middleware only stashes IP and
-		// user agent; services fill actor after a successful login/register,
-		// the failure path logs rejected attempts.
+		// No user yet: Audit only stashes IP and user agent; services fill the actor on success.
 		auth.POST("/register", middleware.Audit(db, "auth.register", "user"), h.Auth.Register)
 		auth.POST("/login", middleware.Audit(db, "auth.login", "user"), h.Auth.Login)
 		auth.POST("/refresh", middleware.Audit(db, "auth.refresh", "user"), h.Auth.Refresh)
 	}
 
-	// Public catalog (F3, DEC-01): movies and showtimes need no account. A token,
-	// when sent, must still be valid (E-CAT6); signed-in admins and staff also
-	// see draft movies. Throttled per client IP (E-CAT7).
 	public := v1.Group("")
 	public.Use(middleware.RateLimit(limits.Public), middleware.OptionalAuth(jwtManager, accounts))
 	{
 		public.GET("/movies", h.Movie.List)
 		public.GET("/movies/:id", h.Movie.Detail)
 		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
-		public.GET("/showtimes", h.Showtime.List) // SHOW-02
+		public.GET("/showtimes", h.Showtime.List)
 	}
 
 	protected := v1.Group("")
@@ -130,19 +117,16 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 	{
 		protected.GET("/users/me", h.User.Me)
 
-		// Picking seats needs an account (E-CAT8).
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
 
 		movies := protected.Group("/movies")
 		{
-			// Writes are admin/staff only. Audit runs before role checks so
-			// forbidden attempts on an authenticated route are logged too.
+			// Audit runs before role checks so forbidden attempts are logged too.
 			movies.POST("", middleware.Audit(db, "admin.create_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Create)
 			movies.PUT("/:id", middleware.Audit(db, "admin.update_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Update)
 			movies.DELETE("/:id", middleware.Audit(db, "admin.delete_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Delete)
 		}
 
-		// Hall and showtime management: admin/staff only.
 		catalog := protected.Group("/admin")
 		{
 			catalog.GET("/halls", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.List)
@@ -157,9 +141,6 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
 		}
 
-		// Customer booking flow: hold -> pay -> (IPN | confirm). holdLimiter
-		// throttles seat bots; Audit runs before role checks so rejected
-		// attempts log too. Reads are not audited (F13).
 		orders := protected.Group("/orders")
 		{
 			orders.GET("", h.Booking.List)
@@ -176,20 +157,16 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			orders.GET("/:id/tickets", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
 		}
 
-		// Staff gate: check tickets in at the entrance of a show (id or QR code).
 		tickets := protected.Group("/tickets")
 		{
 			tickets.POST("/:id/redeem", middleware.Audit(db, "staff.redeem_ticket", "ticket"),
 				middleware.RequireRoles(models.RoleStaff, models.RoleAdmin), h.Booking.Redeem)
 		}
 
-		// Realtime seat-map: a JWT-authenticated call mints the short-lived token.
 		protected.GET("/events/token", middleware.RateLimitByUser(limits.Events), h.SSE.IssueToken)
 
-		// Payment options offered to the customer (mock and real gateways alike).
 		protected.GET("/payments/providers", h.Payment.Providers)
 
-		// Staff board (F17, MVP part): seat counts and gate lists, no money.
 		staff := protected.Group("/staff")
 		staff.Use(middleware.RequireRoles(models.RoleStaff, models.RoleAdmin))
 		{
@@ -197,20 +174,17 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
 		}
 
-		// Accounts (F18, MVP part): admins create staff and lock/unlock users.
 		protected.GET("/admin/users", middleware.RequireRoles(models.RoleAdmin), h.User.List)
 		protected.POST("/admin/users", middleware.Audit(db, "admin.create_user", "user"),
 			middleware.RequireRoles(models.RoleAdmin), h.User.Create)
 		protected.PATCH("/admin/users/:id", middleware.Audit(db, "admin.update_user", "user"),
 			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
 		protected.PUT("/admin/users/:id", middleware.Audit(db, "admin.update_user", "user"),
-			middleware.RequireRoles(models.RoleAdmin), h.User.Update) // USR-02
+			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
 
-		// Revenue report over closed days: money is admin only (T15).
 		protected.GET("/admin/reports/daily", middleware.RequireRoles(models.RoleAdmin), h.Report.Daily)
 
-		// Hall routes as named in the API contract (HALL-02..04); the seat grid
-		// is readable by any signed-in user, changes stay admin/staff.
+		// Aliases required by the API contract; the seat grid is readable by any signed-in user.
 		halls := protected.Group("/halls")
 		{
 			halls.GET("/:id/seats", h.Hall.Seats)
@@ -220,11 +194,9 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 				middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 		}
 
-		// Poster upload; the returned URL goes into the movie's poster_url.
 		protected.POST("/admin/uploads/poster", middleware.Audit(db, "admin.upload_poster", "media"),
 			middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Media.UploadPoster)
 
-		// System administration: batch logs, manual job runs (admin only).
 		admin := protected.Group("/admin")
 		admin.Use(middleware.RequireRoles(models.RoleAdmin))
 		{
@@ -233,17 +205,13 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
 	}
 
-	// EventSource can not send an Authorization header: the realtime token in
-	// the URL is the credential of the stream.
+	// EventSource can not send an Authorization header, so the realtime token in the URL is the credential.
 	v1.GET("/events/shows/:id", h.SSE.Stream)
 
-	// Provider callbacks live outside JWT: the provider signature is the
-	// credential. Gateways call the IPN with GET (VNPay) or POST (MoMo, mock).
+	// No JWT: the provider signature is the credential. Some gateways call the IPN with GET, others POST.
 	v1.Match([]string{http.MethodGet, http.MethodPost}, "/payments/:provider/ipn", h.Payment.Notify)
 	v1.GET("/payments/:provider/return", h.Payment.Return)
 
-	// Providers that ship a simulated gateway (the mock) serve its checkout
-	// pages here; real gateways host theirs themselves.
 	for _, p := range payments.List() {
 		if sim, ok := p.(payment.Simulator); ok {
 			engine.Any(sim.SimulatorPath()+"/*path", gin.WrapH(sim.SimulatorHandler()))

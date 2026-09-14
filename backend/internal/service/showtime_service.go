@@ -13,7 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// ShowtimeService schedules and serves showtimes.
 type ShowtimeService interface {
 	Create(ctx context.Context, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error)
 	Update(ctx context.Context, id string, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error)
@@ -24,7 +23,6 @@ type ShowtimeService interface {
 	OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
 }
 
-// OpenShowtime returns a showtime that is still on sale (realtime tokens).
 func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error) {
 	row, err := s.onSale(ctx, id)
 	if err != nil {
@@ -44,9 +42,6 @@ func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.Sho
 	}, nil
 }
 
-// onSale returns a showtime that still sells seats: open, not started yet and
-// of a movie that is showing (H6, L11). Seat maps and realtime tokens serve
-// nothing else.
 func (s *showtimeService) onSale(ctx context.Context, id string) (*repository.ShowtimeRow, error) {
 	row, err := s.showtime.FindByID(ctx, id)
 	if err != nil {
@@ -81,9 +76,8 @@ func NewShowtimeService(db *gorm.DB, showtime *repository.ShowtimeRepository, ha
 	}
 }
 
-// endOf share-locks the movie and returns when a showtime of it starting at
-// start ends. Only a showing movie can be scheduled (E-S3); ending it or
-// changing its duration waits for this transaction and then sees the showtime.
+// endOf share-locks the movie, so ending it or changing its duration waits for
+// this transaction and then sees the showtime.
 func (s *showtimeService) endOf(ctx context.Context, tx *gorm.DB, movieID string, start time.Time) (time.Time, error) {
 	movie, err := s.movie.LockForShare(ctx, tx, movieID)
 	if err != nil {
@@ -177,8 +171,8 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 	}
 
 	start := req.StartAt.UTC().Truncate(time.Microsecond) // DB precision, so an unchanged time compares equal
-	// Only the status changes (E-S7): closing is always allowed, even once the
-	// showtime started or its movie ended; reopening is checked under the locks.
+	// Status-only change: closing is always allowed, even once the showtime started
+	// or its movie ended; reopening is checked under the locks.
 	statusOnly := req.MovieID == row.MovieID && req.HallID == row.HallID && start.Equal(row.StartAt)
 	if !statusOnly && !start.After(time.Now()) {
 		return nil, apperrors.Validation("start_at must be in the future")
@@ -192,10 +186,8 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		status string
 	)
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock order shared with hall layout changes: the scheduling lock of
-		// every hall involved (sorted), then the showtime row, then the movie row
-		// (shared). Holds and confirms share-lock the showtime row, so this waits
-		// for them and they see the result.
+		// Lock order shared with hall layout changes: hall scheduling locks (sorted), the showtime
+		// row, then the movie row (shared). Holds share-lock the showtime row, so this waits for them.
 		halls := []string{row.HallID}
 		if req.HallID != row.HallID {
 			halls = append(halls, req.HallID)
@@ -253,7 +245,7 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 				}
 			} else if current.MovieID != req.MovieID || !current.StartAt.Equal(start) {
 				// Held and sold tickets name this movie and time: stop sales by
-				// closing the showtime instead (E-S4).
+				// closing the showtime instead.
 				live, err := s.showtime.ShowtimeHasLiveBookings(tx, id)
 				if err != nil {
 					return err
@@ -325,9 +317,8 @@ func (s *showtimeService) Delete(ctx context.Context, id string) error {
 		return apperrors.ErrShowtimeNotFound
 	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock the row first, check after: a hold in flight share-locks it, so
-		// its booking is committed and seen by the check, and a hold arriving
-		// later finds the showtime gone (E-S4).
+		// Lock first, check after: an in-flight hold share-locks the row, so its booking
+		// is committed and seen by the check; a later hold finds the showtime gone.
 		current, err := s.showtime.LockForUpdate(tx, id)
 		if err != nil {
 			return err
@@ -360,14 +351,12 @@ func (s *showtimeService) ListByMovie(ctx context.Context, movieID, date string)
 		return nil, err
 	}
 	if movie.Status != models.MovieStatusShowing {
-		return []dto.ShowtimeListItem{}, nil // E-CAT2: draft/ended movies have nothing on sale
+		return []dto.ShowtimeListItem{}, nil
 	}
 
 	return s.pickDay(ctx, movieID, date)
 }
 
-// ListByDate lists the showtimes on sale of every showing movie for a local
-// day (default today). A day without showtimes is an empty list (T28).
 func (s *showtimeService) ListByDate(ctx context.Context, date string) ([]dto.ShowtimeListItem, error) {
 	return s.pickDay(ctx, "", date)
 }
@@ -405,8 +394,6 @@ func (s *showtimeService) pickDay(ctx context.Context, movieID, date string) ([]
 	return result, nil
 }
 
-// SeatMap serves the seat grid of a showtime still on sale; a closed or
-// started showtime, or one of a movie no longer showing, is not found (L11).
 func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.SeatMapResponse, error) {
 	row, err := s.onSale(ctx, showtimeID)
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// MovieService handles movie management.
 type MovieService interface {
 	// includeDrafts is true for admin/staff; customers never see draft movies.
 	List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]dto.MovieResponse, int64, error)
@@ -85,9 +84,8 @@ func (s *movieService) Create(ctx context.Context, req dto.MovieRequest) (*dto.M
 	return &result, nil
 }
 
-// Update changes a movie. While showtimes of it are still to come it can not
-// leave "showing" or change its duration (E-M4): sold tickets would point at a
-// movie no longer on the schedule, and showtimes would end at the wrong time.
+// Update refuses to leave "showing" or change the duration while showtimes are still to come:
+// sold tickets would point at an unscheduled movie and showtimes would end at the wrong time.
 func (s *movieService) Update(ctx context.Context, id string, req dto.MovieRequest) (*dto.MovieResponse, error) {
 	releaseDate, err := req.ParseReleaseDate()
 	if err != nil {
@@ -97,7 +95,7 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 	var movie *models.Movie
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		// Lock the movie, then look at its showtimes: scheduling a showtime
-		// share-locks the movie, so none slips in between (F5 E-S3).
+		// share-locks the movie, so none slips in between.
 		current, err := s.movieRepo.LockForUpdate(ctx, tx, id)
 		if err != nil {
 			return err
@@ -148,9 +146,7 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 	return &result, nil
 }
 
-// Delete soft-deletes a movie. One with open showtimes still to come is
-// refused (E-M2): close or delete those first. Past showtimes and their
-// bookings stay.
+// Delete soft-deletes a movie; it is refused while open showtimes are still to come.
 func (s *movieService) Delete(ctx context.Context, id string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if _, err := s.movieRepo.LockForUpdate(ctx, tx, id); err != nil {

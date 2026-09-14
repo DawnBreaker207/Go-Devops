@@ -128,8 +128,6 @@ func TestRefundAndQuery(t *testing.T) {
 	}
 }
 
-// The whole checkout over real HTTP: page, pay button, IPN delivered to the
-// merchant, browser redirected to the signed return URL.
 func TestCheckoutOverHTTP(t *testing.T) {
 	var p *Provider
 	var mu sync.Mutex

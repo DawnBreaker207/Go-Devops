@@ -12,8 +12,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// BatchJobRepository reads and writes batch_jobs — the audit trail of every
-// job run, errors included.
 type BatchJobRepository interface {
 	Start(ctx context.Context, name, triggeredBy string) (*models.BatchJob, error)
 	Finish(ctx context.Context, runID, status, errorMessage string) error
@@ -31,9 +29,8 @@ func NewBatchJobRepository(db *gorm.DB) BatchJobRepository {
 	return &batchJobRepository{db: db}
 }
 
-// Start opens a run: inserts a RUNNING row. If another RUNNING row for the
-// same job exists (partial unique index uq_batch_jobs_one_running), it fails
-// with ErrJobRunning so jobs never run in parallel.
+// A second RUNNING row for the same job violates uq_batch_jobs_one_running and
+// returns ErrJobRunning, so a job never runs in parallel with itself.
 func (r *batchJobRepository) Start(ctx context.Context, name, triggeredBy string) (*models.BatchJob, error) {
 	run := &models.BatchJob{
 		JobName:     name,
@@ -50,7 +47,6 @@ func (r *batchJobRepository) Start(ctx context.Context, name, triggeredBy string
 	return run, nil
 }
 
-// Finish closes the running row: final status, error and finished_at.
 func (r *batchJobRepository) Finish(ctx context.Context, runID, status, errorMessage string) error {
 	if err := r.db.WithContext(ctx).Model(&models.BatchJob{}).
 		Where("id = ? AND status = ?", runID, models.BatchRunning).
@@ -64,8 +60,6 @@ func (r *batchJobRepository) Finish(ctx context.Context, runID, status, errorMes
 	return nil
 }
 
-// RecordProgress updates processed/skipped counts after every chunk so a crash
-// leaves the last good state behind.
 func (r *batchJobRepository) RecordProgress(ctx context.Context, runID string, processed, skipped int) error {
 	if err := r.db.WithContext(ctx).Model(&models.BatchJob{}).
 		Where("id = ?", runID).
@@ -78,9 +72,8 @@ func (r *batchJobRepository) RecordProgress(ctx context.Context, runID string, p
 	return nil
 }
 
-// StopOrphans closes RUNNING rows left by a process that died mid-run. The
-// server runs as a single instance, so at startup nothing is really running;
-// without this the unique RUNNING index would block the job forever (H1).
+// StopOrphans runs at startup: the server is a single instance, so any RUNNING row is left by a
+// dead process and would otherwise block its job forever through the unique RUNNING index.
 func (r *batchJobRepository) StopOrphans(ctx context.Context) (int64, error) {
 	res := r.db.WithContext(ctx).Model(&models.BatchJob{}).
 		Where("status = ?", models.BatchRunning).
@@ -95,8 +88,6 @@ func (r *batchJobRepository) StopOrphans(ctx context.Context) (int64, error) {
 	return res.RowsAffected, nil
 }
 
-// RecordSkipped logs a scheduled run that did not start because the previous
-// one was still running.
 func (r *batchJobRepository) RecordSkipped(ctx context.Context, name, triggeredBy, reason string) error {
 	now := time.Now()
 	run := &models.BatchJob{

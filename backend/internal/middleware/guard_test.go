@@ -26,7 +26,6 @@ func status(engine *gin.Engine) int {
 	return rec.Code
 }
 
-// M18: one slow probe under load is not an outage.
 func TestDBGuard_SingleTimeoutDoesNotTrip(t *testing.T) {
 	var calls atomic.Int32
 	engine := guardedEngine(newDBGuard(func(context.Context) error {
@@ -42,7 +41,6 @@ func TestDBGuard_SingleTimeoutDoesNotTrip(t *testing.T) {
 	}
 }
 
-// M18: several timed-out probes in a row mean the database is down.
 func TestDBGuard_ThreeTimeoutsTrip(t *testing.T) {
 	engine := guardedEngine(newDBGuard(func(context.Context) error { return context.DeadlineExceeded }, 50*time.Millisecond, 0))
 	for i := 0; i < 2; i++ {
@@ -55,7 +53,6 @@ func TestDBGuard_ThreeTimeoutsTrip(t *testing.T) {
 	}
 }
 
-// M18: a closed or refused database is down at once, and back as soon as it answers.
 func TestDBGuard_HardErrorTripsImmediately(t *testing.T) {
 	var broken atomic.Bool
 	broken.Store(true)
@@ -74,7 +71,6 @@ func TestDBGuard_HardErrorTripsImmediately(t *testing.T) {
 	}
 }
 
-// M18: concurrent requests share one probe instead of one ping each.
 func TestDBGuard_ConcurrentRequestsPingOnce(t *testing.T) {
 	var calls atomic.Int32
 	engine := guardedEngine(newDBGuard(func(context.Context) error {

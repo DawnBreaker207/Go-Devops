@@ -18,20 +18,18 @@ import (
 	"time"
 )
 
-// CloudinaryOptions configures the Cloudinary store.
 type CloudinaryOptions struct {
 	CloudName string
 	APIKey    string
 	APISecret string
-	// Folder prefixes every upload, e.g. "cinema".
+	// Folder prefixes every upload path.
 	Folder string
-	// BaseURL defaults to https://api.cloudinary.com (overridden in tests).
+	// BaseURL defaults to https://api.cloudinary.com; tests override it.
 	BaseURL    string
 	HTTPClient *http.Client
 	Now        func() time.Time
 }
 
-// Cloudinary uploads through Cloudinary's signed upload REST API, no SDK.
 type Cloudinary struct {
 	opts CloudinaryOptions
 }
@@ -106,8 +104,7 @@ func (c *Cloudinary) Upload(ctx context.Context, img Image) (string, error) {
 	return out.SecureURL, nil
 }
 
-// Sign is Cloudinary's API signature: parameters sorted by name as key=value
-// joined with "&", followed by the API secret, SHA-1, hex encoded.
+// Sign follows Cloudinary's signature scheme: sorted key=value pairs joined by "&", secret appended, SHA-1.
 func (c *Cloudinary) Sign(params map[string]string) string {
 	keys := make([]string, 0, len(params))
 	for key := range params {

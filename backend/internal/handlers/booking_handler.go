@@ -9,7 +9,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// BookingHandler exposes the seat-hold and payment flow.
 type BookingHandler struct {
 	bookingService service.BookingService
 }

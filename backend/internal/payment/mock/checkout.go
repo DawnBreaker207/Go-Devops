@@ -10,8 +10,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Handler serves the fake checkout: the page a customer lands on after pay,
-// and the form actions that settle the transaction.
 func (g *Gateway) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+g.basePath+"/checkout", g.page)
@@ -78,8 +76,6 @@ func (g *Gateway) page(w http.ResponseWriter, r *http.Request) {
 	g.render(w, http.StatusOK, view)
 }
 
-// submit settles the transaction, delivers the IPN (unless the drill skips
-// it) and sends the browser back to the merchant.
 func (g *Gateway) submit(w http.ResponseWriter, r *http.Request) {
 	ref := r.PathValue("ref")
 	mode := r.FormValue("mode")

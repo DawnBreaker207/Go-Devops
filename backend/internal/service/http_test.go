@@ -32,15 +32,13 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
 
-// httpEnv serves the real router (all middleware: DB guard, JWT, roles,
-// audit) on top of env, to check what only exists at the HTTP layer.
+// httpEnv serves the real router with all middleware on top of env.
 type httpEnv struct {
 	*env
 	engine *gin.Engine
 	srv    *httptest.Server
 	tokens *sse.TokenStore
-	// trustedProxies and publicLimiter (nil: unlimited) configure the engine
-	// built after they are set.
+	// Read by buildEngine; a nil publicLimiter means unlimited.
 	trustedProxies []string
 	publicLimiter  *ratelimit.Limiter
 }
@@ -92,8 +90,6 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 	})
 }
 
-// batchManager registers the jobs the HTTP tests trigger; runs started by a
-// test are stopped with it.
 func (h *httpEnv) batchManager(db *gorm.DB, runs repository.BatchJobRepository) *batch.Manager {
 	m := batch.NewManager(db, runs)
 	m.Register(jobs.NewCloseDay(h.reports, time.UTC))
@@ -105,7 +101,7 @@ func (h *httpEnv) batchManager(db *gorm.DB, runs repository.BatchJobRepository) 
 	return m
 }
 
-// login creates an account of role and returns its access token and id.
+// login creates an account of role and returns its access token and user id.
 func (h *httpEnv) login(role string) (string, string) {
 	h.t.Helper()
 	email := fmt.Sprintf("%s-%s@test.local", role, uuid.NewString()[:8])
@@ -146,7 +142,7 @@ func dataMap(body map[string]any) map[string]any {
 	return m
 }
 
-// T15 / T38 / NFR-SEC-04: every role only reaches its own endpoints.
+// T15 / T38: every role only reaches its own endpoints.
 func TestHTTP_RoleScopes(t *testing.T) {
 	h := newHTTPEnv(t)
 	admin, _ := h.login(models.RoleAdmin)
@@ -175,8 +171,7 @@ func TestHTTP_RoleScopes(t *testing.T) {
 	}
 }
 
-// T41 / NFR-SEC-08 and UC-03 over HTTP: another customer gets 403; the owner
-// sees the showtime of the order.
+// T41: another customer gets 403; the owner sees the order with its showtime.
 func TestHTTP_OrderScopeAndShowtimeInfo(t *testing.T) {
 	h := newHTTPEnv(t)
 	ownerToken, ownerID := h.login(models.RoleCustomer)
@@ -201,7 +196,7 @@ func TestHTTP_OrderScopeAndShowtimeInfo(t *testing.T) {
 	}
 }
 
-// T14 / FR-AUTH-03 over HTTP: the lockout answers 429 with Retry-After.
+// T14: over HTTP the lockout answers 429 with Retry-After.
 func TestHTTP_LoginLockoutRetryAfter(t *testing.T) {
 	h := newHTTPEnv(t)
 	h.newUser(models.RoleCustomer, "lock@test.local", "secret123")
@@ -222,7 +217,6 @@ func TestHTTP_LoginLockoutRetryAfter(t *testing.T) {
 	}
 }
 
-// API contract paths: HSL-01, SHOW-02, HALL-02/04, USR-02 (PUT with role).
 func TestHTTP_ContractEndpoints(t *testing.T) {
 	h := newHTTPEnv(t)
 	admin, _ := h.login(models.RoleAdmin)
@@ -259,7 +253,7 @@ func TestHTTP_ContractEndpoints(t *testing.T) {
 	}
 }
 
-// T48 / NFR-PERF-01: 30 sequential reads per endpoint, p95 under 300 ms.
+// T48: 30 sequential reads per endpoint, p95 under 300 ms.
 func TestHTTP_ReadLatencyP95(t *testing.T) {
 	h := newHTTPEnv(t)
 	token, _ := h.login(models.RoleCustomer)
@@ -286,7 +280,7 @@ func TestHTTP_ReadLatencyP95(t *testing.T) {
 	}
 }
 
-// T49 / NFR-DEP-01/02: with the database gone, probes and API answer 503 fast.
+// T49: with the database gone, probes and API answer 503 fast.
 func TestHTTP_DatabaseDownAnswers503Fast(t *testing.T) {
 	h := newHTTPEnv(t)
 	down, err := openDB(testDBName)
@@ -314,9 +308,7 @@ func TestHTTP_DatabaseDownAnswers503Fast(t *testing.T) {
 	}
 }
 
-// T50 / NFR-DEP-03: shutting the server down with an order in progress and a
-// realtime stream open finishes well under 10s; after the restart the order
-// is intact and can be completed.
+// T50: shutdown with an order and a stream open is fast and the order can still be completed.
 func TestHTTP_GracefulShutdownKeepsOrders(t *testing.T) {
 	h := newHTTPEnv(t)
 	token, userID := h.login(models.RoleCustomer)
