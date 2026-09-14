@@ -96,6 +96,11 @@ type BookingOptions struct {
 	// LateCaptureWindow is how long given-up payment attempts are rechecked
 	// for money the provider collected late; 0 means 24 hours.
 	LateCaptureWindow time.Duration
+	// CheckinOpenBefore and CheckinCloseAfter bound when a ticket gets in at
+	// the gate around the showtime start (E-T4); both zero means 30 and 20
+	// minutes.
+	CheckinOpenBefore time.Duration
+	CheckinCloseAfter time.Duration
 }
 
 type bookingService struct {
@@ -109,11 +114,16 @@ type bookingService struct {
 	publisher         JobPublisher
 	hub               *sse.Hub
 	lateCaptureWindow time.Duration
+	checkinOpenBefore time.Duration
+	checkinCloseAfter time.Duration
 }
 
 func NewBookingService(opts BookingOptions) BookingService {
 	if opts.LateCaptureWindow <= 0 {
 		opts.LateCaptureWindow = defaultLateCaptureWindow
+	}
+	if opts.CheckinOpenBefore == 0 && opts.CheckinCloseAfter == 0 {
+		opts.CheckinOpenBefore, opts.CheckinCloseAfter = defaultCheckinOpenBefore, defaultCheckinCloseAfter
 	}
 	return &bookingService{
 		db:                opts.DB,
@@ -126,6 +136,8 @@ func NewBookingService(opts BookingOptions) BookingService {
 		publisher:         opts.Publisher,
 		hub:               opts.Hub,
 		lateCaptureWindow: opts.LateCaptureWindow,
+		checkinOpenBefore: opts.CheckinOpenBefore,
+		checkinCloseAfter: opts.CheckinCloseAfter,
 	}
 }
 
@@ -206,16 +218,33 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	if showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now) {
 		return nil, nil, apperrors.ErrShowtimeClosed // E-HO7
 	}
+	// H6: a movie taken off the schedule sells nothing, whatever its showtimes say.
+	showing, err := s.repo.MovieShowing(ctx, tx, showtime.MovieID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !showing {
+		return nil, nil, apperrors.ErrShowtimeClosed
+	}
 
-	// E-HO3: a retry with the same key gets back the booking it created.
+	// E-HO3: a retry with the same key gets back the booking it created. The
+	// key is spent by that request: reused by another user, show or seat lot,
+	// or once its booking ended, it is refused (L6).
 	if key != "" {
-		existing, err := s.repo.LockPendingByKey(ctx, tx, key)
+		existing, err := s.repo.LockLatestByKey(ctx, tx, key)
 		if err != nil {
 			return nil, nil, err
 		}
 		if existing != nil {
-			if existing.UserID != userID || existing.ShowtimeID != showID {
-				return nil, nil, apperrors.Conflict("idempotency key was already used for another request")
+			if existing.UserID != userID || existing.ShowtimeID != showID || existing.Status != models.BookingPending {
+				return nil, nil, apperrors.ErrIdempotencyKeyReused
+			}
+			same, err := s.sameSeats(ctx, tx, existing.ID, seatIDs)
+			if err != nil {
+				return nil, nil, err
+			}
+			if !same {
+				return nil, nil, apperrors.ErrIdempotencyKeyReused
 			}
 			if existing.ExpiresAt == nil || !existing.ExpiresAt.After(now) {
 				return nil, nil, apperrors.ErrBookingExpired
@@ -647,28 +676,56 @@ func (s *bookingService) paymentFor(ctx context.Context, b *models.Booking) (*mo
 // Gate (F12)
 // ---------------------------------------------------------------------------
 
+// Default check-in window around the showtime start (E-T4).
+const (
+	defaultCheckinOpenBefore = 30 * time.Minute
+	defaultCheckinCloseAfter = 20 * time.Minute
+)
+
 // Redeem checks a ticket in at the gate. ticketRef is the ticket id or the
-// code read from the QR. Only an ISSUED ticket of the staffed showtime flips
-// to REDEEMED, exactly once (E-T1); a ticket of another show is only reported.
+// code read from the QR. Verdicts go in this order: not_found, wrong_show,
+// used, too_early, closed, ok. Only an ISSUED ticket of the staffed showtime
+// inside its check-in window flips to REDEEMED, exactly once (E-T1); a closed
+// showtime still lets its tickets in (E-T5). Any other verdict changes nothing
+// and is audited as a failure (E-T6).
 func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error) {
 	row, err := s.repo.TicketForGate(ctx, ticketRef)
 	if err != nil {
 		return nil, err
 	}
 	if row == nil || row.BookingStatus != models.BookingConfirmed {
-		return &dto.RedeemResponse{Status: models.RedeemNotFound}, nil
+		res := &dto.RedeemResponse{Status: models.RedeemNotFound}
+		s.auditScan(ctx, "", showtimeID, res.Status)
+		return res, nil
 	}
 	startAt := row.StartAt
+	opensAt, closesAt := startAt.Add(-s.checkinOpenBefore), startAt.Add(s.checkinCloseAfter)
 	res := &dto.RedeemResponse{
-		TicketID:   row.ID,
-		ShowtimeID: row.ShowtimeID,
-		MovieTitle: row.MovieTitle,
-		HallName:   row.HallName,
-		SeatLabel:  dto.SeatLabel(row.RowLabel, row.ColNumber),
-		StartAt:    &startAt,
+		TicketID:        row.ID,
+		ShowtimeID:      row.ShowtimeID,
+		MovieTitle:      row.MovieTitle,
+		HallName:        row.HallName,
+		SeatLabel:       dto.SeatLabel(row.RowLabel, row.ColNumber),
+		StartAt:         &startAt,
+		CheckinOpensAt:  &opensAt,
+		CheckinClosesAt: &closesAt,
 	}
-	if row.ShowtimeID != showtimeID {
+	now, err := s.repo.Now(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case row.ShowtimeID != showtimeID:
 		res.Status = models.RedeemWrongShow // E-T2
+	case row.Status != models.TicketIssued:
+		res.Status = models.RedeemUsed
+	case now.Before(opensAt):
+		res.Status = models.RedeemTooEarly
+	case now.After(closesAt):
+		res.Status = models.RedeemClosed
+	}
+	if res.Status != "" {
+		s.auditScan(ctx, row.ID, showtimeID, res.Status)
 		return res, nil
 	}
 
@@ -691,8 +748,46 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 	res.Status = models.RedeemOK
 	if used {
 		res.Status = models.RedeemUsed
+		s.auditScan(ctx, row.ID, showtimeID, res.Status)
 	}
 	return res, nil
+}
+
+// auditScan records a gate scan that let nobody in, outside any transaction
+// (E-T6). The scanned code is never logged: the ticket id, when known, stands
+// for it.
+func (s *bookingService) auditScan(ctx context.Context, ticketID, showtimeID, verdict string) {
+	rec, ok := audit.FromContext(ctx)
+	if !ok {
+		rec = audit.Record{ActorRole: "system"}
+	}
+	rec.Action = "staff.redeem_ticket"
+	rec.ResourceType = "ticket"
+	rec.ResourceID = ticketID
+	rec.Before = nil
+	rec.After = map[string]any{"showtime_id": showtimeID, "verdict": verdict}
+	rec.Outcome = audit.OutcomeFailure
+	rec.ErrorMessage = verdict
+	if err := audit.In(context.WithoutCancel(ctx), s.db, rec); err != nil {
+		logger.Warn("refused ticket scan not audited", logger.Err(err))
+	}
+}
+
+// sameSeats reports whether a booking holds exactly the requested seats.
+func (s *bookingService) sameSeats(ctx context.Context, tx *gorm.DB, bookingID string, seatIDs []string) (bool, error) {
+	held, err := s.repo.BookingSeats(ctx, tx, bookingID)
+	if err != nil {
+		return false, err
+	}
+	if len(held) != len(seatIDs) {
+		return false, nil
+	}
+	for _, bs := range held {
+		if !slices.Contains(seatIDs, bs.ShowtimeSeatID) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // ---------------------------------------------------------------------------

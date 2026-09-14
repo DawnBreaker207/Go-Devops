@@ -58,6 +58,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS one_pending_per_user_show
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_idempotency_pending
     ON bookings (idempotency_key) WHERE status = 'pending' AND idempotency_key IS NOT NULL;
 
+-- A key is spent by its request: it is looked up across every status so a
+-- reused key can be refused (E-HO3).
+CREATE INDEX IF NOT EXISTS idx_bookings_idempotency_key
+    ON bookings (idempotency_key) WHERE idempotency_key IS NOT NULL;
+
 -- Sweep: overdue PENDING bookings.
 CREATE INDEX IF NOT EXISTS idx_bookings_pending_expires
     ON bookings (expires_at) WHERE status = 'pending';

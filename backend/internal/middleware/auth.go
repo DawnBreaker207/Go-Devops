@@ -28,44 +28,62 @@ type AccountChecker interface {
 // and, with accounts set, that the account is still active with the same role.
 func Auth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if header == "" {
+		if c.GetHeader("Authorization") == "" {
 			response.Abort(c, apperrors.Unauthorized("authorization header is required"))
 			return
 		}
-
-		parts := strings.Fields(header)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			response.Abort(c, apperrors.Unauthorized("authorization header must be in format: Bearer <token>"))
-			return
+		if authenticate(c, jwtManager, accounts) {
+			c.Next()
 		}
-
-		claims, err := jwtManager.ParseAccess(parts[1])
-		if err != nil {
-			response.Abort(c, err)
-			return
-		}
-		if accounts != nil {
-			active, role, err := accounts.Status(c.Request.Context(), claims.UserID)
-			switch {
-			case err != nil:
-				response.Abort(c, err)
-				return
-			case !active:
-				response.Abort(c, apperrors.ErrAccountLocked)
-				return
-			case role != claims.Role:
-				// A new role needs a new token: log in again.
-				response.Abort(c, apperrors.ErrInvalidToken)
-				return
-			}
-		}
-
-		c.Set(ContextUserID, claims.UserID)
-		c.Set(ContextUserEmail, claims.Email)
-		c.Set(ContextUserRole, claims.Role)
-		c.Next()
 	}
+}
+
+// OptionalAuth lets a request without an Authorization header through as an
+// anonymous visitor (public catalog). A header that is sent must still be
+// valid: a wrong or expired token answers 401 instead of silently browsing as
+// a guest, so the client knows to refresh it (E-CAT6).
+func OptionalAuth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetHeader("Authorization") == "" || authenticate(c, jwtManager, accounts) {
+			c.Next()
+		}
+	}
+}
+
+// authenticate checks the bearer token and stores the user in the context. On
+// failure it aborts the request with the error and returns false.
+func authenticate(c *gin.Context, jwtManager *jwt.Manager, accounts AccountChecker) bool {
+	parts := strings.Fields(c.GetHeader("Authorization"))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		response.Abort(c, apperrors.Unauthorized("authorization header must be in format: Bearer <token>"))
+		return false
+	}
+
+	claims, err := jwtManager.ParseAccess(parts[1])
+	if err != nil {
+		response.Abort(c, err)
+		return false
+	}
+	if accounts != nil {
+		active, role, err := accounts.Status(c.Request.Context(), claims.UserID)
+		switch {
+		case err != nil:
+			response.Abort(c, err)
+			return false
+		case !active:
+			response.Abort(c, apperrors.ErrAccountLocked)
+			return false
+		case role != claims.Role:
+			// A new role needs a new token: log in again.
+			response.Abort(c, apperrors.ErrInvalidToken)
+			return false
+		}
+	}
+
+	c.Set(ContextUserID, claims.UserID)
+	c.Set(ContextUserEmail, claims.Email)
+	c.Set(ContextUserRole, claims.Role)
+	return true
 }
 
 // RequireRoles allows only the listed roles. Must run after Auth.

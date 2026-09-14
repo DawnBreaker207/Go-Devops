@@ -39,8 +39,10 @@ type httpEnv struct {
 	engine *gin.Engine
 	srv    *httptest.Server
 	tokens *sse.TokenStore
-	// trustedProxies configures the engine built after it is set.
+	// trustedProxies and publicLimiter (nil: unlimited) configure the engine
+	// built after they are set.
 	trustedProxies []string
+	publicLimiter  *ratelimit.Limiter
 }
 
 func newHTTPEnv(t *testing.T) *httpEnv {
@@ -63,9 +65,14 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 	mediaDir := h.t.TempDir()
 	userRepo := repository.NewUserRepository(db)
 	accounts := service.NewAccountStatusCache(userRepo, 30*time.Second)
+	public := h.publicLimiter
+	if public == nil {
+		public = ratelimit.New(10000, 1000)
+	}
 	limits := router.Limiters{
 		Auth:   ratelimit.New(10000, 1000),
 		Hold:   ratelimit.New(10000, 1000),
+		Public: public,
 		Events: ratelimit.New(10000, 1000),
 	}
 	return router.New(cfg, db, h.jwt, accounts, limits, h.providers, router.Handlers{

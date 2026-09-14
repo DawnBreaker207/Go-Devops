@@ -109,8 +109,9 @@ func TestStaffBoard(t *testing.T) {
 	id := e.confirmed(e.users[0], "A1", "A2")
 	order, err := e.svc.Order(e.ctx, e.users[0], id)
 	e.must(err)
-	if _, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID); err != nil {
-		t.Fatal(err)
+	e.moveShowStart(e.showID, 10*time.Minute) // inside the check-in window
+	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID); err != nil || res.Status != models.RedeemOK {
+		t.Fatalf("redeem: %+v %v", res, err)
 	}
 	e.mustHold(e.users[1], "B1")
 

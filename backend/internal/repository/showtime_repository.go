@@ -13,8 +13,9 @@ import (
 // ShowtimeRow is a showtime joined with its hall name and movie title.
 type ShowtimeRow struct {
 	models.Showtime
-	HallName   string `gorm:"column:hall_name"`
-	MovieTitle string `gorm:"column:movie_title"`
+	HallName    string `gorm:"column:hall_name"`
+	MovieTitle  string `gorm:"column:movie_title"`
+	MovieStatus string `gorm:"column:movie_status"`
 }
 
 // ShowtimePickRow is a showtime in the customer picker, with price.
@@ -129,7 +130,7 @@ func (r *ShowtimeRepository) FindByID(ctx context.Context, id string) (*Showtime
 		Model(&models.Showtime{}).
 		Select(`showtimes.id, showtimes.movie_id, showtimes.hall_id, showtimes.start_at,
 			showtimes.end_at, showtimes.status, showtimes.created_at, showtimes.updated_at,
-			halls.name AS hall_name, movies.title AS movie_title`).
+			halls.name AS hall_name, movies.title AS movie_title, movies.status AS movie_status`).
 		Joins("JOIN halls ON halls.id = showtimes.hall_id").
 		Joins("JOIN movies ON movies.id = showtimes.movie_id").
 		Where("showtimes.id = ?", id).
@@ -140,12 +141,14 @@ func (r *ShowtimeRepository) FindByID(ctx context.Context, id string) (*Showtime
 	return &row, err
 }
 
-// OverlapCount returns how many showtimes in the hall overlap [start, end],
-// excluding the given showtime id (empty on create).
-func (r *ShowtimeRepository) OverlapCount(tx *gorm.DB, hallID string, start, end time.Time, excludeID string) (int64, error) {
+// OverlapCount returns how many showtimes in the hall collide with one running
+// [start, end]. The cleaning buffer applies on both sides: after the earlier
+// showtime and before the later one (H5). excludeID is the showtime being
+// changed (empty on create).
+func (r *ShowtimeRepository) OverlapCount(tx *gorm.DB, hallID string, start, end time.Time, buffer time.Duration, excludeID string) (int64, error) {
 	var count int64
 	q := tx.Model(&models.Showtime{}).
-		Where("hall_id = ? AND start_at < ? AND end_at > ?", hallID, end, start)
+		Where("hall_id = ? AND start_at < ? AND end_at > ?", hallID, end.Add(buffer), start.Add(-buffer))
 	if excludeID != "" {
 		q = q.Where("id <> ?", excludeID)
 	}

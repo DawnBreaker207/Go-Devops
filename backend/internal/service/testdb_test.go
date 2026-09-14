@@ -316,6 +316,16 @@ func (e *env) newShowtime(in time.Duration) string {
 	return st.ID
 }
 
+// moveShowStart makes a showtime start in d from the DB clock (negative: it
+// already started), keeping its length, to reach the check-in window or a
+// started show without waiting.
+func (e *env) moveShowStart(showID string, d time.Duration) {
+	e.t.Helper()
+	e.must(e.db.Exec(`UPDATE showtimes SET start_at = NOW() + make_interval(secs => ?),
+		end_at = NOW() + make_interval(secs => ?) + (end_at - start_at) WHERE id = ?`,
+		d.Seconds(), d.Seconds(), showID).Error)
+}
+
 func (e *env) seatsOf(showID string) map[string]string {
 	e.t.Helper()
 	var rows []struct {

@@ -182,6 +182,14 @@ var (
 	ErrShowtimeScheduleLocked = Conflict("showtime with pending or confirmed bookings can only be opened or closed")
 	ErrShowtimeHallLocked     = Conflict("showtime hall can not change once it has bookings")
 	ErrShowtimeChanged        = Conflict("showtime was changed by someone else, reload and retry")
+	ErrShowtimeReopenLocked   = Conflict("showtime can only reopen while its movie is showing and before it starts")
+
+	// Changing a movie that still has showtimes to come (F2 E-M2, E-M4).
+	ErrMovieHasShowtimes   = Conflict("movie has open showtimes still to come; close or delete them first")
+	ErrMovieDurationLocked = Conflict("movie duration can not change while it has showtimes still to come")
+
+	// An idempotency key backs a single hold request (E-HO3).
+	ErrIdempotencyKeyReused = Conflict("idempotency key was already used for another request")
 
 	ErrBookingNotFound   = NotFound("booking not found")
 	ErrSeatTaken         = Conflict("one or more seats are no longer available")

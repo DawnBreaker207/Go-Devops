@@ -678,6 +678,7 @@ func TestRedeem(t *testing.T) {
 	e.must(err)
 	first, second := order.Tickets[0], order.Tickets[1]
 	otherShow := e.newShowtime(8 * time.Hour)
+	e.moveShowStart(e.showID, 10*time.Minute) // inside the check-in window (E-T4)
 
 	check := func(ref, show, want string) *dto.RedeemResponse {
 		t.Helper()

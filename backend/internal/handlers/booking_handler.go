@@ -192,7 +192,7 @@ func (h *BookingHandler) Order(c *gin.Context) {
 // Redeem godoc
 //
 //	@Summary		Check a ticket in at the gate (staff)
-//	@Description	id is the ticket id or the code read from the QR. Verdict: ok | used | wrong_show | not_found.
+//	@Description	id is the ticket id or the code read from the QR. Verdict: ok | used | wrong_show | not_found | too_early | closed (outside the check-in window, returned as checkin_opens_at / checkin_closes_at).
 //	@Tags			tickets
 //	@Accept			json
 //	@Produce		json

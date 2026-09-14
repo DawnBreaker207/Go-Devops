@@ -23,7 +23,7 @@ type MovieService interface {
 }
 
 type movieService struct {
-	db       *gorm.DB
+	db        *gorm.DB
 	movieRepo repository.MovieRepository
 }
 
@@ -85,33 +85,58 @@ func (s *movieService) Create(ctx context.Context, req dto.MovieRequest) (*dto.M
 	return &result, nil
 }
 
+// Update changes a movie. While showtimes of it are still to come it can not
+// leave "showing" or change its duration (E-M4): sold tickets would point at a
+// movie no longer on the schedule, and showtimes would end at the wrong time.
 func (s *movieService) Update(ctx context.Context, id string, req dto.MovieRequest) (*dto.MovieResponse, error) {
-	movie, err := s.movieRepo.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
 	releaseDate, err := req.ParseReleaseDate()
 	if err != nil {
 		return nil, apperrors.Validation("release_date must follow format YYYY-MM-DD").Wrap(err)
 	}
 
-	movie.Title = strings.TrimSpace(req.Title)
-	movie.Genre = strings.TrimSpace(req.Genre)
-	movie.Duration = req.Duration
-	movie.Director = strings.TrimSpace(req.Director)
-	movie.Description = req.Description
-	movie.PosterURL = req.PosterURL
-	movie.ReleaseDate = releaseDate
-	movie.Status = req.Status
-
+	var movie *models.Movie
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.movieRepo.Update(ctx, tx, movie); err != nil {
+		// Lock the movie, then look at its showtimes: scheduling a showtime
+		// share-locks the movie, so none slips in between (F5 E-S3).
+		current, err := s.movieRepo.LockForUpdate(ctx, tx, id)
+		if err != nil {
 			return err
 		}
+		if current.Status == models.MovieStatusShowing && req.Status != models.MovieStatusShowing {
+			upcoming, err := s.movieRepo.HasUpcomingShowtimes(ctx, tx, id, false)
+			if err != nil {
+				return err
+			}
+			if upcoming {
+				return apperrors.ErrMovieHasShowtimes
+			}
+		}
+		if current.Duration != req.Duration {
+			// Closed showtimes count too: reopened, they would end at the wrong time.
+			upcoming, err := s.movieRepo.HasUpcomingShowtimes(ctx, tx, id, true)
+			if err != nil {
+				return err
+			}
+			if upcoming {
+				return apperrors.ErrMovieDurationLocked
+			}
+		}
+
+		current.Title = strings.TrimSpace(req.Title)
+		current.Genre = strings.TrimSpace(req.Genre)
+		current.Duration = req.Duration
+		current.Director = strings.TrimSpace(req.Director)
+		current.Description = req.Description
+		current.PosterURL = req.PosterURL
+		current.ReleaseDate = releaseDate
+		current.Status = req.Status
+		if err := s.movieRepo.Update(ctx, tx, current); err != nil {
+			return err
+		}
+		movie = current
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = id
-			rec.After = map[string]any{"title": movie.Title, "status": movie.Status}
+			rec.After = map[string]any{"title": current.Title, "status": current.Status}
 			return audit.In(ctx, tx, rec)
 		}
 		return nil
@@ -123,8 +148,21 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 	return &result, nil
 }
 
+// Delete soft-deletes a movie. One with open showtimes still to come is
+// refused (E-M2): close or delete those first. Past showtimes and their
+// bookings stay.
 func (s *movieService) Delete(ctx context.Context, id string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
+		if _, err := s.movieRepo.LockForUpdate(ctx, tx, id); err != nil {
+			return err
+		}
+		upcoming, err := s.movieRepo.HasUpcomingShowtimes(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		if upcoming {
+			return apperrors.ErrMovieHasShowtimes
+		}
 		if err := s.movieRepo.Delete(ctx, tx, id); err != nil {
 			return err
 		}

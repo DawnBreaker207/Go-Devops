@@ -136,6 +136,8 @@ func run() error {
 		Hub:           hub,
 
 		LateCaptureWindow: cfg.Payment.LateCaptureWindow,
+		CheckinOpenBefore: time.Duration(cfg.Checkin.OpenBeforeMinutes) * time.Minute,
+		CheckinCloseAfter: time.Duration(cfg.Checkin.CloseAfterMinutes) * time.Minute,
 	}
 	if queueClient != nil {
 		bookingOpts.Publisher = queueClient
@@ -155,10 +157,11 @@ func run() error {
 	mediaService := service.NewMediaService(imageStore, maxUpload)
 
 	// Rate limits: /auth against brute force, /orders/hold against seat bots,
-	// realtime tokens per user.
+	// the public catalog per IP, realtime tokens per user.
 	limits := router.Limiters{
 		Auth:   ratelimit.New(cfg.RateLimit.Auth.Capacity, cfg.RateLimit.Auth.RefillPerSecond),
 		Hold:   ratelimit.New(cfg.RateLimit.Hold.Capacity, cfg.RateLimit.Hold.RefillPerSecond),
+		Public: ratelimit.New(cfg.RateLimit.Public.Capacity, cfg.RateLimit.Public.RefillPerSecond),
 		Events: ratelimit.New(cfg.RateLimit.Events.Capacity, cfg.RateLimit.Events.RefillPerSecond),
 	}
 

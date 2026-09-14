@@ -50,6 +50,10 @@ rate_limit:
   hold:
     capacity: 20
     refill_per_second: 5
+  # Anonymous catalog reads (movies, showtimes) per IP.
+  public:
+    capacity: 60
+    refill_per_second: 20
   # Realtime tokens per user.
   events:
     capacity: 10
@@ -67,6 +71,12 @@ queue:
 booking:
   hold_ttl_minutes: 10
   max_seats_per_booking: 10
+
+# Gate check-in window around the showtime start; outside it a scan answers
+# too_early / closed and the ticket stays unused.
+checkin:
+  open_before_minutes: 30
+  close_after_minutes: 20
 
 # Payments: every provider is an option of its own, enabled independently.
 # The mock is one provider like any real gateway would be.

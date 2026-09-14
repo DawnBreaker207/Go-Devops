@@ -104,4 +104,8 @@ type RedeemResponse struct {
 	HallName   string     `json:"hall_name,omitempty"`
 	SeatLabel  string     `json:"seat_label,omitempty"`
 	StartAt    *time.Time `json:"start_at,omitempty"`
+	// Check-in window of the showtime (E-T4), so the gate can tell when the
+	// doors open or closed.
+	CheckinOpensAt  *time.Time `json:"checkin_opens_at,omitempty"`
+	CheckinClosesAt *time.Time `json:"checkin_closes_at,omitempty"`
 }

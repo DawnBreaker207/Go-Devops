@@ -23,6 +23,7 @@ type Config struct {
 	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 	Queue     QueueConfig     `mapstructure:"queue"`
 	Booking   BookingConfig   `mapstructure:"booking"`
+	Checkin   CheckinConfig   `mapstructure:"checkin"`
 	Payment   PaymentConfig   `mapstructure:"payment"`
 	Mail      MailConfig      `mapstructure:"mail"`
 	Storage   StorageConfig   `mapstructure:"storage"`
@@ -90,6 +91,8 @@ type CORSConfig struct {
 type RateLimitConfig struct {
 	Auth RateLimitRule `mapstructure:"auth"`
 	Hold RateLimitRule `mapstructure:"hold"`
+	// Public throttles the anonymous catalog reads per IP.
+	Public RateLimitRule `mapstructure:"public"`
 	// Events throttles realtime tokens per user.
 	Events RateLimitRule    `mapstructure:"events"`
 	Login  LoginGuardConfig `mapstructure:"login"`
@@ -119,6 +122,13 @@ type BookingConfig struct {
 	HoldTTLMinutes int `mapstructure:"hold_ttl_minutes"`
 	// MaxSeatsPerBooking caps how many seats one customer can hold at once.
 	MaxSeatsPerBooking int `mapstructure:"max_seats_per_booking"`
+}
+
+// CheckinConfig is when a ticket gets in at the gate (E-T4): from
+// OpenBeforeMinutes before the showtime starts to CloseAfterMinutes after.
+type CheckinConfig struct {
+	OpenBeforeMinutes int `mapstructure:"open_before_minutes"`
+	CloseAfterMinutes int `mapstructure:"close_after_minutes"`
 }
 
 // PaymentConfig configures payments. Every provider — the mock as much as a
@@ -328,8 +338,14 @@ func (c *Config) validate() error {
 	if c.App.RoomCleanupMinutes < 0 || c.App.RoomCleanupMinutes > 240 {
 		return fmt.Errorf("app.room_cleanup_minutes must be between 0 and 240, got %d", c.App.RoomCleanupMinutes)
 	}
+	if c.Checkin.OpenBeforeMinutes < 1 || c.Checkin.OpenBeforeMinutes > 240 {
+		return fmt.Errorf("checkin.open_before_minutes must be between 1 and 240, got %d", c.Checkin.OpenBeforeMinutes)
+	}
+	if c.Checkin.CloseAfterMinutes < 0 || c.Checkin.CloseAfterMinutes > 240 {
+		return fmt.Errorf("checkin.close_after_minutes must be between 0 and 240, got %d", c.Checkin.CloseAfterMinutes)
+	}
 	for name, rule := range map[string]RateLimitRule{
-		"auth": c.RateLimit.Auth, "hold": c.RateLimit.Hold, "events": c.RateLimit.Events,
+		"auth": c.RateLimit.Auth, "hold": c.RateLimit.Hold, "public": c.RateLimit.Public, "events": c.RateLimit.Events,
 	} {
 		if rule.Capacity < 1 || rule.RefillPerSecond <= 0 {
 			return fmt.Errorf("rate_limit.%s needs capacity >= 1 and refill_per_second > 0", name)
@@ -403,6 +419,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rate_limit.auth.refill_per_second", 2)
 	v.SetDefault("rate_limit.hold.capacity", 20)
 	v.SetDefault("rate_limit.hold.refill_per_second", 5)
+	v.SetDefault("rate_limit.public.capacity", 60)
+	v.SetDefault("rate_limit.public.refill_per_second", 20)
 	v.SetDefault("rate_limit.events.capacity", 10)
 	v.SetDefault("rate_limit.events.refill_per_second", 0.2)
 	v.SetDefault("rate_limit.login.max_failures", 5)
@@ -421,6 +439,9 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("booking.hold_ttl_minutes", 10)
 	v.SetDefault("booking.max_seats_per_booking", 10)
+
+	v.SetDefault("checkin.open_before_minutes", 30)
+	v.SetDefault("checkin.close_after_minutes", 20)
 
 	v.SetDefault("payment.public_base_url", "http://localhost:8080")
 	v.SetDefault("payment.return_redirect_url", "")

@@ -44,6 +44,7 @@ type Handlers struct {
 type Limiters struct {
 	Auth   *ratelimit.Limiter // per IP, against password guessing
 	Hold   *ratelimit.Limiter // per IP, against seat bots
+	Public *ratelimit.Limiter // per IP, anonymous catalog reads
 	Events *ratelimit.Limiter // per user, realtime tokens
 }
 
@@ -112,21 +113,28 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		auth.POST("/refresh", middleware.Audit(db, "auth.refresh", "user"), h.Auth.Refresh)
 	}
 
+	// Public catalog (F3, DEC-01): movies and showtimes need no account. A token,
+	// when sent, must still be valid (E-CAT6); signed-in admins and staff also
+	// see draft movies. Throttled per client IP (E-CAT7).
+	public := v1.Group("")
+	public.Use(middleware.RateLimit(limits.Public), middleware.OptionalAuth(jwtManager, accounts))
+	{
+		public.GET("/movies", h.Movie.List)
+		public.GET("/movies/:id", h.Movie.Detail)
+		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
+		public.GET("/showtimes", h.Showtime.List) // SHOW-02
+	}
+
 	protected := v1.Group("")
 	protected.Use(middleware.Auth(jwtManager, accounts))
 	{
 		protected.GET("/users/me", h.User.Me)
 
-		// Customer views.
-		protected.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
-		protected.GET("/showtimes", h.Showtime.List) // SHOW-02
+		// Picking seats needs an account (E-CAT8).
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
 
 		movies := protected.Group("/movies")
 		{
-			movies.GET("", h.Movie.List)
-			movies.GET("/:id", h.Movie.Detail)
-
 			// Writes are admin/staff only. Audit runs before role checks so
 			// forbidden attempts on an authenticated route are logged too.
 			movies.POST("", middleware.Audit(db, "admin.create_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Create)

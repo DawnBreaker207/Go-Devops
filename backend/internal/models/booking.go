@@ -95,6 +95,8 @@ const (
 	RedeemUsed      = "used"
 	RedeemWrongShow = "wrong_show"
 	RedeemNotFound  = "not_found"
+	RedeemTooEarly  = "too_early" // before the check-in window opens
+	RedeemClosed    = "closed"    // after the check-in window closed
 )
 
 // Ticket represents one seat sold within a booking.

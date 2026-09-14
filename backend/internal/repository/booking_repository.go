@@ -77,9 +77,10 @@ type BookingRepository interface {
 	LockUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) error
 	UserActive(ctx context.Context, tx *gorm.DB, userID string) (bool, error)
 	LockBooking(ctx context.Context, tx *gorm.DB, id string) (*models.Booking, error)
-	LockPendingByKey(ctx context.Context, tx *gorm.DB, idempotencyKey string) (*models.Booking, error)
+	LockLatestByKey(ctx context.Context, tx *gorm.DB, idempotencyKey string) (*models.Booking, error)
 	LockPendingByUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) (*models.Booking, error)
 	LockShowtime(ctx context.Context, tx *gorm.DB, id string) (*models.Showtime, error)
+	MovieShowing(ctx context.Context, tx *gorm.DB, movieID string) (bool, error)
 
 	Create(ctx context.Context, tx *gorm.DB, booking *models.Booking) error
 	CreateBookingSeats(ctx context.Context, tx *gorm.DB, seats []models.BookingSeat) error
@@ -211,9 +212,11 @@ func (r *bookingRepository) LockBooking(ctx context.Context, tx *gorm.DB, id str
 	return firstOrNil[models.Booking](r.conn(ctx, tx).Clauses(forUpdate()).Where("id = ?", id), "lock booking")
 }
 
-func (r *bookingRepository) LockPendingByKey(ctx context.Context, tx *gorm.DB, key string) (*models.Booking, error) {
+// LockLatestByKey locks the newest booking created with an idempotency key,
+// whatever its status: a key backs one request only (E-HO3).
+func (r *bookingRepository) LockLatestByKey(ctx context.Context, tx *gorm.DB, key string) (*models.Booking, error) {
 	return firstOrNil[models.Booking](r.conn(ctx, tx).Clauses(forUpdate()).
-		Where("idempotency_key = ? AND status = ?", key, models.BookingPending), "lock booking by idempotency key")
+		Where("idempotency_key = ?", key).Order("created_at DESC"), "lock booking by idempotency key")
 }
 
 func (r *bookingRepository) LockPendingByUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) (*models.Booking, error) {
@@ -225,6 +228,16 @@ func (r *bookingRepository) LockPendingByUserShow(ctx context.Context, tx *gorm.
 // admin closing/rescheduling the show waits for them (and vice versa).
 func (r *bookingRepository) LockShowtime(ctx context.Context, tx *gorm.DB, id string) (*models.Showtime, error) {
 	return firstOrNil[models.Showtime](r.conn(ctx, tx).Clauses(forShare()).Where("id = ?", id), "lock showtime")
+}
+
+// MovieShowing reports whether a movie still sells tickets (H6).
+func (r *bookingRepository) MovieShowing(ctx context.Context, tx *gorm.DB, movieID string) (bool, error) {
+	var status []string
+	if err := r.conn(ctx, tx).Raw(`SELECT status FROM movies WHERE id = ? AND deleted_at IS NULL`, movieID).
+		Scan(&status).Error; err != nil {
+		return false, fmt.Errorf("read movie status: %w", err)
+	}
+	return len(status) == 1 && status[0] == models.MovieStatusShowing, nil
 }
 
 func (r *bookingRepository) Create(ctx context.Context, tx *gorm.DB, booking *models.Booking) error {

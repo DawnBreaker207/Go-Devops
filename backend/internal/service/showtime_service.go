@@ -24,17 +24,11 @@ type ShowtimeService interface {
 	OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
 }
 
-// OpenShowtime returns a showtime that is open for sales (realtime tokens).
+// OpenShowtime returns a showtime that is still on sale (realtime tokens).
 func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error) {
-	row, err := s.showtime.FindByID(ctx, id)
+	row, err := s.onSale(ctx, id)
 	if err != nil {
 		return nil, err
-	}
-	if row == nil {
-		return nil, apperrors.ErrShowtimeNotFound
-	}
-	if row.Status != models.ShowtimeOpen {
-		return nil, apperrors.ErrShowtimeNotOpen
 	}
 	return &dto.ShowtimeResponse{
 		ID:         row.ID,
@@ -48,6 +42,23 @@ func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.Sho
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
 	}, nil
+}
+
+// onSale returns a showtime that still sells seats: open, not started yet and
+// of a movie that is showing (H6, L11). Seat maps and realtime tokens serve
+// nothing else.
+func (s *showtimeService) onSale(ctx context.Context, id string) (*repository.ShowtimeRow, error) {
+	row, err := s.showtime.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, apperrors.ErrShowtimeNotFound
+	}
+	if row.Status != models.ShowtimeOpen || !row.StartAt.After(time.Now()) || row.MovieStatus != models.MovieStatusShowing {
+		return nil, apperrors.ErrShowtimeNotOpen
+	}
+	return row, nil
 }
 
 type showtimeService struct {
@@ -70,17 +81,24 @@ func NewShowtimeService(db *gorm.DB, showtime *repository.ShowtimeRepository, ha
 	}
 }
 
-func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error) {
-	movie, err := s.movie.FindByID(ctx, req.MovieID)
+// endOf share-locks the movie and returns when a showtime of it starting at
+// start ends. Only a showing movie can be scheduled (E-S3); ending it or
+// changing its duration waits for this transaction and then sees the showtime.
+func (s *showtimeService) endOf(ctx context.Context, tx *gorm.DB, movieID string, start time.Time) (time.Time, error) {
+	movie, err := s.movie.LockForShare(ctx, tx, movieID)
 	if err != nil {
-		return nil, err
+		return time.Time{}, err
 	}
 	if movie.Status != models.MovieStatusShowing {
-		return nil, apperrors.ErrMovieNotShowing
+		return time.Time{}, apperrors.ErrMovieNotShowing
 	}
 	if movie.Duration <= 0 {
-		return nil, apperrors.Validation("movie duration must be positive")
+		return time.Time{}, apperrors.Validation("movie duration must be positive")
 	}
+	return start.Add(time.Duration(movie.Duration) * time.Minute), nil
+}
+
+func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error) {
 	if _, err := s.hall.FindByID(ctx, req.HallID); err != nil {
 		return nil, err
 	}
@@ -89,22 +107,25 @@ func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (
 	if !start.After(time.Now()) {
 		return nil, apperrors.Validation("start_at must be in the future")
 	}
-	end := start.Add(time.Duration(movie.Duration) * time.Minute)
-	effectiveEnd := end.Add(s.cleanup)
 
 	showtime := &models.Showtime{
 		MovieID: req.MovieID,
 		HallID:  req.HallID,
 		StartAt: start,
-		EndAt:   end,
 		Status:  models.ShowtimeOpen,
 	}
 
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Lock order: the hall's scheduling lock, then the movie row (shared).
 		if err := s.showtime.LockHall(tx, req.HallID); err != nil {
 			return err
 		}
-		overlaps, err := s.showtime.OverlapCount(tx, req.HallID, start, effectiveEnd, "")
+		end, err := s.endOf(ctx, tx, req.MovieID, start)
+		if err != nil {
+			return err
+		}
+		showtime.EndAt = end
+		overlaps, err := s.showtime.OverlapCount(tx, req.HallID, start, end, s.cleanup, "")
 		if err != nil {
 			return err
 		}
@@ -151,34 +172,30 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 	if row == nil {
 		return nil, apperrors.ErrShowtimeNotFound
 	}
-	movie, err := s.movie.FindByID(ctx, req.MovieID)
-	if err != nil {
-		return nil, err
-	}
-	if movie.Status != models.MovieStatusShowing {
-		return nil, apperrors.ErrMovieNotShowing
-	}
-	if movie.Duration <= 0 {
-		return nil, apperrors.Validation("movie duration must be positive")
-	}
 	if _, err := s.hall.FindByID(ctx, req.HallID); err != nil {
 		return nil, err
 	}
 
 	start := req.StartAt.UTC().Truncate(time.Microsecond) // DB precision, so an unchanged time compares equal
-	if !start.After(time.Now()) {
+	// Only the status changes (E-S7): closing is always allowed, even once the
+	// showtime started or its movie ended; reopening is checked under the locks.
+	statusOnly := req.MovieID == row.MovieID && req.HallID == row.HallID && start.Equal(row.StartAt)
+	if !statusOnly && !start.After(time.Now()) {
 		return nil, apperrors.Validation("start_at must be in the future")
 	}
-	end := start.Add(time.Duration(movie.Duration) * time.Minute)
-	effectiveEnd := end.Add(s.cleanup)
 
 	before := map[string]any{"movie_id": row.MovieID, "hall_id": row.HallID,
 		"start_at": row.StartAt, "end_at": row.EndAt, "status": row.Status}
 
+	var (
+		end    time.Time
+		status string
+	)
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Lock order shared with hall layout changes: the scheduling lock of
-		// every hall involved (sorted), then the showtime row. Holds and confirms
-		// share-lock the row, so this waits for them and they see the result.
+		// every hall involved (sorted), then the showtime row, then the movie row
+		// (shared). Holds and confirms share-lock the showtime row, so this waits
+		// for them and they see the result.
 		halls := []string{row.HallID}
 		if req.HallID != row.HallID {
 			halls = append(halls, req.HallID)
@@ -199,47 +216,68 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		if current.HallID != row.HallID {
 			return apperrors.ErrShowtimeChanged // moved by a concurrent update: its hall is not locked
 		}
+		if statusOnly && (current.MovieID != row.MovieID || !current.StartAt.Equal(row.StartAt)) {
+			return apperrors.ErrShowtimeChanged
+		}
 
-		hallChanged := current.HallID != req.HallID
-		if hallChanged {
-			// The seat grid is rebuilt for the new hall, only possible while no
-			// booking of any status points at the old seats.
-			has, err := s.showtime.ShowtimeHasBookings(tx, id)
+		status = current.Status
+		if req.Status != "" {
+			status = req.Status
+		}
+		hallChanged := false
+		if statusOnly {
+			end = current.EndAt
+			if status == models.ShowtimeOpen && current.Status != models.ShowtimeOpen {
+				movie, err := s.movie.LockForShare(ctx, tx, current.MovieID)
+				if err != nil {
+					return err
+				}
+				if movie.Status != models.MovieStatusShowing || !current.StartAt.After(time.Now()) {
+					return apperrors.ErrShowtimeReopenLocked
+				}
+			}
+		} else {
+			if end, err = s.endOf(ctx, tx, req.MovieID, start); err != nil {
+				return err
+			}
+			hallChanged = current.HallID != req.HallID
+			if hallChanged {
+				// The seat grid is rebuilt for the new hall, only possible while no
+				// booking of any status points at the old seats.
+				has, err := s.showtime.ShowtimeHasBookings(tx, id)
+				if err != nil {
+					return err
+				}
+				if has {
+					return apperrors.ErrShowtimeHallLocked
+				}
+			} else if current.MovieID != req.MovieID || !current.StartAt.Equal(start) {
+				// Held and sold tickets name this movie and time: stop sales by
+				// closing the showtime instead (E-S4).
+				live, err := s.showtime.ShowtimeHasLiveBookings(tx, id)
+				if err != nil {
+					return err
+				}
+				if live {
+					return apperrors.ErrShowtimeScheduleLocked
+				}
+			}
+
+			overlaps, err := s.showtime.OverlapCount(tx, req.HallID, start, end, s.cleanup, id)
 			if err != nil {
 				return err
 			}
-			if has {
-				return apperrors.ErrShowtimeHallLocked
-			}
-		} else if current.MovieID != req.MovieID || !current.StartAt.Equal(start) {
-			// Held and sold tickets name this movie and time: stop sales by
-			// closing the showtime instead (E-S4).
-			live, err := s.showtime.ShowtimeHasLiveBookings(tx, id)
-			if err != nil {
-				return err
-			}
-			if live {
-				return apperrors.ErrShowtimeScheduleLocked
+			if overlaps > 0 {
+				return apperrors.ErrShowtimeOverlap
 			}
 		}
 
-		overlaps, err := s.showtime.OverlapCount(tx, req.HallID, start, effectiveEnd, id)
-		if err != nil {
-			return err
-		}
-		if overlaps > 0 {
-			return apperrors.ErrShowtimeOverlap
-		}
 		showtime := &models.Showtime{ID: id}
 		showtime.MovieID = req.MovieID
 		showtime.HallID = req.HallID
 		showtime.StartAt = start
 		showtime.EndAt = end
-		if req.Status != "" {
-			showtime.Status = req.Status
-		} else {
-			showtime.Status = current.Status
-		}
+		showtime.Status = status
 		if err := s.showtime.Update(tx, showtime); err != nil {
 			return err
 		}
@@ -268,18 +306,14 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		return nil, err
 	}
 
-	result := &dto.ShowtimeResponse{
+	return &dto.ShowtimeResponse{
 		ID:      id,
 		MovieID: req.MovieID,
 		HallID:  req.HallID,
 		StartAt: start,
 		EndAt:   end,
-		Status:  req.Status,
-	}
-	if result.Status == "" {
-		result.Status = row.Status
-	}
-	return result, nil
+		Status:  status,
+	}, nil
 }
 
 func (s *showtimeService) Delete(ctx context.Context, id string) error {
@@ -371,16 +405,12 @@ func (s *showtimeService) pickDay(ctx context.Context, movieID, date string) ([]
 	return result, nil
 }
 
+// SeatMap serves the seat grid of a showtime still on sale; a closed or
+// started showtime, or one of a movie no longer showing, is not found (L11).
 func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.SeatMapResponse, error) {
-	row, err := s.showtime.FindByID(ctx, showtimeID)
+	row, err := s.onSale(ctx, showtimeID)
 	if err != nil {
 		return nil, err
-	}
-	if row == nil {
-		return nil, apperrors.ErrShowtimeNotFound
-	}
-	if row.Status != models.ShowtimeOpen {
-		return nil, apperrors.ErrShowtimeNotOpen
 	}
 	seats, err := s.showtime.SeatMap(ctx, showtimeID)
 	if err != nil {

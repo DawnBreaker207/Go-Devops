@@ -19,9 +19,11 @@ func validConfig() *Config {
 		RateLimit: RateLimitConfig{
 			Auth:   RateLimitRule{Capacity: 10, RefillPerSecond: 2},
 			Hold:   RateLimitRule{Capacity: 20, RefillPerSecond: 5},
+			Public: RateLimitRule{Capacity: 60, RefillPerSecond: 20},
 			Events: RateLimitRule{Capacity: 10, RefillPerSecond: 0.2},
 		},
 		Booking: BookingConfig{HoldTTLMinutes: 10, MaxSeatsPerBooking: 10},
+		Checkin: CheckinConfig{OpenBeforeMinutes: 30, CloseAfterMinutes: 20},
 		Payment: PaymentConfig{
 			LateCaptureWindow: 24 * time.Hour,
 			Providers:         PaymentProvidersConfig{Mock: MockProviderConfig{Enabled: true, Secret: "dev-mock-secret-change-in-prod"}},
@@ -105,6 +107,9 @@ func TestValidate_Bounds(t *testing.T) {
 		"tiny body limit":     func(c *Config) { c.Server.MaxBodyBytes = 10 },
 		"late window 10m":     func(c *Config) { c.Payment.LateCaptureWindow = 10 * time.Minute },
 		"mock without secret": func(c *Config) { c.Payment.Providers.Mock.Secret = "" },
+		"checkin opens 0":     func(c *Config) { c.Checkin.OpenBeforeMinutes = 0 },
+		"checkin closes 300":  func(c *Config) { c.Checkin.CloseAfterMinutes = 300 },
+		"public capacity 0":   func(c *Config) { c.RateLimit.Public.Capacity = 0 },
 	}
 	for name, mutate := range cases {
 		c := validConfig()
