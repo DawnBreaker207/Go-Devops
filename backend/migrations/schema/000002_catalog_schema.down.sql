@@ -1,5 +1,0 @@
-DROP TABLE IF EXISTS showtime_seats;
-DROP TABLE IF EXISTS showtimes;
-DROP TABLE IF EXISTS hall_prices;
-DROP TABLE IF EXISTS seats;
-DROP TABLE IF EXISTS halls;
