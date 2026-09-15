@@ -96,6 +96,79 @@ func (r *HallRepository) HallHasBookings(tx *gorm.DB, hallID string) (bool, erro
 	return count > 0, err
 }
 
+// HallEverHadBooking reports any booking of any status, including a
+// showtime later deleted: its booking_seats/tickets still reference the
+// hall's showtime_seats rows by foreign key, so regenerating the layout
+// (which deletes and recreates them) would fail, not just race.
+func (r *HallRepository) HallEverHadBooking(tx *gorm.DB, hallID string) (bool, error) {
+	var count int64
+	err := tx.Raw(`SELECT 1 FROM bookings b
+		JOIN showtimes s ON s.id = b.showtime_id
+		WHERE s.hall_id = ? LIMIT 1`, hallID).
+		Scan(&count).Error
+	return count > 0, err
+}
+
+// HasOpenUpcomingShowtimes reports an open showtime still to come, checked
+// before deactivating a hall.
+func (r *HallRepository) HasOpenUpcomingShowtimes(tx *gorm.DB, hallID string) (bool, error) {
+	var count int64
+	err := tx.Raw(`SELECT 1 FROM showtimes
+		WHERE hall_id = ? AND deleted_at IS NULL AND status = 'open' AND start_at > NOW() LIMIT 1`, hallID).
+		Scan(&count).Error
+	return count > 0, err
+}
+
+// HasUnfinishedShowtimes reports any showtime that has not ended yet
+// (open or closed), checked before deleting a hall.
+func (r *HallRepository) HasUnfinishedShowtimes(tx *gorm.DB, hallID string) (bool, error) {
+	var count int64
+	err := tx.Raw(`SELECT 1 FROM showtimes
+		WHERE hall_id = ? AND deleted_at IS NULL AND end_at > NOW() LIMIT 1`, hallID).
+		Scan(&count).Error
+	return count > 0, err
+}
+
+// UpdateHall persists name/screen/aisle/active. It must run inside a transaction.
+func (r *HallRepository) UpdateHall(tx *gorm.DB, hall *models.Hall) error {
+	return tx.Model(hall).
+		Select("name", "screen_position", "aisle_after_cols", "active", "updated_at").
+		Updates(hall).Error
+}
+
+// DeleteHall soft-deletes a hall. It must run inside a transaction.
+func (r *HallRepository) DeleteHall(tx *gorm.DB, hallID string) error {
+	return tx.Delete(&models.Hall{}, "id = ?", hallID).Error
+}
+
+// DeleteSeats drops every seat of a hall before its layout is regenerated;
+// only legal when HallEverHadBooking is false, and only after
+// DeleteShowtimeSeatsByHall (showtime_seats.seat_id would otherwise block
+// the delete). It must run inside a transaction.
+func (r *HallRepository) DeleteSeats(tx *gorm.DB, hallID string) error {
+	return tx.Exec(`DELETE FROM seats WHERE hall_id = ?`, hallID).Error
+}
+
+// DeleteShowtimeSeatsByHall drops the per-seat state of every showtime of the
+// hall (deleted or not), clearing the foreign key into seats before the grid
+// is rebuilt. Only legal when HallEverHadBooking is false: a booking_seats or
+// tickets row would otherwise still reference these rows and block this
+// delete. It must run inside a transaction.
+func (r *HallRepository) DeleteShowtimeSeatsByHall(tx *gorm.DB, hallID string) error {
+	return tx.Exec(`DELETE FROM showtime_seats WHERE showtime_id IN
+		(SELECT id FROM showtimes WHERE hall_id = ?)`, hallID).Error
+}
+
+// CreateShowtimeSeatsForHall re-creates showtime_seats for every seat of the
+// hall's own showtimes still open to come, from the grid just written by
+// CreateSeats. It must run inside a transaction, after DeleteShowtimeSeatsByHall.
+func (r *HallRepository) CreateShowtimeSeatsForHall(tx *gorm.DB, hallID string) error {
+	return tx.Exec(`INSERT INTO showtime_seats (id, showtime_id, seat_id, status)
+		SELECT gen_random_uuid(), st.id, se.id, 'available'
+		FROM showtimes st, seats se
+		WHERE st.hall_id = ? AND st.deleted_at IS NULL AND se.hall_id = ?`, hallID, hallID).Error
+}
+
 func (r *HallRepository) PricesByHall(ctx context.Context, hallID string) ([]models.HallPrice, error) {
 	var prices []models.HallPrice
 	err := r.db.WithContext(ctx).Where("hall_id = ?", hallID).Order("seat_type").Find(&prices).Error

@@ -39,9 +39,16 @@ CREATE TABLE IF NOT EXISTS halls (
     seats_per_row  INTEGER      NOT NULL CHECK (seats_per_row > 0),
     seat_types     JSONB        NOT NULL DEFAULT '{}',
     gaps           JSONB        NOT NULL DEFAULT '[]',
+    -- Where the screen sits relative to row A, for the seat-map renderer.
+    screen_position VARCHAR(8)  NOT NULL DEFAULT 'front',
+    -- Column numbers after which there is a vertical aisle (display only).
+    aisle_after_cols JSONB      NOT NULL DEFAULT '[]',
+    -- An inactive hall keeps its history but takes no new showtimes.
+    active         BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    deleted_at     TIMESTAMPTZ
+    deleted_at     TIMESTAMPTZ,
+    CONSTRAINT ck_hall_screen_position CHECK (screen_position IN ('front','back'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_halls_name ON halls (name) WHERE deleted_at IS NULL;

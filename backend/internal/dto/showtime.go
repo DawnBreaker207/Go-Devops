@@ -74,15 +74,17 @@ type SeatMapSeat struct {
 
 // SeatMapResponse is the seat grid for a showtime.
 type SeatMapResponse struct {
-	ShowtimeID string         `json:"showtime_id"`
-	MovieID    string         `json:"movie_id"`
-	MovieTitle string         `json:"movie_title"`
-	AgeRating  string         `json:"age_rating"`
-	HallID     string         `json:"hall_id"`
-	HallName   string         `json:"hall_name"`
-	StartAt    time.Time      `json:"start_at"`
-	EndAt      time.Time      `json:"end_at"`
-	Status     string         `json:"status"`
-	Prices     map[string]int64 `json:"prices"`
-	Seats      []SeatMapSeat  `json:"seats"`
+	ShowtimeID     string           `json:"showtime_id"`
+	MovieID        string           `json:"movie_id"`
+	MovieTitle     string           `json:"movie_title"`
+	AgeRating      string           `json:"age_rating"`
+	HallID         string           `json:"hall_id"`
+	HallName       string           `json:"hall_name"`
+	StartAt        time.Time        `json:"start_at"`
+	EndAt          time.Time        `json:"end_at"`
+	Status         string           `json:"status"`
+	ScreenPosition string           `json:"screen_position"`
+	AisleAfterCols []int            `json:"aisle_after_cols"`
+	Prices         map[string]int64 `json:"prices"`
+	Seats          []SeatMapSeat    `json:"seats"`
 }

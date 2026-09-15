@@ -138,11 +138,17 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 
 		catalog := protected.Group("/admin")
 		{
+			catalog.GET("/hall-templates", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Templates)
 			catalog.GET("/halls", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.List)
 			catalog.GET("/halls/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Show)
 			catalog.GET("/halls/:id/seats", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Seats)
 			catalog.GET("/halls/:id/prices", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Prices)
 			catalog.POST("/halls", middleware.Audit(db, "admin.create_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Create)
+			catalog.POST("/halls/:id/clone", middleware.Audit(db, "admin.clone_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Clone)
+			catalog.PUT("/halls/:id", middleware.Audit(db, "admin.update_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateHall)
+			catalog.PUT("/halls/:id/layout", middleware.Audit(db, "admin.update_hall_layout", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.RegenerateLayout)
+			catalog.DELETE("/halls/:id", middleware.Audit(db, "admin.delete_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteHall)
+			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
 			catalog.PUT("/halls/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
 			catalog.PUT("/halls/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)

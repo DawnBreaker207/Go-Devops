@@ -94,10 +94,15 @@ func (s *showtimeService) endOf(ctx context.Context, tx *gorm.DB, movieID string
 }
 
 func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error) {
-	if hall, err := s.hall.FindByID(ctx, req.HallID); err != nil {
+	hall, err := s.hall.FindByID(ctx, req.HallID)
+	if err != nil {
 		return nil, err
-	} else if hall == nil {
+	}
+	if hall == nil {
 		return nil, apperrors.ErrHallNotFound
+	}
+	if !hall.Active {
+		return nil, apperrors.ErrHallInactive
 	}
 
 	start := req.StartAt.UTC()
@@ -112,7 +117,7 @@ func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (
 		Status:  models.ShowtimeOpen,
 	}
 
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// Lock order: the hall's scheduling lock, then the movie row (shared).
 		if err := s.showtime.LockHall(tx, req.HallID); err != nil {
 			return err
@@ -172,9 +177,11 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 	if row == nil {
 		return nil, apperrors.ErrShowtimeNotFound
 	}
-	if hall, err := s.hall.FindByID(ctx, req.HallID); err != nil {
+	hall, err := s.hall.FindByID(ctx, req.HallID)
+	if err != nil {
 		return nil, err
-	} else if hall == nil {
+	}
+	if hall == nil {
 		return nil, apperrors.ErrHallNotFound
 	}
 
@@ -232,11 +239,14 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 				if err != nil {
 					return err
 				}
-				if movie.Status != models.MovieStatusShowing || !current.StartAt.After(time.Now()) {
+				if movie.Status != models.MovieStatusShowing || !current.StartAt.After(time.Now()) || !hall.Active {
 					return apperrors.ErrShowtimeReopenLocked
 				}
 			}
 		} else {
+			if !hall.Active {
+				return apperrors.ErrHallInactive
+			}
 			if end, err = s.endOf(ctx, tx, req.MovieID, start); err != nil {
 				return err
 			}
@@ -415,19 +425,25 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	hall, err := s.hall.FindByID(ctx, row.HallID)
+	if err != nil {
+		return nil, err
+	}
 
 	response := &dto.SeatMapResponse{
-		ShowtimeID: showtimeID,
-		MovieID:    row.MovieID,
-		MovieTitle: row.MovieTitle,
-		AgeRating:  row.AgeRating,
-		HallID:     row.HallID,
-		HallName:   row.HallName,
-		StartAt:    row.StartAt,
-		EndAt:      row.EndAt,
-		Status:     row.Status,
-		Prices:     map[string]int64{},
-		Seats:      make([]dto.SeatMapSeat, 0, len(seats)),
+		ShowtimeID:     showtimeID,
+		MovieID:        row.MovieID,
+		MovieTitle:     row.MovieTitle,
+		AgeRating:      row.AgeRating,
+		HallID:         row.HallID,
+		HallName:       row.HallName,
+		StartAt:        row.StartAt,
+		EndAt:          row.EndAt,
+		Status:         row.Status,
+		ScreenPosition: hall.ScreenPosition,
+		AisleAfterCols: hall.AisleAfterCols,
+		Prices:         map[string]int64{},
+		Seats:          make([]dto.SeatMapSeat, 0, len(seats)),
 	}
 	for _, seat := range seats {
 		status := seat.SeatStatus
