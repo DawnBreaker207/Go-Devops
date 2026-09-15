@@ -15,8 +15,18 @@ type Cache struct {
 	rdb *redis.Client
 }
 
+// dialTimeout/opTimeout bound a Redis brownout: TCP up but not answering
+// must fail fast into the DB fallback, not stall the request.
+const (
+	dialTimeout = 500 * time.Millisecond
+	opTimeout   = 300 * time.Millisecond
+)
+
 func New(addr, password string, db int) *Cache {
-	return &Cache{rdb: redis.NewClient(&redis.Options{Addr: addr, Password: password, DB: db})}
+	return &Cache{rdb: redis.NewClient(&redis.Options{
+		Addr: addr, Password: password, DB: db,
+		DialTimeout: dialTimeout, ReadTimeout: opTimeout, WriteTimeout: opTimeout,
+	})}
 }
 
 // FromClient wraps an already-configured client (tests, composable setups).
