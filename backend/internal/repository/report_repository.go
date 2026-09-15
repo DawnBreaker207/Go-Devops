@@ -40,6 +40,18 @@ type ReportRepository interface {
 	ShowtimeBoard(ctx context.Context, from, to time.Time) ([]ShowtimeBoardRow, error)
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]ShowtimeTicketRow, error)
 	CounterSalesDay(ctx context.Context, from, to time.Time) (count, total int64, err error)
+	LiveDayAggregate(ctx context.Context, from, to time.Time) (LiveAggregateRow, error)
+}
+
+// LiveAggregateRow is the same shape as a daily_aggregates row, computed on
+// the spot for a window that closeDay may not have run for yet (typically
+// "today").
+type LiveAggregateRow struct {
+	TotalRevenue  int64   `gorm:"column:total_revenue"`
+	TicketsSold   int     `gorm:"column:tickets_sold"`
+	SeatsSold     int     `gorm:"column:seats_sold"`
+	Capacity      int     `gorm:"column:capacity"`
+	OccupancyRate float64 `gorm:"column:occupancy_rate"`
 }
 
 type reportRepository struct {
@@ -177,4 +189,43 @@ func (r *reportRepository) CounterSalesDay(ctx context.Context, from, to time.Ti
 		return 0, 0, fmt.Errorf("counter sales day: %w", err)
 	}
 	return row.Count, row.Total, nil
+}
+
+// LiveDayAggregate is the read-only twin of upsertDailyAggregateSQL's
+// computation, for a window (typically "today") that hasn't been closed by
+// the closeDay job yet — an admin overview should not have to wait for it.
+const liveDayAggregateSQL = `
+WITH paid AS (
+	SELECT b.id, b.total_amount
+	FROM bookings b
+	WHERE b.status = 'confirmed' AND b.paid_at >= @from AND b.paid_at < @to
+),
+shows AS (
+	SELECT st.id,
+		COUNT(ss.id) FILTER (WHERE NOT s.is_gap) AS capacity,
+		COUNT(ss.id) FILTER (WHERE ss.status = 'sold') AS seats_sold
+	FROM showtimes st
+	LEFT JOIN showtime_seats ss ON ss.showtime_id = st.id
+	LEFT JOIN seats s ON s.id = ss.seat_id
+	WHERE st.deleted_at IS NULL AND st.start_at >= @from AND st.start_at < @to
+	GROUP BY st.id
+),
+totals AS (
+	SELECT COALESCE(SUM(capacity), 0) AS capacity, COALESCE(SUM(seats_sold), 0) AS seats_sold FROM shows
+)
+SELECT
+	(SELECT COALESCE(SUM(total_amount), 0) FROM paid) AS total_revenue,
+	(SELECT COUNT(*) FROM tickets t JOIN paid ON paid.id = t.booking_id) AS tickets_sold,
+	totals.seats_sold,
+	totals.capacity,
+	CASE WHEN totals.capacity = 0 THEN 0 ELSE ROUND(100.0 * totals.seats_sold / totals.capacity, 2) END AS occupancy_rate
+FROM totals`
+
+func (r *reportRepository) LiveDayAggregate(ctx context.Context, from, to time.Time) (LiveAggregateRow, error) {
+	var row LiveAggregateRow
+	if err := r.db.WithContext(ctx).Raw(liveDayAggregateSQL, map[string]any{"from": from, "to": to}).
+		Scan(&row).Error; err != nil {
+		return LiveAggregateRow{}, fmt.Errorf("live day aggregate: %w", err)
+	}
+	return row, nil
 }

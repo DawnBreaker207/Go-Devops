@@ -36,3 +36,22 @@ func (h *ReportHandler) Daily(c *gin.Context) {
 	}
 	response.OK(c, report)
 }
+
+// Overview godoc
+//
+//	@Summary		Admin dashboard: today (live), the last 7 days, upcoming showtimes and operational alerts, in one call
+//	@Description	Today's revenue/occupancy is computed live, not waiting on the closeDay job. Alerts surface stuck refunds, recent failed batch jobs and confirmed orders whose ticket email exhausted every retry.
+//	@Tags			reports
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.Body{data=dto.AdminOverviewResponse}
+//	@Failure		403	{object}	response.Body
+//	@Router			/admin/overview [get]
+func (h *ReportHandler) Overview(c *gin.Context) {
+	res, err := h.reports.AdminOverview(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, res)
+}

@@ -187,11 +187,18 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		staff.Use(middleware.RequireRoles(models.RoleStaff, models.RoleAdmin))
 		{
 			staff.GET("/dashboard", h.Staff.Dashboard)
+			staff.GET("/overview", h.Staff.Overview)
 			staff.GET("/boxoffice/day", h.Staff.BoxOfficeDay)
 			// Same action name as the success row the service writes in-transaction
 			// (orders.counter_sell) — filtering by action must show both outcomes.
 			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
+			staff.GET("/orders/:id", h.Staff.OrderDetail)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
+			// Customer support lookup: read-only, scoped to role=customer accounts
+			// only (staff/admin accounts stay visible only via /admin/users).
+			staff.GET("/customers", h.Staff.SearchCustomers)
+			staff.GET("/customers/:id", h.Staff.CustomerProfile)
+			staff.GET("/customers/:id/orders", h.Staff.CustomerOrders)
 		}
 
 		protected.GET("/admin/users", middleware.RequireRoles(models.RoleAdmin), h.User.List)
@@ -203,6 +210,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
 
 		protected.GET("/admin/reports/daily", middleware.RequireRoles(models.RoleAdmin), h.Report.Daily)
+		protected.GET("/admin/overview", middleware.RequireRoles(models.RoleAdmin), h.Report.Overview)
 
 		// Aliases required by the API contract; the seat grid is readable by any signed-in user.
 		halls := protected.Group("/halls")

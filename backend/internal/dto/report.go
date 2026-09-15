@@ -61,3 +61,55 @@ type DailyAggregateResponse struct {
 	Breakdown     map[string]any `json:"breakdown"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
+
+// StuckRefundAlert is a refund that has failed provider-side several times in a row.
+type StuckRefundAlert struct {
+	PaymentID string `json:"payment_id"`
+	BookingID string `json:"booking_id"`
+	Attempts  int    `json:"attempts"`
+	Amount    int64  `json:"amount"`
+	LastError string `json:"last_error,omitempty"`
+}
+
+// FailedJobAlert is a recent batch job run that ended in failure.
+type FailedJobAlert struct {
+	ID           string    `json:"id"`
+	JobName      string    `json:"job_name"`
+	ErrorMessage string    `json:"error_message,omitempty"`
+	StartedAt    time.Time `json:"started_at"`
+}
+
+// GivenUpEmailAlert is a confirmed order whose ticket email exhausted every retry.
+type GivenUpEmailAlert struct {
+	BookingID string    `json:"booking_id"`
+	Attempts  int       `json:"attempts"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AdminAlertsResponse surfaces operational issues that would otherwise only
+// be found by manually filtering /admin/audit-logs or /admin/batch/jobs.
+type AdminAlertsResponse struct {
+	StuckRefunds  []StuckRefundAlert  `json:"stuck_refunds"`
+	FailedJobs    []FailedJobAlert    `json:"failed_jobs"`
+	GivenUpEmails []GivenUpEmailAlert `json:"given_up_emails"`
+}
+
+// AdminOverviewResponse is the one-call admin dashboard: today's business
+// computed live (not waiting on closeDay), the last 7 closed days for trend,
+// what's still to come today, and anything that needs an admin's attention.
+type AdminOverviewResponse struct {
+	Today             DailyAggregateResponse   `json:"today"`
+	Last7Days         []DailyAggregateResponse `json:"last_7_days"`
+	UpcomingShowtimes []StaffShowtimeResponse  `json:"upcoming_showtimes"`
+	Alerts            AdminAlertsResponse      `json:"alerts"`
+}
+
+// StaffOverviewResponse composes the existing staff board and box office
+// numbers with one derived count, so the floor app can land on a single call.
+type StaffOverviewResponse struct {
+	Date              string                  `json:"date" example:"2026-09-14"`
+	Showtimes         []StaffShowtimeResponse `json:"showtimes"`
+	CounterSalesCount int64                   `json:"counter_sales_count"`
+	CounterSalesTotal int64                   `json:"counter_sales_total"`
+	AwaitingCheckin   int                     `json:"awaiting_checkin"`
+}

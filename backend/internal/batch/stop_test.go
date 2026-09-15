@@ -56,6 +56,10 @@ func (f *fakeRuns) List(context.Context, dto.PageQuery) ([]models.BatchJob, int6
 	return nil, 0, nil
 }
 
+func (f *fakeRuns) RecentFailed(context.Context, time.Time, int) ([]models.BatchJob, error) {
+	return nil, nil
+}
+
 func (f *fakeRuns) statuses() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

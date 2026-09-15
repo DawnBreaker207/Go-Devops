@@ -115,6 +115,7 @@ type BookingRepository interface {
 	MarkEmailSent(ctx context.Context, id string) error
 	ReleaseEmailClaim(ctx context.Context, id string) (int, error)
 	BookingHeader(ctx context.Context, id string) (*BookingHeader, error)
+	GivenUpEmails(ctx context.Context, limit int) ([]models.Booking, error)
 }
 
 type bookingRepository struct {
@@ -560,6 +561,20 @@ func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]s
 		return nil, fmt.Errorf("find bookings awaiting email: %w", err)
 	}
 	return ids, nil
+}
+
+// GivenUpEmails are confirmed bookings whose ticket email exhausted every
+// retry — the sweep will never touch them again, so the admin overview is
+// the only place they still surface.
+func (r *bookingRepository) GivenUpEmails(ctx context.Context, limit int) ([]models.Booking, error) {
+	var out []models.Booking
+	if err := r.db.WithContext(ctx).
+		Where("status = ? AND sold_via = ? AND email_sent_at IS NULL AND email_attempts >= ?",
+			models.BookingConfirmed, models.SoldViaOnline, MaxTicketEmailAttempts).
+		Order("created_at DESC").Limit(limit).Find(&out).Error; err != nil {
+		return nil, fmt.Errorf("find given-up ticket emails: %w", err)
+	}
+	return out, nil
 }
 
 // The 5-minute lease keeps two workers from mailing the same booking; a worker dying mid-send

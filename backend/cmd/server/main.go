@@ -150,7 +150,9 @@ func run() error {
 
 	emailService := service.NewTicketEmailService(db, bookingRepo, mailer, location)
 
-	reportService := service.NewReportService(repository.NewReportRepository(db), showtimeRepo, location)
+	batchRepo := repository.NewBatchJobRepository(db)
+	reportService := service.NewReportService(repository.NewReportRepository(db), showtimeRepo,
+		paymentRepo, batchRepo, bookingRepo, location)
 
 	imageStore, mediaDir := buildImageStore(cfg)
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
@@ -163,7 +165,6 @@ func run() error {
 		Events: ratelimit.New(cfg.RateLimit.Events.Capacity, cfg.RateLimit.Events.RefillPerSecond),
 	}
 
-	batchRepo := repository.NewBatchJobRepository(db)
 	batchManager := batch.NewManager(db, batchRepo)
 	batchManager.Register(jobs.NewSweepExpiredHolds(bookingService))
 	batchManager.Register(jobs.NewSendTicketEmails(emailService))
@@ -190,7 +191,7 @@ func run() error {
 		Booking:  handlers.NewBookingHandler(bookingService),
 		SSE:      handlers.NewSSEHandler(hub, tokens, showtimeService),
 		Payment:  handlers.NewPaymentHandler(providers, bookingService, cfg.Payment.ReturnRedirectURL),
-		Staff:    handlers.NewStaffHandler(reportService, bookingService),
+		Staff:    handlers.NewStaffHandler(reportService, bookingService, userService),
 		Report:   handlers.NewReportHandler(reportService),
 		Media:    handlers.NewMediaHandler(mediaService, mediaDir, maxUpload),
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),

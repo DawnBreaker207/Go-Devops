@@ -35,6 +35,7 @@ type PaymentRepository interface {
 	RefundPending(ctx context.Context, limit int) ([]models.Payment, error)
 	DueForReconcile(ctx context.Context, limit int) ([]models.Payment, error)
 	FailedForRecheck(ctx context.Context, lateWindow time.Duration, limit int) ([]models.Payment, error)
+	StuckRefunds(ctx context.Context, minAttempts, limit int) ([]models.Payment, error)
 }
 
 type paymentRepository struct {
@@ -247,6 +248,19 @@ func (r *paymentRepository) DueForReconcile(ctx context.Context, limit int) ([]m
 		Where("checked_at IS NULL OR checked_at < NOW() - INTERVAL '2 minutes'").
 		Order("created_at").Limit(limit).Find(&out).Error; err != nil {
 		return nil, fmt.Errorf("find payments to reconcile: %w", err)
+	}
+	return out, nil
+}
+
+// StuckRefunds are refund attempts that have failed at least minAttempts
+// times in a row — the same threshold that triggers the payments.refund_stuck
+// alert audit row, surfaced here for the admin overview.
+func (r *paymentRepository) StuckRefunds(ctx context.Context, minAttempts, limit int) ([]models.Payment, error) {
+	var out []models.Payment
+	if err := r.db.WithContext(ctx).
+		Where("status = ? AND refund_attempts >= ?", models.PaymentRefundPending, minAttempts).
+		Order("refund_attempts DESC").Limit(limit).Find(&out).Error; err != nil {
+		return nil, fmt.Errorf("find stuck refunds: %w", err)
 	}
 	return out, nil
 }

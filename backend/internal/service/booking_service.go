@@ -62,6 +62,7 @@ type BookingService interface {
 	Confirm(ctx context.Context, userID, bookingID string) (*dto.OrderDetailResponse, error)
 	Status(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	Order(ctx context.Context, userID, bookingID string) (*dto.OrderDetailResponse, error)
+	AdminOrder(ctx context.Context, bookingID string) (*dto.OrderDetailResponse, error)
 	Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	List(ctx context.Context, userID string, q dto.PageQuery) ([]dto.OrderStatusResponse, int64, error)
 	Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error)
@@ -503,6 +504,26 @@ func (s *bookingService) Status(ctx context.Context, userID, bookingID string) (
 
 func (s *bookingService) Order(ctx context.Context, userID, bookingID string) (*dto.OrderDetailResponse, error) {
 	b, err := s.ownedBooking(ctx, userID, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	return s.orderDetail(ctx, b)
+}
+
+// AdminOrder is Order without the ownership check, for admin/staff customer
+// support looking up any booking by id.
+func (s *bookingService) AdminOrder(ctx context.Context, bookingID string) (*dto.OrderDetailResponse, error) {
+	b, err := s.repo.FindByID(ctx, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, apperrors.ErrBookingNotFound
+	}
+	if err := s.reconcile(ctx, b); err != nil {
+		return nil, err
+	}
+	b, err = s.repo.FindByID(ctx, bookingID)
 	if err != nil {
 		return nil, err
 	}

@@ -19,6 +19,7 @@ type BatchJobRepository interface {
 	StopOrphans(ctx context.Context) (int64, error)
 	RecordSkipped(ctx context.Context, name, triggeredBy, reason string) error
 	List(ctx context.Context, query dto.PageQuery) ([]models.BatchJob, int64, error)
+	RecentFailed(ctx context.Context, since time.Time, limit int) ([]models.BatchJob, error)
 }
 
 type batchJobRepository struct {
@@ -124,4 +125,16 @@ func (r *batchJobRepository) List(ctx context.Context, query dto.PageQuery) ([]m
 		return nil, 0, fmt.Errorf("list batch jobs: %w", err)
 	}
 	return jobs, total, nil
+}
+
+// RecentFailed is for the admin overview's operational alerts, not the full
+// run history List already serves.
+func (r *batchJobRepository) RecentFailed(ctx context.Context, since time.Time, limit int) ([]models.BatchJob, error) {
+	var out []models.BatchJob
+	if err := r.db.WithContext(ctx).
+		Where("status = ? AND started_at >= ?", models.BatchFailed, since).
+		Order("started_at DESC").Limit(limit).Find(&out).Error; err != nil {
+		return nil, fmt.Errorf("find recent failed batch jobs: %w", err)
+	}
+	return out, nil
 }

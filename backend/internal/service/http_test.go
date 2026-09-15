@@ -63,6 +63,7 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 	mediaDir := h.t.TempDir()
 	userRepo := repository.NewUserRepository(db)
 	accounts := service.NewAccountStatusCache(userRepo, 30*time.Second)
+	userService := service.NewUserService(db, userRepo, accounts.Invalidate)
 	public := h.publicLimiter
 	if public == nil {
 		public = ratelimit.New(10000, 1000)
@@ -76,7 +77,7 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 	return router.New(cfg, db, h.jwt, accounts, limits, h.providers, router.Handlers{
 		Health:   handlers.NewHealthHandler(db, "test"),
 		Auth:     handlers.NewAuthHandler(h.auth),
-		User:     handlers.NewUserHandler(service.NewUserService(db, userRepo, accounts.Invalidate)),
+		User:     handlers.NewUserHandler(userService),
 		Movie:    handlers.NewMovieHandler(h.movies),
 		Batch:    handlers.NewBatchHandler(h.batchManager(db, runs), runs, db),
 		Hall:     handlers.NewHallHandler(h.halls),
@@ -84,7 +85,7 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Booking:  handlers.NewBookingHandler(h.svc),
 		SSE:      handlers.NewSSEHandler(h.hub, h.tokens, h.showtimes),
 		Payment:  handlers.NewPaymentHandler(h.providers, h.svc, ""),
-		Staff:    handlers.NewStaffHandler(h.reports, h.svc),
+		Staff:    handlers.NewStaffHandler(h.reports, h.svc, userService),
 		Report:   handlers.NewReportHandler(h.reports),
 		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
@@ -167,6 +168,15 @@ func TestHTTP_RoleScopes(t *testing.T) {
 		{"admin self-erases", http.MethodDelete, "/api/v1/users/me", admin, map[string]string{"password": "secret123"}, http.StatusForbidden},
 		{"staff reads audit log", http.MethodGet, "/api/v1/admin/audit-logs", staff, nil, http.StatusForbidden},
 		{"customer reads audit log", http.MethodGet, "/api/v1/admin/audit-logs", customer, nil, http.StatusForbidden},
+		{"staff reads admin overview", http.MethodGet, "/api/v1/admin/overview", staff, nil, http.StatusForbidden},
+		{"customer reads admin overview", http.MethodGet, "/api/v1/admin/overview", customer, nil, http.StatusForbidden},
+		{"admin reads admin overview", http.MethodGet, "/api/v1/admin/overview", admin, nil, http.StatusOK},
+		{"customer reads staff overview", http.MethodGet, "/api/v1/staff/overview", customer, nil, http.StatusForbidden},
+		{"staff reads staff overview", http.MethodGet, "/api/v1/staff/overview", staff, nil, http.StatusOK},
+		{"customer searches customers", http.MethodGet, "/api/v1/staff/customers", customer, nil, http.StatusForbidden},
+		{"customer reads a customer profile", http.MethodGet, "/api/v1/staff/customers/00000000-0000-0000-0000-000000000000", customer, nil, http.StatusForbidden},
+		{"customer reads a customer's orders", http.MethodGet, "/api/v1/staff/customers/00000000-0000-0000-0000-000000000000/orders", customer, nil, http.StatusForbidden},
+		{"customer reads any order via staff route", http.MethodGet, "/api/v1/staff/orders/00000000-0000-0000-0000-000000000000", customer, nil, http.StatusForbidden},
 		{"no token", http.MethodGet, "/api/v1/orders", "", nil, http.StatusUnauthorized},
 	}
 	for _, c := range cases {
@@ -218,6 +228,65 @@ func TestHTTP_AuditLogsFilterByBooking(t *testing.T) {
 	meta, _ := data["meta"].(map[string]any)
 	if int64(meta["total"].(float64)) < 3 {
 		t.Fatalf("meta.total = %v, want at least 3", meta["total"])
+	}
+}
+
+// Customer support lookup: staff/admin can search a customer, read their
+// profile, list their order history and view one order's detail — none of
+// which a customer can reach for anyone but themselves (already covered by
+// TestHTTP_RoleScopes). A non-customer id (staff/admin) 404s through this
+// path instead of confirming such an account exists.
+func TestHTTP_CustomerSupportLookup(t *testing.T) {
+	h := newHTTPEnv(t)
+	staff, _ := h.login(models.RoleStaff)
+	_, adminID := h.login(models.RoleAdmin)
+	bookingID := h.confirmed(h.users[0], "A1")
+
+	status, _, body := h.call(http.MethodGet, "/api/v1/staff/customers?search="+h.emailOf[h.users[0]], staff, nil)
+	if status != http.StatusOK {
+		t.Fatalf("search: HTTP %d %v", status, body["message"])
+	}
+	items, _ := dataMap(body)["items"].([]any)
+	found := ""
+	for _, it := range items {
+		row, _ := it.(map[string]any)
+		if row["id"] == h.users[0] {
+			found = h.users[0]
+		}
+	}
+	if found == "" {
+		t.Fatalf("customer %s not found in search results: %v", h.users[0], items)
+	}
+
+	status, _, body = h.call(http.MethodGet, "/api/v1/staff/customers/"+h.users[0], staff, nil)
+	if status != http.StatusOK {
+		t.Fatalf("profile: HTTP %d %v", status, body["message"])
+	}
+
+	status, _, body = h.call(http.MethodGet, "/api/v1/staff/customers/"+h.users[0]+"/orders", staff, nil)
+	if status != http.StatusOK {
+		t.Fatalf("orders: HTTP %d %v", status, body["message"])
+	}
+	orderItems, _ := dataMap(body)["items"].([]any)
+	if len(orderItems) != 1 {
+		t.Fatalf("orders for customer = %v, want 1", orderItems)
+	}
+	row, _ := orderItems[0].(map[string]any)
+	if row["id"] != bookingID {
+		t.Fatalf("order id = %v, want %s", row["id"], bookingID)
+	}
+
+	status, _, body = h.call(http.MethodGet, "/api/v1/staff/orders/"+bookingID, staff, nil)
+	if status != http.StatusOK {
+		t.Fatalf("order detail: HTTP %d %v", status, body["message"])
+	}
+	if dataMap(body)["id"] != bookingID {
+		t.Fatalf("order detail id = %v, want %s", dataMap(body)["id"], bookingID)
+	}
+
+	// A staff/admin id must 404 through the customer-lookup path.
+	if status, _, _ := h.call(http.MethodGet, "/api/v1/staff/customers/"+adminID, staff, nil); status != http.StatusNotFound {
+		t.Fatalf("admin id via customer lookup: HTTP %d, want 404", status)
 	}
 }
 

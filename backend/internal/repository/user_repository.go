@@ -99,7 +99,7 @@ func (r *userRepository) List(ctx context.Context, query dto.UserListQuery) ([]m
 	tx := r.db.WithContext(ctx).Model(&models.User{})
 	if search := strings.TrimSpace(query.Search); search != "" {
 		pattern := "%" + strings.ToLower(search) + "%"
-		tx = tx.Where("LOWER(email) LIKE ? OR LOWER(full_name) LIKE ?", pattern, pattern)
+		tx = tx.Where("LOWER(email) LIKE ? OR LOWER(full_name) LIKE ? OR phone LIKE ?", pattern, pattern, "%"+search+"%")
 	}
 	if query.Role != "" {
 		tx = tx.Where("role = ?", query.Role)

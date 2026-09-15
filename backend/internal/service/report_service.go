@@ -17,17 +17,28 @@ type ReportService interface {
 	StaffBoard(ctx context.Context, date string) (*dto.StaffBoardResponse, error)
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]dto.StaffTicketResponse, error)
 	BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error)
+	AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error)
+	StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error)
 }
 
 type reportService struct {
 	repo      repository.ReportRepository
 	showtimes *repository.ShowtimeRepository
+	payments  repository.PaymentRepository
+	batchJobs repository.BatchJobRepository
+	bookings  repository.BookingRepository
 	location  *time.Location
 }
 
-func NewReportService(repo repository.ReportRepository, showtimes *repository.ShowtimeRepository, location *time.Location) ReportService {
-	return &reportService{repo: repo, showtimes: showtimes, location: location}
+func NewReportService(repo repository.ReportRepository, showtimes *repository.ShowtimeRepository,
+	payments repository.PaymentRepository, batchJobs repository.BatchJobRepository, bookings repository.BookingRepository,
+	location *time.Location) ReportService {
+	return &reportService{repo: repo, showtimes: showtimes, payments: payments, batchJobs: batchJobs,
+		bookings: bookings, location: location}
 }
+
+// alertListLimit bounds each operational-alert list on the admin overview.
+const alertListLimit = 20
 
 // dayBounds returns the local date and its [from, to) instants.
 func (s *reportService) dayBounds(day time.Time) (string, time.Time, time.Time) {
@@ -177,6 +188,120 @@ func (s *reportService) BoxOfficeDay(ctx context.Context, date string) (*dto.Box
 		return nil, err
 	}
 	return &dto.BoxOfficeDayResponse{Date: label, Count: count, Total: total}, nil
+}
+
+// AdminOverview is the one-call admin dashboard: today computed live (not
+// waiting on closeDay), the last 7 closed days, what's left to show today,
+// and operational alerts that would otherwise only surface by manually
+// filtering /admin/audit-logs or /admin/batch/jobs.
+func (s *reportService) AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error) {
+	now := time.Now().In(s.location)
+	todayLabel, todayFrom, todayTo := s.dayBounds(now)
+
+	live, err := s.repo.LiveDayAggregate(ctx, todayFrom, todayTo)
+	if err != nil {
+		return nil, err
+	}
+	today := dto.DailyAggregateResponse{
+		ReportDate:    todayLabel,
+		TotalRevenue:  live.TotalRevenue,
+		TicketsSold:   live.TicketsSold,
+		SeatsSold:     live.SeatsSold,
+		Capacity:      live.Capacity,
+		OccupancyRate: live.OccupancyRate,
+		UpdatedAt:     now,
+	}
+
+	_, sevenDaysAgo, _ := s.dayBounds(now.AddDate(0, 0, -6))
+	pastAggs, err := s.repo.DailyAggregates(ctx, sevenDaysAgo.Format(dto.DateLayout), todayLabel)
+	if err != nil {
+		return nil, err
+	}
+	last7 := make([]dto.DailyAggregateResponse, 0, len(pastAggs))
+	for i := range pastAggs {
+		last7 = append(last7, *newDailyAggregateResponse(&pastAggs[i]))
+	}
+
+	board, err := s.repo.ShowtimeBoard(ctx, now, todayTo)
+	if err != nil {
+		return nil, err
+	}
+	upcoming := make([]dto.StaffShowtimeResponse, 0, len(board))
+	for _, r := range board {
+		upcoming = append(upcoming, dto.StaffShowtimeResponse{
+			ID: r.ID, MovieTitle: r.MovieTitle, HallName: r.HallName, StartAt: r.StartAt, EndAt: r.EndAt,
+			Status: r.Status, Capacity: r.Capacity, Held: r.Held, Sold: r.Sold,
+			Available: r.Capacity - r.Held - r.Sold, CheckedIn: r.CheckedIn,
+		})
+	}
+
+	alerts, err := s.operationalAlerts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminOverviewResponse{Today: today, Last7Days: last7, UpcomingShowtimes: upcoming, Alerts: *alerts}, nil
+}
+
+func (s *reportService) operationalAlerts(ctx context.Context) (*dto.AdminAlertsResponse, error) {
+	stuck, err := s.payments.StuckRefunds(ctx, stuckAlertAttempts, alertListLimit)
+	if err != nil {
+		return nil, err
+	}
+	stuckOut := make([]dto.StuckRefundAlert, 0, len(stuck))
+	for _, p := range stuck {
+		stuckOut = append(stuckOut, dto.StuckRefundAlert{
+			PaymentID: p.ID, BookingID: p.BookingID, Attempts: p.RefundAttempts,
+			Amount: p.Amount, LastError: derefString(p.LastError),
+		})
+	}
+
+	failedJobs, err := s.batchJobs.RecentFailed(ctx, time.Now().Add(-24*time.Hour), alertListLimit)
+	if err != nil {
+		return nil, err
+	}
+	jobsOut := make([]dto.FailedJobAlert, 0, len(failedJobs))
+	for _, j := range failedJobs {
+		jobsOut = append(jobsOut, dto.FailedJobAlert{
+			ID: j.ID, JobName: j.JobName, ErrorMessage: j.ErrorMessage, StartedAt: j.StartedAt,
+		})
+	}
+
+	givenUp, err := s.bookings.GivenUpEmails(ctx, alertListLimit)
+	if err != nil {
+		return nil, err
+	}
+	emailsOut := make([]dto.GivenUpEmailAlert, 0, len(givenUp))
+	for _, b := range givenUp {
+		emailsOut = append(emailsOut, dto.GivenUpEmailAlert{
+			BookingID: b.ID, Attempts: b.EmailAttempts, CreatedAt: b.CreatedAt,
+		})
+	}
+
+	return &dto.AdminAlertsResponse{StuckRefunds: stuckOut, FailedJobs: jobsOut, GivenUpEmails: emailsOut}, nil
+}
+
+// StaffOverview composes the existing staff board and box office numbers
+// with one derived count (tickets sold but not yet scanned), so the floor
+// app can land on a single call instead of two.
+func (s *reportService) StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error) {
+	board, err := s.StaffBoard(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+	boxOffice, err := s.BoxOfficeDay(ctx, date)
+	if err != nil {
+		return nil, err
+	}
+	awaiting := 0
+	for _, sh := range board.Showtimes {
+		awaiting += sh.Sold - sh.CheckedIn
+	}
+	return &dto.StaffOverviewResponse{
+		Date: board.Date, Showtimes: board.Showtimes,
+		CounterSalesCount: boxOffice.Count, CounterSalesTotal: boxOffice.Total,
+		AwaitingCheckin: awaiting,
+	}, nil
 }
 
 func newDailyAggregateResponse(a *models.DailyAggregate) *dto.DailyAggregateResponse {

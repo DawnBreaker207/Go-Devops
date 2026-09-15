@@ -255,7 +255,8 @@ func newEnv(t *testing.T) *env {
 	e.auth = service.NewAuthService(testDB, userRepo, repository.NewRefreshTokenRepository(testDB), e.jwt, guard,
 		repository.NewPasswordResetTokenRepository(testDB), e.mailer, "http://test.local/reset-password", 30*time.Minute, 0)
 	e.accounts = service.NewUserService(testDB, userRepo)
-	e.reports = service.NewReportService(repository.NewReportRepository(testDB), repository.NewShowtimeRepository(testDB), time.UTC)
+	e.reports = service.NewReportService(repository.NewReportRepository(testDB), repository.NewShowtimeRepository(testDB),
+		repository.NewPaymentRepository(testDB), repository.NewBatchJobRepository(testDB), repository.NewBookingRepository(testDB), time.UTC)
 	e.movies = service.NewMovieService(testDB, repository.NewMovieRepository(testDB), nil, 0)
 	return e
 }
