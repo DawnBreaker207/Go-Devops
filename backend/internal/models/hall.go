@@ -45,6 +45,7 @@ type Seat struct {
 	ColNumber int       `gorm:"not null;uniqueIndex:uq_seat_hall_row_col" json:"col_number"`
 	SeatType  string    `gorm:"type:varchar(16);not null;default:standard" json:"seat_type"`
 	IsGap     bool      `gorm:"not null;default:false" json:"is_gap"`
+	ColSpan   int       `gorm:"type:smallint;not null;default:1" json:"col_span"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

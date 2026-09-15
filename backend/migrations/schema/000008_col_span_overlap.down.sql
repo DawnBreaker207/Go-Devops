@@ -1,0 +1,4 @@
+ALTER TABLE showtimes DROP CONSTRAINT IF EXISTS ex_showtime_no_hall_overlap;
+DROP EXTENSION IF EXISTS btree_gist;
+ALTER TABLE seats DROP CONSTRAINT IF EXISTS ck_seat_col_span;
+ALTER TABLE seats DROP COLUMN IF EXISTS col_span;

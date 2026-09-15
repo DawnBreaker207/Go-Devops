@@ -68,7 +68,7 @@ func (s *hallService) PricesByHall(ctx context.Context, hallID string) ([]models
 }
 
 func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.HallResponse, error) {
-	seats, err := generateSeats(req.Rows, req.SeatsPerRow, req.SeatTypes, req.Gaps)
+	seats, err := generateSeats(req.Rows, req.SeatsPerRow, req.SeatTypes, req.Gaps, req.Spans)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (s *hallService) SetPrices(ctx context.Context, hallID string, req dto.Pric
 	return response, nil
 }
 
-func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps []string) ([]models.Seat, error) {
+func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps, spans []string) ([]models.Seat, error) {
 	rowTypes, err := rowTypeMap(seatTypes, rows)
 	if err != nil {
 		return nil, err
@@ -215,25 +215,68 @@ func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps []
 		gapSet[dto.SeatLabel(row, col)] = true
 	}
 
+	spanSet, consumeSet, err := spanSet(spans, rows, seatsPerRow, gapSet)
+	if err != nil {
+		return nil, err
+	}
+
 	seats := make([]models.Seat, 0, rows*seatsPerRow)
 	for r := 1; r <= rows; r++ {
 		rowLabel := dto.RowLabel(r)
 		for c := 1; c <= seatsPerRow; c++ {
+			label := dto.SeatLabel(rowLabel, c)
+			if consumeSet[label] {
+				// The column is the right half of a 2-column seat anchored at c-1.
+				continue
+			}
 			seatType := rowTypes[r]
 			if seatType == "" {
 				seatType = models.SeatStandard
+			}
+			colSpan := 1
+			col := c
+			if spanSet[label] {
+				colSpan = 2
+				c++ // the neighbor column is consumed by this seat
 			}
 			seats = append(seats, models.Seat{
 				HallID:    "",
 				RowIndex:  r,
 				RowLabel:  rowLabel,
-				ColNumber: c,
+				ColNumber: col,
 				SeatType:  seatType,
-				IsGap:     gapSet[dto.SeatLabel(rowLabel, c)],
+				IsGap:     gapSet[label],
+				ColSpan:   colSpan,
 			})
 		}
 	}
 	return seats, nil
+}
+
+// A span anchor D3 makes one seat covering columns D3-D4; a col_span=2 seat
+// swallows row c+1, which must exist and must not be a gap or another anchor.
+func spanSet(spans []string, rows, seatsPerRow int, gapSet map[string]bool) (span, consumed map[string]bool, err error) {
+	span = make(map[string]bool, len(spans))
+	consumed = make(map[string]bool, len(spans))
+	for _, s := range spans {
+		row, col, parseErr := parseGapLabel(s, rows, seatsPerRow)
+		if parseErr != nil {
+			return nil, nil, parseErr
+		}
+		if col == seatsPerRow {
+			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "no room for a second column"})
+		}
+		label := dto.SeatLabel(row, col)
+		if span[label] || consumed[label] {
+			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "duplicate anchor"})
+		}
+		if gapSet[label] {
+			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "gap cannot span"})
+		}
+		span[label] = true
+		consumed[dto.SeatLabel(row, col+1)] = true
+	}
+	return span, consumed, nil
 }
 
 func rowTypeMap(seatTypes map[string][]string, rows int) (map[int]string, error) {

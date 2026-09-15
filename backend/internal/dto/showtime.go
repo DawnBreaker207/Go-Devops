@@ -67,6 +67,7 @@ type SeatMapSeat struct {
 	Col            int    `json:"col_number"`
 	SeatType       string `json:"seat_type"`
 	IsGap          bool   `json:"is_gap"`
+	ColSpan        int    `json:"col_span"`
 	Status         string `json:"status"`
 	Price          int64  `json:"price"`
 }

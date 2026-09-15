@@ -130,6 +130,9 @@ func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (
 			return apperrors.ErrShowtimeOverlap
 		}
 		if err := s.showtime.Create(tx, showtime); err != nil {
+			if apperrors.IsExclusionViolation(err) {
+				return apperrors.ErrShowtimeOverlap
+			}
 			return err
 		}
 		seats, err := s.hall.SeatsByHall(ctx, req.HallID)
@@ -276,6 +279,9 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 		showtime.EndAt = end
 		showtime.Status = status
 		if err := s.showtime.Update(tx, showtime); err != nil {
+			if apperrors.IsExclusionViolation(err) {
+				return apperrors.ErrShowtimeOverlap
+			}
 			return err
 		}
 		if hallChanged {
@@ -437,6 +443,7 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 			Col:            seat.ColNumber,
 			SeatType:       seat.SeatType,
 			IsGap:          seat.IsGap,
+			ColSpan:        seat.ColSpan,
 			Status:         status,
 			Price:          seat.Price,
 		})

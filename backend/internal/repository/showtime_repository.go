@@ -46,6 +46,7 @@ type SeatMapRow struct {
 	ColNumber      int       `gorm:"column:col_number"`
 	SeatType       string    `gorm:"column:seat_type"`
 	IsGap          bool      `gorm:"column:is_gap"`
+	ColSpan        int       `gorm:"column:col_span"`
 	SeatStatus     string    `gorm:"column:seat_status"`
 	Price          int64     `gorm:"column:price"`
 }
@@ -195,7 +196,7 @@ func (r *ShowtimeRepository) SeatMap(ctx context.Context, showtimeID string) ([]
 			movies.title AS movie_title, halls.name AS hall_name,
 			showtime_seats.id AS showtime_seat_id, seats.id AS seat_id,
 			seats.row_label, seats.col_number,
-			seats.seat_type, seats.is_gap,
+			seats.seat_type, seats.is_gap, seats.col_span,
 			COALESCE(showtime_seats.status, '') AS seat_status,
 			COALESCE(hall_prices.price, 0) AS price`).
 		Joins("JOIN halls ON halls.id = showtimes.hall_id").

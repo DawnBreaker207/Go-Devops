@@ -21,6 +21,16 @@ func IsUniqueViolation(err error) bool {
 	return false
 }
 
+// IsExclusionViolation reports a PostgreSQL exclusion-constraint violation
+// (23P01), the btree_gist backstop for overlapping showtimes in one hall.
+func IsExclusionViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23P01"
+	}
+	return false
+}
+
 // IsDeadlock reports a PostgreSQL deadlock error (40P01), retried by the
 // seat-hold flow instead of surfacing to the client
 func IsDeadlock(err error) bool {

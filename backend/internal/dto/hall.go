@@ -16,6 +16,9 @@ type HallRequest struct {
 	// Optional: rows not listed are standard.
 	SeatTypes map[string][]string `json:"seat_types" example:"vip:7,8"`
 	Gaps      []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
+	// Anchors of 2-column seats, e.g. ["D3"] makes one seat spanning D3-D4; the
+	// neighbor column keeps no seat of its own.
+	Spans []string `json:"spans" binding:"omitempty,max=100" example:"[\"D3\"]"`
 	// Must hold a positive price for each of the 4 seat types.
 	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
 }
@@ -70,6 +73,7 @@ type SeatResponse struct {
 	Col      int    `json:"col_number"`
 	SeatType string `json:"seat_type"`
 	IsGap    bool   `json:"is_gap"`
+	ColSpan  int    `json:"col_span"`
 }
 
 func SeatLabel(rowLabel string, col int) string {
@@ -85,6 +89,7 @@ func NewSeatResponse(seat *models.Seat) SeatResponse {
 		Col:      seat.ColNumber,
 		SeatType: seat.SeatType,
 		IsGap:    seat.IsGap,
+		ColSpan:  seat.ColSpan,
 	}
 }
 
