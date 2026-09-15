@@ -14,7 +14,7 @@ type HallRequest struct {
 	Rows        int    `json:"rows" binding:"required,min=1,max=50" example:"8"`
 	SeatsPerRow int    `json:"seats_per_row" binding:"required,min=1,max=50" example:"12"`
 	// Optional: rows not listed are standard.
-	SeatTypes map[string][]string `json:"seat_types" example:"vip:7,8"`
+	SeatTypes map[string][]string `json:"seat_types"`
 	Gaps      []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
 	// Anchors of 2-column seats, e.g. ["D3"] makes one seat spanning D3-D4; the
 	// neighbor column keeps no seat of its own.
