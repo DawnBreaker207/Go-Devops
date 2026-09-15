@@ -56,6 +56,7 @@ password: admin123                (APP_ADMIN_PASSWORD)
 | `make fmt` / `make tidy` | Format source / dọn `go.mod` |
 | `make swag` | Sinh lại swagger vào `docs/` |
 | `make migrate-up` / `make migrate-down` | Chạy / rollback migration (schema chỉ đến từ `migrations/schema`, gom theo module — xem `migrations/README.md`) |
+| `make migrate-seed` / `make migrate-create name=<module>_<change>` | Áp seed idempotent / tạo migration mới |
 | `make migrate-db-reset` | Xoá và dựng lại DB dev từ migration + seed |
 | `make docker-up` / `make docker-down` | Docker compose: postgres, rabbitmq, redis, service `migrate` chạy migration rồi mới bật backend. Compose mặc định `APP_ENV=production` — chạy local thì đặt `APP_ENV=development` trong `.env`, hoặc cung cấp secret thật |
 

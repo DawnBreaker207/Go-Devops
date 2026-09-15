@@ -67,6 +67,14 @@ rate_limit:
 queue:
   url: amqp://guest:guest@localhost:5672/
 
+# Optional read cache: public movie reads are answered from Redis when the
+# address is set. Empty = disabled (choose docker or local Redis as you like).
+redis:
+  addr: ""
+  password: ""
+  db: 0
+  ttl: 5m
+
 # Booking: seat hold TTL and per-booking seat cap.
 booking:
   hold_ttl_minutes: 10
