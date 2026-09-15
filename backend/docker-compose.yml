@@ -33,6 +33,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Fast cache for hot public reads; optional (server runs without it).
+  redis:
+    image: redis:7-alpine
+    container_name: cp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Applies migrations/schema before the backend starts. A password with
   # URL-special characters must be URL-encoded in DATABASE_PASSWORD.
   migrate:
@@ -58,6 +71,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     environment:
@@ -76,6 +91,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       QUEUE_URL: ${QUEUE_URL:-amqp://guest:guest@rabbitmq:5672/}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       PAYMENT_PUBLIC_BASE_URL: ${PAYMENT_PUBLIC_BASE_URL:-http://localhost:8080}
       PAYMENT_PROVIDERS_MOCK_SECRET: ${PAYMENT_PROVIDERS_MOCK_SECRET:-}
       PAYMENT_PROVIDERS_MOCK_ALLOW_IN_PRODUCTION: ${PAYMENT_PROVIDERS_MOCK_ALLOW_IN_PRODUCTION:-false}

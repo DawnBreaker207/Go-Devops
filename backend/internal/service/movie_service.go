@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/cache"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"gorm.io/gorm"
 )
@@ -24,11 +27,16 @@ type MovieService interface {
 type movieService struct {
 	db        *gorm.DB
 	movieRepo repository.MovieRepository
+	cache     *cache.Cache
+	cacheTTL  time.Duration
 }
 
-func NewMovieService(db *gorm.DB, movieRepo repository.MovieRepository) MovieService {
-	return &movieService{db: db, movieRepo: movieRepo}
+// NewMovieService optionally caches public movie reads; a nil cache disables it.
+func NewMovieService(db *gorm.DB, movieRepo repository.MovieRepository, c *cache.Cache, ttl time.Duration) MovieService {
+	return &movieService{db: db, movieRepo: movieRepo, cache: c, cacheTTL: ttl}
 }
+
+func movieKey(id string) string { return "movie:" + id }
 
 // defaultAgeRating: an omitted rating means everybody (P, per GORDP 2022/17).
 func defaultAgeRating(rating string) string {
@@ -47,6 +55,14 @@ func (s *movieService) List(ctx context.Context, query dto.MovieListQuery, inclu
 }
 
 func (s *movieService) GetByID(ctx context.Context, id string, includeDrafts bool) (*dto.MovieResponse, error) {
+	if !includeDrafts {
+		if raw, ok, err := s.cache.Get(ctx, movieKey(id)); err == nil && ok {
+			var cached dto.MovieResponse
+			if json.Unmarshal([]byte(raw), &cached) == nil {
+				return &cached, nil
+			}
+		}
+	}
 	movie, err := s.movieRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -55,6 +71,11 @@ func (s *movieService) GetByID(ctx context.Context, id string, includeDrafts boo
 		return nil, apperrors.ErrMovieNotFound
 	}
 	result := dto.NewMovieResponse(movie)
+	if !includeDrafts {
+		if raw, err := json.Marshal(result); err == nil {
+			s.cache.Set(ctx, movieKey(id), string(raw), s.cacheTTL)
+		}
+	}
 	return &result, nil
 }
 
@@ -157,6 +178,7 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 	}
 
 	result := dto.NewMovieResponse(movie)
+	s.cache.Del(ctx, movieKey(id))
 	return &result, nil
 }
 
@@ -176,6 +198,7 @@ func (s *movieService) Delete(ctx context.Context, id string) error {
 		if err := s.movieRepo.Delete(ctx, tx, id); err != nil {
 			return err
 		}
+		s.cache.Del(ctx, movieKey(id))
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = id
 			rec.After = map[string]any{"deleted": true}

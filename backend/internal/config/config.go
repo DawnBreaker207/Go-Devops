@@ -21,6 +21,7 @@ type Config struct {
 	CORS      CORSConfig      `mapstructure:"cors"`
 	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 	Queue     QueueConfig     `mapstructure:"queue"`
+	Redis     RedisConfig     `mapstructure:"redis"`
 	Booking   BookingConfig   `mapstructure:"booking"`
 	Checkin   CheckinConfig   `mapstructure:"checkin"`
 	Payment   PaymentConfig   `mapstructure:"payment"`
@@ -28,6 +29,14 @@ type Config struct {
 	Account   AccountConfig   `mapstructure:"account"`
 	Storage   StorageConfig   `mapstructure:"storage"`
 	Audit     AuditConfig     `mapstructure:"audit"`
+}
+
+// RedisConfig backs the optional read cache; an empty Addr disables it.
+type RedisConfig struct {
+	Addr     string        `mapstructure:"addr"`
+	Password string        `mapstructure:"password"`
+	DB       int           `mapstructure:"db"`
+	TTL      time.Duration `mapstructure:"ttl"`
 }
 
 // AccountConfig wires the self-service account flows.
@@ -453,4 +462,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("account.password_reset_ttl", "30m")
 
 	v.SetDefault("queue.url", "amqp://guest:guest@localhost:5672/")
+
+	v.SetDefault("redis.addr", "")
+	v.SetDefault("redis.password", "")
+	v.SetDefault("redis.db", 0)
+	v.SetDefault("redis.ttl", "5m")
 }

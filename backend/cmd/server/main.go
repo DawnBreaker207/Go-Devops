@@ -26,6 +26,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/sse"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/storage"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/cache"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/queue"
@@ -102,7 +103,12 @@ func run() error {
 	// Locks and role changes reach already-issued tokens within accountStatusTTL.
 	accountStatus := service.NewAccountStatusCache(userRepo, accountStatusTTL)
 	userService := service.NewUserService(db, userRepo, accountStatus.Invalidate)
-	movieService := service.NewMovieService(db, movieRepo)
+	var movieCache *cache.Cache
+	if cfg.Redis.Addr != "" {
+		movieCache = cache.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+		defer movieCache.Close()
+	}
+	movieService := service.NewMovieService(db, movieRepo, movieCache, cfg.Redis.TTL)
 	hallService := service.NewHallService(db, hallRepo)
 	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location)
 
