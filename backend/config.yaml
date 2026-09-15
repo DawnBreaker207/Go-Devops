@@ -12,8 +12,14 @@ app:
 server:
   port: 8080
   read_timeout: 15s
+  read_header_timeout: 5s
   write_timeout: 15s
+  idle_timeout: 60s
   shutdown_timeout: 10s
+  # Largest JSON request body (uploads have their own limit).
+  max_body_bytes: 1048576
+  # Reverse proxies allowed to set X-Forwarded-For; empty trusts none.
+  trusted_proxies: []
 
 database:
   host: localhost
@@ -26,9 +32,7 @@ database:
   max_open_conns: 25
   max_idle_conns: 5
   conn_max_lifetime: 1h
-  # Schema is owned by migrations (migrations/schema, make migrate-up) — it
-  # carries partial unique indexes GORM can't express, so AutoMigrate stays off.
-  auto_migrate: false
+  # The schema comes only from migrations/schema (make migrate-up).
 
 jwt:
   # Dev-only secrets; override via JWT_ACCESS_SECRET / JWT_REFRESH_SECRET in prod.
@@ -46,10 +50,94 @@ rate_limit:
   hold:
     capacity: 20
     refill_per_second: 5
+  # Anonymous catalog reads (movies, showtimes) per IP.
+  public:
+    capacity: 60
+    refill_per_second: 20
+  # Realtime tokens per user.
+  events:
+    capacity: 10
+    refill_per_second: 0.2
+  # 5 wrong passwords in a row for one email+IP -> 429 for the lockout time.
+  login:
+    max_failures: 5
+    lockout: 5m
 
 # RabbitMQ durable queuing; use host "rabbitmq" when running via docker.
 queue:
   url: amqp://guest:guest@localhost:5672/
+
+# Optional read cache: public movie reads are answered from Redis when the
+# address is set. Empty = disabled (choose docker or local Redis as you like).
+redis:
+  addr: ""
+  password: ""
+  db: 0
+  ttl: 5m
+  # Showtime listings expire fast: a showtime must fall off "on sale" close
+  # to when it actually starts or closes, not up to 5 minutes late.
+  showtimes_ttl: 60s
+
+# Booking: seat hold TTL and per-booking seat cap.
+booking:
+  hold_ttl_minutes: 10
+  max_seats_per_booking: 10
+
+# Gate check-in window around the showtime start; outside it a scan answers
+# too_early / closed and the ticket stays unused.
+checkin:
+  open_before_minutes: 30
+  close_after_minutes: 20
+
+# Payments: every provider is an option of its own, enabled independently.
+# The mock is one provider like any real gateway would be.
+payment:
+  # How providers (IPN) and browsers (return URL, mock checkout) reach this API.
+  public_base_url: http://localhost:8080
+  # Where the browser goes after /payments/{provider}/return ("" = JSON answer).
+  return_redirect_url: ""
+  # Used when POST /orders/:id/pay names no provider; must be enabled.
+  default_provider: mock
+  # Given-up attempts are rechecked this long for money collected late.
+  late_capture_window: 24h
+  providers:
+    mock:
+      enabled: true
+      display_name: "Cổng thử nghiệm (mock)"
+      secret: dev-mock-secret-change-in-prod
+    # A real gateway gets its own block once its adapter exists, e.g.:
+    # vnpay:
+    #   enabled: false
+    #   tmn_code: ...
+    #   hash_secret: ...
+
+# Ticket emails use a mock mailer (no SMTP): each email is written as an
+# .html file into outbox_dir so it can be opened in a browser.
+mail:
+  outbox_dir: tmp/mail
+
+# Password reset: the emailed link points at the frontend page; the token there
+# is single-use and expires after password_reset_ttl (5m-24h).
+account:
+  password_reset_url: http://localhost:5173/reset-password
+  password_reset_ttl: 30m
+
+# Audit logs older than this are removed by the nightly cleanup job (>= 90).
+audit:
+  retention_days: 90
+
+# Poster uploads: "local" writes files served under /media (dev),
+# "cloudinary" uploads to Cloudinary (fill the credentials). DB stores the URL.
+storage:
+  driver: local
+  public_base_url: http://localhost:8080
+  local_dir: tmp/uploads
+  max_upload_mb: 5
+  cloudinary:
+    cloud_name: ""
+    api_key: ""
+    api_secret: ""
+    folder: cinema
 
 cors:
   allowed_origins:

@@ -7,13 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// Showtime status.
 const (
 	ShowtimeOpen   = "open"
 	ShowtimeClosed = "closed"
 )
 
-// Showtime schedules a movie in a hall at a time slot.
 type Showtime struct {
 	ID        string         `gorm:"type:uuid;primaryKey" json:"id"`
 	MovieID   string         `gorm:"type:uuid;not null" json:"movie_id"`
@@ -35,15 +33,13 @@ func (s *Showtime) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// Per-show seat status.
 const (
 	SeatStatusAvailable = "available"
 	SeatStatusHeld      = "held"
 	SeatStatusSold      = "sold"
 )
 
-// ShowtimeSeat is the state of one seat in one show — the locking and
-// fencing point for holds. Version is the optimistic-lock token.
+// The row lock and fencing point for holds; Version is the fencing token.
 type ShowtimeSeat struct {
 	ID         string     `gorm:"type:uuid;primaryKey" json:"id"`
 	ShowtimeID string     `gorm:"type:uuid;not null" json:"showtime_id"`

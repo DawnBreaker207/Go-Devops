@@ -8,7 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// Use json field names (e.g. "release_date") in validation errors instead of Go field names.
+// Validation errors use json/form field names instead of Go field names.
 func registerValidators() {
 	engine, ok := binding.Validator.Engine().(*validator.Validate)
 	if !ok {

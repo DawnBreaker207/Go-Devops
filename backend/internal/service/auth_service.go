@@ -1,37 +1,73 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"html/template"
+	"math"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/notify"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
-	"gorm.io/gorm"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 )
 
-// AuthService handles register, login, and token refresh.
+// dummyPasswordHash has the cost of real password hashes.
+var dummyPasswordHash = sync.OnceValue(func() []byte {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("not-a-real-password"), bcrypt.DefaultCost)
+	return hash
+})
+
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
+	AcceptTerms(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.TokenResponse, error)
+	Logout(ctx context.Context, refreshToken string) error
+	ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error)
+	ForgotPassword(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error
 }
 
 type authService struct {
-	db         *gorm.DB
-	userRepo   repository.UserRepository
-	jwtManager *jwt.Manager
+	db          *gorm.DB
+	userRepo    repository.UserRepository
+	tokens      repository.RefreshTokenRepository
+	resetTokens repository.PasswordResetTokenRepository
+	mailer      notify.Mailer
+	resetURL    string
+	resetTTL    time.Duration
+	jwtManager  *jwt.Manager
+	loginGuard  *ratelimit.FailureLimiter
+	// termsVersion is the current terms revision; 0 disables the acceptance gate.
+	termsVersion int
 }
 
-func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, jwtManager *jwt.Manager) AuthService {
-	return &authService{db: db, userRepo: userRepo, jwtManager: jwtManager}
+// NewAuthService: loginGuard may be nil (no failed-login lockout).
+func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, tokens repository.RefreshTokenRepository,
+	jwtManager *jwt.Manager, loginGuard *ratelimit.FailureLimiter,
+	resetTokens repository.PasswordResetTokenRepository, mailer notify.Mailer,
+	resetURL string, resetTTL time.Duration, termsVersion int) AuthService {
+	return &authService{db: db, userRepo: userRepo, tokens: tokens, resetTokens: resetTokens,
+		mailer: mailer, resetURL: resetURL, resetTTL: resetTTL, jwtManager: jwtManager,
+		loginGuard: loginGuard, termsVersion: termsVersion}
 }
 
 func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error) {
@@ -55,13 +91,15 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		Password: string(hashed),
 		FullName: strings.TrimSpace(req.FullName),
 		Role:     models.RoleCustomer,
+		Active:   true,
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
+		if apperrors.IsUniqueViolation(err) {
+			return nil, apperrors.ErrEmailAlreadyExists // registered concurrently
+		}
 		return nil, err
 	}
-	// Auth events are activity records, not handled by the middleware's
-	// failure path; written after the fact, best-effort — a failed audit row
-	// must not take the user's session down.
+	// Best-effort audit after the fact: a failed audit row must not fail the request.
 	s.auditSuccess(ctx, "auth.register", user.ID, user.Role,
 		map[string]any{"email": user.Email, "full_name": user.FullName})
 
@@ -69,23 +107,22 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	return &result, nil
 }
 
+// Login counts wrong passwords per email+IP; the 5th in a row locks that pair out.
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
-	user, err := s.userRepo.FindByEmail(ctx, normalizeEmail(req.Email))
+	user, err := s.authenticate(ctx, req)
 	if err != nil {
-		// Don't reveal whether the email exists.
-		if errors.Is(err, apperrors.ErrUserNotFound) {
-			return nil, apperrors.ErrInvalidCredentials
-		}
 		return nil, err
 	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, apperrors.ErrInvalidCredentials
+	if s.termsVersion > 0 && user.AcceptedTermsVersion < s.termsVersion {
+		return nil, apperrors.ErrTermsRequired.WithDetails(map[string]string{
+			"required_terms_version": strconv.Itoa(s.termsVersion),
+			"accepted_terms_version": strconv.Itoa(user.AcceptedTermsVersion),
+		})
 	}
 
-	pair, err := s.jwtManager.GeneratePair(user.ID, user.Email, user.Role)
+	pair, err := s.issueTokens(ctx, s.db, user, "")
 	if err != nil {
-		return nil, apperrors.Internal("cannot issue token").Wrap(err)
+		return nil, err
 	}
 	s.auditSuccess(ctx, "auth.login", user.ID, user.Role, nil)
 
@@ -95,24 +132,122 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	}, nil
 }
 
+// AcceptTerms records that the account agreed to the current terms and signs it in.
+func (s *authService) AcceptTerms(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
+	if s.termsVersion <= 0 {
+		return nil, apperrors.Validation("terms acceptance is not required")
+	}
+	user, err := s.authenticate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if user.AcceptedTermsVersion >= s.termsVersion {
+		return nil, apperrors.Validation("terms already accepted")
+	}
+	if err := s.userRepo.SetAcceptedTerms(ctx, s.db, user.ID, s.termsVersion); err != nil {
+		return nil, err
+	}
+	user.AcceptedTermsVersion = s.termsVersion
+
+	pair, err := s.issueTokens(ctx, s.db, user, "")
+	if err != nil {
+		return nil, err
+	}
+	s.auditSuccess(ctx, "auth.accept_terms", user.ID, user.Role, nil)
+
+	return &dto.LoginResponse{
+		TokenResponse: newTokenResponse(pair),
+		User:          dto.NewUserResponse(user),
+	}, nil
+}
+
+// authenticate runs the shared credential, lockout and account checks.
+func (s *authService) authenticate(ctx context.Context, req dto.LoginRequest) (*models.User, error) {
+	email := normalizeEmail(req.Email)
+	guardKey := email + "|" + req.ClientIP
+	if s.loginGuard != nil {
+		if blocked, left := s.loginGuard.Blocked(guardKey); blocked {
+			return nil, apperrors.ErrTooManyLoginAttempts.WithDetails(map[string]string{
+				"retry_after_seconds": strconv.Itoa(int(math.Ceil(left.Seconds()))),
+			})
+		}
+	}
+
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		// Don't reveal whether the email exists, not even by answering faster.
+		if errors.Is(err, apperrors.ErrUserNotFound) {
+			_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), []byte(req.Password))
+			s.loginFailed(guardKey, req.ClientIP)
+			return nil, apperrors.ErrInvalidCredentials
+		}
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		s.loginFailed(guardKey, req.ClientIP)
+		return nil, apperrors.ErrInvalidCredentials
+	}
+	if s.loginGuard != nil {
+		s.loginGuard.Reset(guardKey)
+	}
+	if !user.Active {
+		return nil, apperrors.ErrAccountLocked
+	}
+	return user, nil
+}
+
+// Refresh rotates the refresh token. A token presented twice is a replay: its whole
+// family is revoked and the user must log in again.
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.TokenResponse, error) {
 	claims, err := s.jwtManager.ParseRefresh(refreshToken)
 	if err != nil {
 		return nil, err
 	}
 
-	// Re-read the user so tokens are invalidated when the account is deleted or demoted.
-	user, err := s.userRepo.FindByID(ctx, claims.UserID)
-	if err != nil {
-		if errors.Is(err, apperrors.ErrUserNotFound) {
-			return nil, apperrors.ErrInvalidToken
+	var (
+		pair   *jwt.TokenPair
+		user   *models.User
+		replay bool
+	)
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		pair, user, replay = nil, nil, false
+		stored, err := s.tokens.Lock(ctx, tx, claims.ID)
+		if err != nil {
+			return err
 		}
+		if stored == nil || stored.UserID != claims.UserID || stored.RevokedAt != nil {
+			return apperrors.ErrInvalidToken
+		}
+		if stored.UsedAt != nil {
+			replay = true
+			_, err := s.tokens.RevokeFamily(ctx, tx, stored.FamilyID)
+			return err
+		}
+
+		u, err := s.userRepo.FindByID(ctx, claims.UserID)
+		if err != nil {
+			if errors.Is(err, apperrors.ErrUserNotFound) {
+				return apperrors.ErrInvalidToken
+			}
+			return err
+		}
+		if !u.Active {
+			return apperrors.ErrAccountLocked
+		}
+		if err := s.tokens.MarkUsed(ctx, tx, stored.ID); err != nil {
+			return err
+		}
+		pair, err = s.issueTokens(ctx, tx, u, stored.FamilyID)
+		user = u
+		return err
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	pair, err := s.jwtManager.GeneratePair(user.ID, user.Email, user.Role)
-	if err != nil {
-		return nil, apperrors.Internal("cannot issue token").Wrap(err)
+	if replay {
+		logger.Warn("refresh token replay detected; token family revoked", logger.String("user_id", claims.UserID))
+		return nil, apperrors.ErrInvalidToken
 	}
 	s.auditSuccess(ctx, "auth.refresh", user.ID, user.Role, nil)
 
@@ -120,8 +255,198 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 	return &result, nil
 }
 
-// auditSuccess writes an auth event row. The middleware stashes the route's
-// action and network info into the context; here we only complete it.
+// Logout revokes the whole token family of the presented refresh token. A token
+// that is already dead still answers 200: the session is simply gone.
+func (s *authService) Logout(ctx context.Context, refreshToken string) error {
+	claims, err := s.jwtManager.ParseRefresh(refreshToken)
+	if err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		stored, err := s.tokens.Lock(ctx, tx, claims.ID)
+		if err != nil {
+			return err
+		}
+		if stored == nil || stored.UserID != claims.UserID || stored.RevokedAt != nil {
+			return nil
+		}
+		_, err = s.tokens.RevokeFamily(ctx, tx, stored.FamilyID)
+		return err
+	})
+}
+
+// ChangePassword checks the current password, then rotates it and revokes every
+// other session; the current one receives a fresh token pair.
+func (s *authService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+		return nil, apperrors.ErrInvalidCredentials
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, apperrors.Internal("cannot hash password").Wrap(err)
+	}
+	var pair *jwt.TokenPair
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.userRepo.SetPassword(ctx, tx, userID, string(hashed)); err != nil {
+			return err
+		}
+		if _, err := s.tokens.RevokeUser(ctx, tx, userID); err != nil {
+			return err
+		}
+		pair, err = s.issueTokens(ctx, tx, user, "")
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := newTokenResponse(pair)
+	return &result, nil
+}
+
+// ForgotPassword always answers 200: it never reveals whether the email exists.
+// For an existing active account it mints one live reset token and emails the
+// link; a missing email burns a bcrypt compare so the answer does not leak timing.
+func (s *authService) ForgotPassword(ctx context.Context, email string) error {
+	user, err := s.userRepo.FindByEmail(ctx, normalizeEmail(email))
+	if err != nil {
+		if errors.Is(err, apperrors.ErrUserNotFound) {
+			_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), dummyPasswordHash())
+			return nil
+		}
+		return err
+	}
+	if !user.Active {
+		return nil
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return apperrors.Internal("cannot generate reset token").Wrap(err)
+	}
+	tokenHex := hex.EncodeToString(raw)
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.resetTokens.InvalidateUser(ctx, tx, user.ID); err != nil {
+			return err
+		}
+		return s.resetTokens.Create(ctx, tx, &models.PasswordResetToken{
+			UserID:    user.ID,
+			TokenHash: sha256Hex(tokenHex),
+			ExpiresAt: time.Now().Add(s.resetTTL),
+		})
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.sendResetEmail(ctx, user.Email, tokenHex); err != nil {
+		// The mail is not on the critical path: the client must get its 200 either way.
+		logger.Warn("password reset email not sent", logger.String("user_id", user.ID), logger.Err(err))
+	}
+	return nil
+}
+
+// ResetPassword redeems a single-use token. Wrong, unused, or expired tokens are
+// rejected the same way (400); on success the password changes, the token dies
+// and every refresh token of the user is revoked.
+func (s *authService) ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error {
+	if len(req.Token) < 16 {
+		return apperrors.BadRequest("invalid or expired reset token")
+	}
+	hash := sha256Hex(strings.ToLower(req.Token))
+	var user *models.User
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		token, err := s.resetTokens.LockValid(ctx, tx, hash)
+		if err != nil {
+			return err
+		}
+		if token == nil {
+			return apperrors.BadRequest("invalid or expired reset token")
+		}
+		u, err := s.userRepo.FindByID(ctx, token.UserID)
+		if err != nil {
+			return err
+		}
+		if !u.Active {
+			return apperrors.ErrAccountLocked
+		}
+		hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return apperrors.Internal("cannot hash password").Wrap(err)
+		}
+		if err := s.userRepo.SetPassword(ctx, tx, u.ID, string(hashed)); err != nil {
+			return err
+		}
+		if err := s.resetTokens.MarkUsed(ctx, tx, token.ID); err != nil {
+			return err
+		}
+		if _, err := s.tokens.RevokeUser(ctx, tx, u.ID); err != nil {
+			return err
+		}
+		user = u
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	s.auditSuccess(ctx, "auth.reset_password", user.ID, user.Role, nil)
+	return nil
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+const resetEmailHTML = `<!doctype html>
+<html><body style="font-family:Arial,Helvetica,sans-serif;color:#1f2328;max-width:480px">
+<p>Xin chào,</p>
+<p>Bạn vừa yêu cầu đặt lại mật khẩu cho tài khoản xem phim của mình.</p>
+<p><a href="{{.URL}}">Đặt lại mật khẩu</a></p>
+<p>Liên kết có giá trị 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+</body></html>`
+
+var resetEmailTemplate = template.Must(template.New("reset").Parse(resetEmailHTML))
+
+// sendResetEmail: the recipient address never enters logs.
+func (s *authService) sendResetEmail(ctx context.Context, email, token string) error {
+	var body bytes.Buffer
+	if err := resetEmailTemplate.Execute(&body, struct{ URL string }{URL: s.resetURL + "?token=" + token}); err != nil {
+		return err
+	}
+	return s.mailer.Send(ctx, notify.Message{To: email, Subject: "Đặt lại mật khẩu", HTML: body.String()})
+}
+
+// issueTokens: an empty familyID starts a new token family (a fresh login).
+func (s *authService) issueTokens(ctx context.Context, tx *gorm.DB, user *models.User, familyID string) (*jwt.TokenPair, error) {
+	pair, err := s.jwtManager.GeneratePair(user.ID, user.Email, user.Role)
+	if err != nil {
+		return nil, apperrors.Internal("cannot issue token").Wrap(err)
+	}
+	if familyID == "" {
+		familyID = uuid.NewString()
+	}
+	if err := s.tokens.Create(ctx, tx, &models.RefreshToken{
+		ID:        pair.RefreshID,
+		UserID:    user.ID,
+		FamilyID:  familyID,
+		ExpiresAt: pair.RefreshExpiresAt,
+	}); err != nil {
+		return nil, err
+	}
+	return pair, nil
+}
+
+// loginFailed logs the IP only: emails stay out of logs.
+func (s *authService) loginFailed(key, ip string) {
+	if s.loginGuard != nil && s.loginGuard.Fail(key) {
+		logger.Warn("login locked out after repeated failures", logger.String("ip", ip))
+	}
+}
+
+// auditSuccess completes the audit record the middleware put in the context.
 func (s *authService) auditSuccess(ctx context.Context, action, userID, role string, after map[string]any) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {

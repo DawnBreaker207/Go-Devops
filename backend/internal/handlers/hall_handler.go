@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
@@ -8,7 +10,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// HallHandler handles hall, seat and price requests.
 type HallHandler struct {
 	hallService service.HallService
 }
@@ -171,6 +172,158 @@ func (h *HallHandler) SetPrices(c *gin.Context) {
 		return
 	}
 	response.OK(c, prices)
+}
+
+// Templates godoc
+//
+//	@Summary		Preview the built-in hall templates
+//	@Tags			halls
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.Body{data=[]dto.HallTemplateResponse}
+//	@Failure		401	{object}	response.Body
+//	@Router			/admin/hall-templates [get]
+func (h *HallHandler) Templates(c *gin.Context) {
+	response.OK(c, h.hallService.Templates())
+}
+
+// Clone godoc
+//
+//	@Summary		Clone a hall's current seat grid under a new name
+//	@Tags			halls
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string					true	"Hall ID to clone"
+//	@Param			payload	body		dto.CloneHallRequest	true	"New hall name"
+//	@Success		201		{object}	response.Body{data=dto.HallResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/admin/halls/{id}/clone [post]
+func (h *HallHandler) Clone(c *gin.Context) {
+	var req dto.CloneHallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	hall, err := h.hallService.Clone(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, hall)
+}
+
+// BulkUpdateSeats godoc
+//
+//	@Summary		Change many seats at once (labels, rows, columns or a range)
+//	@Tags			halls
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string						true	"Hall ID"
+//	@Param			payload	body		dto.BulkSeatUpdateRequest	true	"Changes, one selector each"
+//	@Success		200		{object}	response.Body{data=[]dto.SeatResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/admin/halls/{id}/seats [patch]
+func (h *HallHandler) BulkUpdateSeats(c *gin.Context) {
+	var req dto.BulkSeatUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	seats, err := h.hallService.BulkUpdateSeats(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, seats)
+}
+
+// UpdateHall godoc
+//
+//	@Summary		Rename a hall, change its screen/aisle display, or (de)activate it
+//	@Description	Deactivating is refused (409) while an open showtime is still to come; once inactive the hall takes no new showtimes.
+//	@Tags			halls
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string					true	"Hall ID"
+//	@Param			payload	body		dto.UpdateHallRequest	true	"Fields to change"
+//	@Success		200		{object}	response.Body{data=dto.HallResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/admin/halls/{id} [put]
+func (h *HallHandler) UpdateHall(c *gin.Context) {
+	var req dto.UpdateHallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	hall, err := h.hallService.UpdateHall(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, hall)
+}
+
+// RegenerateLayout godoc
+//
+//	@Summary		Regenerate a hall's whole seat grid
+//	@Description	Only while the hall has never had a single booking (409 otherwise).
+//	@Tags			halls
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string			true	"Hall ID"
+//	@Param			payload	body		dto.HallRequest	true	"New layout (name/prices are ignored here)"
+//	@Success		200		{object}	response.Body{data=dto.HallResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/admin/halls/{id}/layout [put]
+func (h *HallHandler) RegenerateLayout(c *gin.Context) {
+	var req dto.HallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	hall, err := h.hallService.RegenerateLayout(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, hall)
+}
+
+// DeleteHall godoc
+//
+//	@Summary		Delete a hall (soft delete)
+//	@Description	Refused (409) while it has a showtime not yet ended.
+//	@Tags			halls
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	string	true	"Hall ID"
+//	@Success		204	{object}	response.Body
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Failure		409	{object}	response.Body
+//	@Router			/admin/halls/{id} [delete]
+func (h *HallHandler) DeleteHall(c *gin.Context) {
+	if err := h.hallService.DeleteHall(c.Request.Context(), c.Param("id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // Prices godoc

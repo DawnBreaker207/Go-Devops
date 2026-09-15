@@ -1,12 +1,12 @@
-// Package batch is a background job framework: job registry, per-run logging
-// to batch_jobs, chunked processing with retry/skip, cron scheduling, and
-// manual triggers. Jobs run in-process (single instance, no queue needed for
-// scheduling); RabbitMQ is reserved for tasks that must leave the HTTP lane.
+// Package batch runs in-process background jobs with cron scheduling, run logging and chunked retry.
 package batch
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"runtime/debug"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -17,42 +17,48 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Job is a unit of background work: a 6-field cron schedule (seconds included),
-// empty schedule = manual trigger only. A struct beats an interface here since
-// every job shares the same shape.
+// Job.Schedule is a 6-field cron spec (with seconds); empty means manual trigger only.
 type Job struct {
 	Name     string
 	Schedule string
 	Run      func(ctx context.Context, opts RunOptions) error
 }
 
-// RunOptions carries run-level info a job reports progress through.
 type RunOptions struct {
 	DB          *gorm.DB
 	RunID       string
 	TriggeredBy string
-	// Progress reports processed/skipped counts after each chunk (persisted to batch_jobs).
-	Progress func(processed, skipped int) error
+	Progress    func(processed, skipped int) error
 }
 
-// Manager registers, schedules and runs jobs, logging runs to batch_jobs.
+const (
+	runTimeout = 30 * time.Minute
+	// Bookkeeping writes must succeed even after the run's own context is canceled.
+	bookkeepingTimeout = 5 * time.Second
+)
+
 type Manager struct {
 	db   *gorm.DB
 	repo repository.BatchJobRepository
 	jobs map[string]*Job
 	cron *cronScheduler
+
+	// Canceled by Stop so running jobs wind down.
+	ctx    context.Context
+	cancel context.CancelFunc
+	manual sync.WaitGroup
 }
 
 func NewManager(db *gorm.DB, repo repository.BatchJobRepository) *Manager {
-	return &Manager{db: db, repo: repo, jobs: make(map[string]*Job)}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Manager{db: db, repo: repo, jobs: make(map[string]*Job), ctx: ctx, cancel: cancel}
 }
 
-// Register adds a job. Name is the identity; a duplicate silently replaces.
+// Register adds a job; a job with the same name replaces the old one.
 func (m *Manager) Register(job *Job) {
 	m.jobs[job.Name] = job
 }
 
-// Names lists registered job names for the admin UI.
 func (m *Manager) Names() []string {
 	names := make([]string, 0, len(m.jobs))
 	for name := range m.jobs {
@@ -61,22 +67,23 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// Start schedules cron jobs that declare a schedule.
-func (m *Manager) Start() {
+// Start marks runs left RUNNING by a previous process as stopped, then schedules jobs.
+func (m *Manager) Start(ctx context.Context) error {
+	stopped, err := m.repo.StopOrphans(ctx)
+	if err != nil {
+		return err
+	}
+	if stopped > 0 {
+		logger.Warn("batch runs interrupted by the last shutdown marked stopped", logger.Int("runs", int(stopped)))
+	}
+
 	m.cron = newCron()
 	for _, job := range m.jobs {
 		if job.Schedule == "" {
 			continue
 		}
 		name := job.Name
-		if _, err := m.cron.addFunc(job.Schedule, func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-			defer cancel()
-			if err := m.Run(ctx, name, models.TriggerCron); err != nil {
-				logger.Error("scheduled batch job failed",
-					logger.String("job", name), logger.Err(err))
-			}
-		}); err != nil {
+		if _, err := m.cron.addFunc(job.Schedule, func() { m.runScheduled(name) }); err != nil {
 			logger.Error("invalid cron schedule",
 				logger.String("job", name), logger.String("schedule", job.Schedule), logger.Err(err))
 			continue
@@ -85,54 +92,140 @@ func (m *Manager) Start() {
 			logger.String("job", name), logger.String("schedule", job.Schedule))
 	}
 	m.cron.start()
+	return nil
 }
 
-// Stop halts scheduling, letting already-running jobs finish.
-func (m *Manager) Stop() {
-	if m.cron != nil {
-		m.cron.stop()
+// A tick that finds the previous run still going is recorded as skipped, not as an error.
+func (m *Manager) runScheduled(name string) {
+	ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
+	defer cancel()
+	err := m.Run(ctx, name, models.TriggerCron)
+	switch {
+	case err == nil:
+	case errors.Is(err, apperrors.ErrJobRunning):
+		bctx, bcancel := context.WithTimeout(context.Background(), bookkeepingTimeout)
+		defer bcancel()
+		if rerr := m.repo.RecordSkipped(bctx, name, models.TriggerCron, "previous run still running"); rerr != nil {
+			logger.Warn("skipped batch run not recorded", logger.String("job", name), logger.Err(rerr))
+		}
+	default:
+		logger.Error("scheduled batch job failed", logger.String("job", name), logger.Err(err))
 	}
 }
 
-// Run executes one job now: opens a RUNNING row, calls the job, closes the row.
-// A second call while the job is running returns ErrJobRunning.
+// Stop cancels running jobs (chunked, safe to rerun) and waits for them, bounded by ctx,
+// so shutdown never closes the database under a job.
+func (m *Manager) Stop(ctx context.Context) {
+	m.cancel()
+	done := make(chan struct{})
+	go func() {
+		if m.cron != nil {
+			<-m.cron.stop().Done()
+		}
+		m.manual.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		logger.Warn("batch jobs still running at shutdown")
+	}
+}
+
+// Run executes a job and waits for it. It returns ErrJobRunning if the job is already running.
 func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
-	job, ok := m.jobs[name]
-	if !ok {
-		return apperrors.ErrJobNotFound
-	}
-
-	run, err := m.repo.Start(ctx, name, triggeredBy)
+	job, run, err := m.begin(ctx, name, triggeredBy)
 	if err != nil {
 		return err
 	}
+	return m.execute(ctx, job, run)
+}
 
+// Trigger starts a run in the background. It returns once the RUNNING row exists,
+// so an unknown or already running job is reported to the caller.
+func (m *Manager) Trigger(name, triggeredBy string) (string, error) {
+	job, run, err := m.begin(m.ctx, name, triggeredBy)
+	if err != nil {
+		return "", err
+	}
+	m.manual.Add(1)
+	go func() {
+		defer m.manual.Done()
+		ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
+		defer cancel()
+		if err := m.execute(ctx, job, run); err != nil {
+			logger.Error("manual batch job failed", logger.String("job", name), logger.Err(err))
+		}
+	}()
+	return run.ID, nil
+}
+
+func (m *Manager) begin(ctx context.Context, name, triggeredBy string) (*Job, *models.BatchJob, error) {
+	job, ok := m.jobs[name]
+	if !ok {
+		return nil, nil, apperrors.ErrJobNotFound
+	}
+	run, err := m.repo.Start(ctx, name, triggeredBy)
+	if err != nil {
+		return nil, nil, err
+	}
+	return job, run, nil
+}
+
+func (m *Manager) execute(ctx context.Context, job *Job, run *models.BatchJob) (runErr error) {
+	bookkeeping := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
+	}
 	opts := RunOptions{
 		DB:          m.db,
 		RunID:       run.ID,
-		TriggeredBy: triggeredBy,
+		TriggeredBy: run.TriggeredBy,
 		Progress: func(processed, skipped int) error {
-			return m.repo.RecordProgress(context.Background(), run.ID, processed, skipped)
+			pctx, cancel := bookkeeping()
+			defer cancel()
+			return m.repo.RecordProgress(pctx, run.ID, processed, skipped)
 		},
 	}
 
-	runErr := job.Run(ctx, opts)
-	status := models.BatchSuccess
-	msg := ""
-	if runErr != nil {
-		status, msg = models.BatchFailed, runErr.Error()
-	}
-	if err := m.repo.Finish(context.Background(), run.ID, status, msg); err != nil {
-		logger.Error("finish batch job failed", logger.String("run_id", run.ID), logger.Err(err))
-	}
-	if runErr != nil {
-		runErr = fmt.Errorf("%s failed: %w", name, runErr)
-	}
-	return runErr
+	defer func() {
+		status, msg := models.BatchSuccess, ""
+		if r := recover(); r != nil {
+			runErr = fmt.Errorf("%s panicked: %v", job.Name, r)
+			status, msg = models.BatchFailed, runErr.Error()
+			logger.Error("batch job panicked", logger.String("job", job.Name),
+				logger.String("panic", fmt.Sprint(r)), logger.String("stack", string(debug.Stack())))
+		} else if runErr != nil {
+			status, msg = models.BatchFailed, runErr.Error()
+			if ctx.Err() != nil {
+				status = models.BatchStopped
+			}
+			runErr = fmt.Errorf("%s failed: %w", job.Name, runErr)
+		}
+		fctx, cancel := bookkeeping()
+		defer cancel()
+		if err := m.repo.Finish(fctx, run.ID, status, msg); err != nil {
+			logger.Error("finish batch job failed", logger.String("run_id", run.ID), logger.Err(err))
+		}
+	}()
+	return job.Run(ctx, opts)
 }
 
-// RunInChunks processes items in chunks (~500), persisting progress after each
-// chunk. A failing item is counted as skipped and does not stop the job.
+const ItemAttempts = 3
+
+// NoRetry marks an item error an immediate retry can't fix; RunInChunks skips the item at once.
+func NoRetry(err error) error {
+	if err == nil {
+		return nil
+	}
+	return noRetryError{err}
+}
+
+type noRetryError struct{ error }
+
+func (e noRetryError) Unwrap() error { return e.error }
+
+// RunInChunks saves progress after each chunk. A failing item is tried up to ItemAttempts
+// times, then skipped; it never stops the job.
 func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func(ctx context.Context, item T) error) error {
 	const chunkSize = 500
 	processed, skipped := 0, 0
@@ -145,7 +238,20 @@ func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func
 			end = len(all)
 		}
 		for _, item := range all[start:end] {
-			if err := each(ctx, item); err != nil {
+			var err error
+			for attempt := 0; attempt < ItemAttempts; attempt++ {
+				if err = each(ctx, item); err == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				var noRetry noRetryError
+				if errors.As(err, &noRetry) {
+					break
+				}
+			}
+			if err != nil {
 				skipped++
 				continue
 			}

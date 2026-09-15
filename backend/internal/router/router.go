@@ -2,6 +2,7 @@
 package router
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,13 +15,14 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/handlers"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/middleware"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/storage"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/ratelimit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// Handlers groups the handlers wired in main.
 type Handlers struct {
 	Health   *handlers.HealthHandler
 	Auth     *handlers.AuthHandler
@@ -29,10 +31,24 @@ type Handlers struct {
 	Batch    *handlers.BatchHandler
 	Hall     *handlers.HallHandler
 	Showtime *handlers.ShowtimeHandler
+	Booking  *handlers.BookingHandler
+	SSE      *handlers.SSEHandler
+	Payment  *handlers.PaymentHandler
+	Staff    *handlers.StaffHandler
+	Report   *handlers.ReportHandler
+	Media    *handlers.MediaHandler
+	Audit    *handlers.AuditHandler
 }
 
-// New builds a gin.Engine with all middleware and routes attached.
-func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, holdLimiter *ratelimit.Limiter, h Handlers) *gin.Engine {
+type Limiters struct {
+	Auth   *ratelimit.Limiter
+	Hold   *ratelimit.Limiter
+	Public *ratelimit.Limiter
+	Events *ratelimit.Limiter
+}
+
+func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts middleware.AccountChecker,
+	limits Limiters, payments *payment.Registry, h Handlers) *gin.Engine {
 	if cfg.App.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -41,9 +57,16 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
+	// Only configured proxies may set X-Forwarded-For, so rate limits and the
+	// login lockout can not be dodged with a forged header.
+	if err := engine.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
+		_ = engine.SetTrustedProxies(nil)
+	}
 	engine.Use(
 		middleware.RequestID(),
 		middleware.Recovery(),
+		middleware.SecurityHeaders(),
+		middleware.BodyLimit(cfg.Server.MaxBodyBytes),
 		middleware.Logger(),
 		middleware.CORS(cfg.CORS.AllowedOrigins),
 	)
@@ -55,59 +78,78 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 		response.Error(c, apperrors.BadRequest("method not allowed"))
 	})
 
-	// Infrastructure probes for k8s/docker healthchecks.
 	engine.GET("/health", h.Health.Check)
 	engine.GET("/healthz", h.Health.Healthz)
+
+	if dir := h.Media.LocalDir(); dir != "" {
+		engine.Static(storage.MediaPath, dir)
+	}
 
 	if !cfg.App.IsProduction() {
 		engine.GET("/swagger/*any", ginswagger.WrapHandler(swaggerfiles.Handler))
 	}
 
-	// DBGuard answers 503 fast when the DB is down.
 	v1 := engine.Group("/api/v1")
-	v1.Use(middleware.DBGuard(db, 500*time.Millisecond))
+	v1.Use(middleware.DBGuard(db, 500*time.Millisecond), middleware.NoStore())
 	v1.GET("/health", h.Health.Check)
+	v1.GET("/healthz", h.Health.Healthz)
 
 	auth := v1.Group("/auth")
-	auth.Use(middleware.RateLimit(authLimiter))
+	auth.Use(middleware.RateLimit(limits.Auth))
 	{
-		// Auth routes are public: the audit middleware only stashes IP and
-		// user agent; services fill actor after a successful login/register,
-		// the failure path logs rejected attempts.
+		// No user yet: Audit only stashes IP and user agent; services fill the actor on success.
 		auth.POST("/register", middleware.Audit(db, "auth.register", "user"), h.Auth.Register)
 		auth.POST("/login", middleware.Audit(db, "auth.login", "user"), h.Auth.Login)
+		auth.POST("/terms-accept", middleware.Audit(db, "auth.accept_terms", "user"), h.Auth.AcceptTerms)
 		auth.POST("/refresh", middleware.Audit(db, "auth.refresh", "user"), h.Auth.Refresh)
+		auth.POST("/logout", middleware.Audit(db, "auth.logout", "user"), h.Auth.Logout)
+		auth.POST("/forgot-password", middleware.Audit(db, "auth.forgot_password", "user"), h.Auth.ForgotPassword)
+		auth.POST("/reset-password", middleware.Audit(db, "auth.reset_password", "user"), h.Auth.ResetPassword)
+	}
+
+	public := v1.Group("")
+	public.Use(middleware.RateLimit(limits.Public), middleware.OptionalAuth(jwtManager, accounts))
+	{
+		public.GET("/movies", h.Movie.List)
+		public.GET("/movies/:id", h.Movie.Detail)
+		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
+		public.GET("/showtimes", h.Showtime.List)
 	}
 
 	protected := v1.Group("")
-	protected.Use(middleware.Auth(jwtManager))
+	protected.Use(middleware.Auth(jwtManager, accounts))
 	{
 		protected.GET("/users/me", h.User.Me)
+		protected.PUT("/users/me", middleware.Audit(db, "users.update_profile", "user"), h.User.UpdateMe)
+		// Account erasure is a customer self-service right; staff/admin are
+		// operational accounts managed by an admin (lock/unlock), not self-erased.
+		protected.DELETE("/users/me", middleware.Audit(db, "users.delete_me", "user"),
+			middleware.RequireRoles(models.RoleCustomer), h.User.DeleteMe)
+		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)
 
-		// Customer views.
-		protected.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
 
 		movies := protected.Group("/movies")
 		{
-			movies.GET("", h.Movie.List)
-			movies.GET("/:id", h.Movie.Detail)
-
-			// Writes are admin/staff only. Audit runs before role checks so
-			// forbidden attempts on an authenticated route are logged too.
+			// Audit runs before role checks so forbidden attempts are logged too.
 			movies.POST("", middleware.Audit(db, "admin.create_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Create)
 			movies.PUT("/:id", middleware.Audit(db, "admin.update_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Update)
 			movies.DELETE("/:id", middleware.Audit(db, "admin.delete_movie", "movie"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Movie.Delete)
 		}
 
-		// Hall and showtime management: admin/staff only.
 		catalog := protected.Group("/admin")
 		{
+			catalog.GET("/hall-templates", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Templates)
 			catalog.GET("/halls", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.List)
 			catalog.GET("/halls/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Show)
 			catalog.GET("/halls/:id/seats", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Seats)
 			catalog.GET("/halls/:id/prices", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Prices)
 			catalog.POST("/halls", middleware.Audit(db, "admin.create_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Create)
+			catalog.POST("/halls/:id/clone", middleware.Audit(db, "admin.clone_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Clone)
+			catalog.PUT("/halls/:id", middleware.Audit(db, "admin.update_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateHall)
+			catalog.PUT("/halls/:id/layout", middleware.Audit(db, "admin.update_hall_layout", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.RegenerateLayout)
+			catalog.DELETE("/halls/:id", middleware.Audit(db, "admin.delete_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteHall)
+			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
 			catalog.PUT("/halls/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
 			catalog.PUT("/halls/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)
@@ -115,17 +157,95 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, authLimiter, 
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
 		}
 
-		// System administration: batch logs, manual job runs (admin only).
+		orders := protected.Group("/orders")
+		{
+			orders.GET("", h.Booking.List)
+			orders.POST("/hold", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.hold", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Booking.Hold)
+			orders.POST("/:id/pay", middleware.Audit(db, "orders.pay", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Booking.Pay)
+			orders.POST("/:id/confirm", middleware.Audit(db, "orders.confirm", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Booking.Confirm)
+			orders.POST("/:id/cancel", middleware.Audit(db, "orders.cancel", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Booking.Cancel)
+			orders.GET("/:id/status", middleware.RequireRoles(models.RoleCustomer), h.Booking.Status)
+			orders.GET("/:id", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
+			orders.GET("/:id/tickets", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
+		}
+
+		tickets := protected.Group("/tickets")
+		{
+			tickets.POST("/:id/redeem", middleware.Audit(db, "staff.redeem_ticket", "ticket"),
+				middleware.RequireRoles(models.RoleStaff, models.RoleAdmin), h.Booking.Redeem)
+		}
+
+		protected.GET("/events/token", middleware.RateLimitByUser(limits.Events), h.SSE.IssueToken)
+
+		protected.GET("/payments/providers", h.Payment.Providers)
+
+		staff := protected.Group("/staff")
+		staff.Use(middleware.RequireRoles(models.RoleStaff, models.RoleAdmin))
+		{
+			staff.GET("/dashboard", h.Staff.Dashboard)
+			staff.GET("/overview", h.Staff.Overview)
+			staff.GET("/boxoffice/day", h.Staff.BoxOfficeDay)
+			// Same action name as the success row the service writes in-transaction
+			// (orders.counter_sell) — filtering by action must show both outcomes.
+			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
+			staff.GET("/orders/:id", h.Staff.OrderDetail)
+			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
+			// Customer support lookup: read-only, scoped to role=customer accounts
+			// only (staff/admin accounts stay visible only via /admin/users).
+			staff.GET("/customers", h.Staff.SearchCustomers)
+			staff.GET("/customers/:id", h.Staff.CustomerProfile)
+			staff.GET("/customers/:id/orders", h.Staff.CustomerOrders)
+		}
+
+		protected.GET("/admin/users", middleware.RequireRoles(models.RoleAdmin), h.User.List)
+		protected.POST("/admin/users", middleware.Audit(db, "admin.create_user", "user"),
+			middleware.RequireRoles(models.RoleAdmin), h.User.Create)
+		protected.PATCH("/admin/users/:id", middleware.Audit(db, "admin.update_user", "user"),
+			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
+		protected.PUT("/admin/users/:id", middleware.Audit(db, "admin.update_user", "user"),
+			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
+
+		protected.GET("/admin/reports/daily", middleware.RequireRoles(models.RoleAdmin), h.Report.Daily)
+		protected.GET("/admin/overview", middleware.RequireRoles(models.RoleAdmin), h.Report.Overview)
+
+		// Aliases required by the API contract; the seat grid is readable by any signed-in user.
+		halls := protected.Group("/halls")
+		{
+			halls.GET("/:id/seats", h.Hall.Seats)
+			halls.PUT("/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"),
+				middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
+			halls.PUT("/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"),
+				middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
+		}
+
+		protected.POST("/admin/uploads/poster", middleware.Audit(db, "admin.upload_poster", "media"),
+			middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Media.UploadPoster)
+
 		admin := protected.Group("/admin")
 		admin.Use(middleware.RequireRoles(models.RoleAdmin))
 		{
 			admin.GET("/batch/jobs", h.Batch.List)
+			admin.GET("/audit-logs", h.Audit.List)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
 	}
 
-	// holdLimiter is wired to the /orders/hold group when F7 lands.
-	_ = holdLimiter
+	// EventSource can not send an Authorization header, so the realtime token in the URL is the credential.
+	v1.GET("/events/shows/:id", h.SSE.Stream)
+
+	// No JWT: the provider signature is the credential. Some gateways call the IPN with GET, others POST.
+	v1.Match([]string{http.MethodGet, http.MethodPost}, "/payments/:provider/ipn", h.Payment.Notify)
+	v1.GET("/payments/:provider/return", h.Payment.Return)
+
+	for _, p := range payments.List() {
+		if sim, ok := p.(payment.Simulator); ok {
+			engine.Any(sim.SimulatorPath()+"/*path", gin.WrapH(sim.SimulatorHandler()))
+		}
+	}
 
 	return engine
 }

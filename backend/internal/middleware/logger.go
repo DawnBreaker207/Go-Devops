@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,12 +10,30 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
-// Logger logs each request with latency and status.
+// Credentials that travel in URLs (realtime token, payment signatures) must not be logged.
+var sensitiveQueryKeys = map[string]bool{"token": true, "sig": true, "signature": true}
+
+func redactQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "[unparseable]"
+	}
+	for key := range values {
+		if sensitiveQueryKeys[key] {
+			values[key] = []string{"REDACTED"}
+		}
+	}
+	return values.Encode()
+}
+
 func Logger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := redactQuery(c.Request.URL.RawQuery)
 
 		c.Next()
 

@@ -52,6 +52,14 @@ func (l *Limiter) Allow(key string) bool {
 	return true
 }
 
+// RetryAfter is how long until one token is back, for Retry-After headers.
+func (l *Limiter) RetryAfter() time.Duration {
+	if l.refill <= 0 {
+		return time.Minute
+	}
+	return time.Duration(float64(time.Second) / l.refill)
+}
+
 // ponytail: the bucket map never shrinks; fine for a single instance, needs a
 // shared store (Redis) for a multi-instance setup.
 func (l *Limiter) maybePrune(now time.Time) {

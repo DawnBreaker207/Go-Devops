@@ -20,6 +20,7 @@ type ShowtimeResponse struct {
 	ID         string    `json:"id"`
 	MovieID    string    `json:"movie_id"`
 	MovieTitle string    `json:"movie_title"`
+	AgeRating  string    `json:"age_rating"`
 	HallID     string    `json:"hall_id"`
 	HallName   string    `json:"hall_name"`
 	StartAt    time.Time `json:"start_at"`
@@ -31,14 +32,16 @@ type ShowtimeResponse struct {
 
 // ShowtimeListItem is one showtime in the movie picker.
 type ShowtimeListItem struct {
-	ID        string    `json:"id"`
-	MovieID   string    `json:"movie_id"`
-	HallID    string    `json:"hall_id"`
-	HallName  string    `json:"hall_name"`
-	StartAt   time.Time `json:"start_at"`
-	EndAt     time.Time `json:"end_at"`
-	Status    string    `json:"status"`
-	FromPrice int64     `json:"from_price,omitempty"`
+	ID         string    `json:"id"`
+	MovieID    string    `json:"movie_id"`
+	MovieTitle string    `json:"movie_title"`
+	AgeRating  string    `json:"age_rating"`
+	HallID     string    `json:"hall_id"`
+	HallName   string    `json:"hall_name"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+	Status     string    `json:"status"`
+	FromPrice  int64     `json:"from_price,omitempty"`
 }
 
 // NewShowtimeListItem maps a row with hall name and price to a DTO.
@@ -57,26 +60,31 @@ func NewShowtimeListItem(s models.Showtime, hallName string, fromPrice int64) Sh
 
 // SeatMapSeat is one seat inside the showtime grid.
 type SeatMapSeat struct {
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	RowLabel string `json:"row_label"`
-	Col      int    `json:"col_number"`
-	SeatType string `json:"seat_type"`
-	IsGap    bool   `json:"is_gap"`
-	Status   string `json:"status"`
-	Price    int64  `json:"price"`
+	ID             string `json:"id"`
+	ShowtimeSeatID string `json:"showtime_seat_id,omitempty"`
+	Label          string `json:"label"`
+	RowLabel       string `json:"row_label"`
+	Col            int    `json:"col_number"`
+	SeatType       string `json:"seat_type"`
+	IsGap          bool   `json:"is_gap"`
+	ColSpan        int    `json:"col_span"`
+	Status         string `json:"status"`
+	Price          int64  `json:"price"`
 }
 
 // SeatMapResponse is the seat grid for a showtime.
 type SeatMapResponse struct {
-	ShowtimeID string         `json:"showtime_id"`
-	MovieID    string         `json:"movie_id"`
-	MovieTitle string         `json:"movie_title"`
-	HallID     string         `json:"hall_id"`
-	HallName   string         `json:"hall_name"`
-	StartAt    time.Time      `json:"start_at"`
-	EndAt      time.Time      `json:"end_at"`
-	Status     string         `json:"status"`
-	Prices     map[string]int64 `json:"prices"`
-	Seats      []SeatMapSeat  `json:"seats"`
+	ShowtimeID     string           `json:"showtime_id"`
+	MovieID        string           `json:"movie_id"`
+	MovieTitle     string           `json:"movie_title"`
+	AgeRating      string           `json:"age_rating"`
+	HallID         string           `json:"hall_id"`
+	HallName       string           `json:"hall_name"`
+	StartAt        time.Time        `json:"start_at"`
+	EndAt          time.Time        `json:"end_at"`
+	Status         string           `json:"status"`
+	ScreenPosition string           `json:"screen_position"`
+	AisleAfterCols []int            `json:"aisle_after_cols"`
+	Prices         map[string]int64 `json:"prices"`
+	Seats          []SeatMapSeat    `json:"seats"`
 }

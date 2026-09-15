@@ -1,0 +1,128 @@
+-- Module catalog: movies, halls, seats, prices, showtimes and per-show seat
+-- state (F2–F6). Seats are generated from a hall layout; ticket sales only
+-- touch showtime_seats.
+
+-- tstzrange/EXCLUDE below need this for the showtime overlap backstop.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+CREATE TABLE IF NOT EXISTS movies (
+    id           UUID PRIMARY KEY,
+    title        VARCHAR(255) NOT NULL,
+    genre        VARCHAR(100) NOT NULL,
+    duration     INTEGER      NOT NULL,
+    director     VARCHAR(255) NOT NULL,
+    description  TEXT,
+    poster_url   VARCHAR(512),
+    trailer_url  VARCHAR(512),
+    -- "cast" is an SQL keyword.
+    cast_members TEXT,
+    age_rating   VARCHAR(4)   NOT NULL DEFAULT 'P',
+    release_date DATE         NOT NULL,
+    status       VARCHAR(32)  NOT NULL DEFAULT 'draft',
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at   TIMESTAMPTZ,
+    CONSTRAINT ck_movie_status CHECK (status IN ('draft','showing','ended')),
+    CONSTRAINT ck_movie_duration CHECK (duration > 0),
+    -- Vietnamese film classification.
+    CONSTRAINT ck_movie_age_rating CHECK (age_rating IN ('P','K','T13','T16','T18'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_movies_status ON movies (status);
+CREATE INDEX IF NOT EXISTS idx_movies_genre ON movies (LOWER(genre)) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies (release_date) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS halls (
+    id             UUID PRIMARY KEY,
+    name           VARCHAR(255) NOT NULL,
+    rows           INTEGER      NOT NULL CHECK (rows > 0),
+    seats_per_row  INTEGER      NOT NULL CHECK (seats_per_row > 0),
+    -- Which seat type/gap each seat is lives on `seats` itself, per seat, not
+    -- here: a row-level "seat_types"/"gaps" recipe would go stale the moment
+    -- a bulk or per-seat edit gives one row more than one seat type.
+    -- Where the screen sits relative to row A, for the seat-map renderer.
+    screen_position VARCHAR(8)  NOT NULL DEFAULT 'front',
+    -- Column numbers after which there is a vertical aisle (display only).
+    aisle_after_cols JSONB      NOT NULL DEFAULT '[]',
+    -- An inactive hall keeps its history but takes no new showtimes.
+    active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at     TIMESTAMPTZ,
+    CONSTRAINT ck_hall_screen_position CHECK (screen_position IN ('front','back'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_halls_name ON halls (name) WHERE deleted_at IS NULL;
+
+-- The unique key (hall_id, ...) also serves lookups by hall.
+CREATE TABLE IF NOT EXISTS seats (
+    id         UUID PRIMARY KEY,
+    hall_id    UUID        NOT NULL REFERENCES halls(id),
+    row_index  INTEGER     NOT NULL CHECK (row_index > 0), -- display order; labels sort wrong past Z
+    row_label  VARCHAR(8)  NOT NULL,
+    col_number INTEGER     NOT NULL CHECK (col_number > 0),
+    seat_type  VARCHAR(16) NOT NULL DEFAULT 'standard',
+    is_gap     BOOLEAN     NOT NULL DEFAULT FALSE,
+    -- A "couple" seat spans this column and the next; the neighbor column
+    -- holds no seat of its own.
+    col_span   SMALLINT    NOT NULL DEFAULT 1 CHECK (col_span IN (1, 2)),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_seat_hall_row_col UNIQUE (hall_id, row_label, col_number),
+    CONSTRAINT ck_seat_type CHECK (seat_type IN ('standard','vip','couple','recliner'))
+);
+
+CREATE TABLE IF NOT EXISTS hall_prices (
+    id         UUID PRIMARY KEY,
+    hall_id    UUID        NOT NULL REFERENCES halls(id),
+    seat_type  VARCHAR(16) NOT NULL,
+    price      BIGINT      NOT NULL CHECK (price > 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_hall_prices_seat_type UNIQUE (hall_id, seat_type),
+    CONSTRAINT ck_hall_prices_seat_type CHECK (seat_type IN ('standard','vip','couple','recliner'))
+);
+
+CREATE TABLE IF NOT EXISTS showtimes (
+    id         UUID PRIMARY KEY,
+    movie_id   UUID        NOT NULL REFERENCES movies(id),
+    hall_id    UUID        NOT NULL REFERENCES halls(id),
+    start_at   TIMESTAMPTZ NOT NULL,
+    end_at     TIMESTAMPTZ NOT NULL,
+    status     VARCHAR(16) NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    CONSTRAINT ck_showtime_status CHECK (status IN ('open','closed')),
+    CONSTRAINT ck_showtime_range CHECK (end_at > start_at),
+    -- The service already serializes showtime creation on the hall's advisory
+    -- lock; this is the database-level backstop for any path that forgets it.
+    -- It checks the raw [start_at, end_at) overlap only, without the
+    -- configurable cleaning buffer the service applies.
+    CONSTRAINT ex_showtime_no_hall_overlap
+        EXCLUDE USING gist (hall_id WITH =, tstzrange(start_at, end_at) WITH &&)
+        WHERE (deleted_at IS NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_showtimes_hall_start ON showtimes (hall_id, start_at);
+CREATE INDEX IF NOT EXISTS idx_showtimes_movie_start ON showtimes (movie_id, start_at);
+-- Day listings, the staff board and closeDay filter by start time only.
+CREATE INDEX IF NOT EXISTS idx_showtimes_start ON showtimes (start_at) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS showtime_seats (
+    id          UUID PRIMARY KEY,
+    showtime_id UUID        NOT NULL REFERENCES showtimes(id),
+    seat_id     UUID        NOT NULL REFERENCES seats(id),
+    status      VARCHAR(16) NOT NULL DEFAULT 'available',
+    held_by     UUID,
+    held_until  TIMESTAMPTZ,
+    version     BIGINT      NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_showtime_seat UNIQUE (showtime_id, seat_id),
+    CONSTRAINT ck_showtime_seat_status CHECK (status IN ('available','held','sold')),
+    CONSTRAINT ck_showtime_seat_hold CHECK ((status = 'held') = (held_by IS NOT NULL AND held_until IS NOT NULL))
+);
+
+-- Sweep: expired holds.
+CREATE INDEX IF NOT EXISTS idx_showtime_seats_held ON showtime_seats (held_until) WHERE status = 'held';

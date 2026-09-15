@@ -12,7 +12,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// Recovery logs panics and returns a 500 in the common format.
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

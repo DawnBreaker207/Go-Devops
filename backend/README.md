@@ -19,14 +19,16 @@ API service của **Cinema Project**, viết bằng Go + Gin + GORM + PostgreSQL
 cp .env.example .env                       # sửa DATABASE_* và JWT_* cho phù hợp
 openssl rand -hex 32                       # sinh secret cho JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
 
-docker compose up -d postgres              # hoặc dùng Postgres sẵn có
+docker compose up -d postgres            # hoặc dùng Postgres sẵn có
+docker compose up -d redis                # tuỳ chọn: bật read cache (REDIS_ADDR đang trống = không cache)
 make run                                   # http://localhost:8080
 ```
 
-Chạy toàn bộ bằng Docker:
+Chạy toàn bộ bằng Docker (postgres + rabbitmq + redis + migrate + backend):
 
 ```bash
-make docker-up      # postgres + backend
+make docker-up      # local: đặt APP_ENV=development (và JWT_*/PAYMENT_PROVIDERS_MOCK_SECRET) trong .env,
+                    # vì mặc định compose chạy production và từ chối secret trống
 make docker-down
 ```
 
@@ -45,13 +47,19 @@ password: admin123                (APP_ADMIN_PASSWORD)
 | ---- | ----- |
 | `make run` | Chạy server |
 | `make build` | Build binary vào `bin/backend-cp` |
-| `make test` | `go test ./... -race` |
+| `make test` | `go test ./...` (cần Postgres + RabbitMQ đang chạy) |
+| `make test-system` | `docker compose up -d postgres rabbitmq` rồi `go test ./... -count=1` trên toàn bộ stack thật |
+| `make chaos` | Build `cmd/server` thật, chạy làm tiến trình OS thật, kill -9 + khởi động lại giữa lúc giữ ghế, kiểm phục hồi qua HTTP + SQL (`internal/chaostest`, cần Postgres ở `localhost:5432` + CLI `migrate`) |
+| `make test-load` | `cmd/loadtest`: ~300 virtual user thật qua HTTP đọc catalog + giữ/huỷ ghế, in p50/p95/tỉ lệ lỗi, chặn theo NFR-PERF-01/02. Trỏ `BASE_URL` vào server đang chạy |
+| `make test-migrate` | Round-trip migration (up → down hết → up) trên DB tạm, diff schema với một lượt up duy nhất (`scripts/test-migrate.sh`) |
+| `make test-race` | Chạy toàn bộ test với `-race` trong container `golang:1.26` (race detector cần gcc) |
 | `make lint` | `go vet ./...` |
 | `make fmt` / `make tidy` | Format source / dọn `go.mod` |
 | `make swag` | Sinh lại swagger vào `docs/` |
-| `make migrate-up` / `make migrate-down` | Chạy / rollback migration |
-| `make migrate-create name=add_showtimes` | Tạo cặp file migration mới |
-| `make docker-up` / `make docker-down` | Docker compose |
+| `make migrate-up` / `make migrate-down` | Chạy / rollback migration (schema chỉ đến từ `migrations/schema`, gom theo module — xem `migrations/README.md`) |
+| `make migrate-seed` / `make migrate-create name=<module>_<change>` | Áp seed idempotent / tạo migration mới |
+| `make migrate-db-reset` | Xoá và dựng lại DB dev từ migration + seed |
+| `make docker-up` / `make docker-down` | Docker compose: postgres, rabbitmq, redis, service `migrate` chạy migration rồi mới bật backend. Compose mặc định `APP_ENV=production` — chạy local thì đặt `APP_ENV=development` trong `.env`, hoặc cung cấp secret thật |
 
 ## Biến môi trường
 
@@ -65,10 +73,13 @@ Thứ tự ưu tiên: **biến môi trường → `.env` → `config.yaml` → d
 | `SERVER_PORT` | `8080` | Cổng HTTP |
 | `SERVER_SHUTDOWN_TIMEOUT` | `10s` | Thời gian chờ khi graceful shutdown |
 | `DATABASE_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_NAME` | `localhost` / `5432` / `postgres` / `postgres` / `cinema` | Kết nối Postgres |
-| `DATABASE_AUTO_MIGRATE` | `true` | Dev dùng GORM AutoMigrate; production nên đặt `false` và chạy `make migrate-up` |
+| `REDIS_ADDR` / `REDIS_PASSWORD` / `REDIS_DB` / `REDIS_TTL` | *(trống)* / *(trống)* / `0` / `5m` | Cache đọc phim công khai. Địa chỉ trống = tắt cache |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | *(bắt buộc)* | Hai secret phải khác nhau, service từ chối khởi động nếu trống hoặc trùng |
 | `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | `15m` / `168h` | Hạn của access / refresh token |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Danh sách origin, phân tách bằng dấu phẩy |
+| `SERVER_TRUSTED_PROXIES` | *(trống)* | IP/CIDR của reverse proxy được tin `X-Forwarded-For`; trống thì IP client là địa chỉ TCP |
+| `PAYMENT_LATE_CAPTURE_WINDOW` | `24h` | Thời gian kiểm lại lượt thanh toán đã bỏ để bắt tiền về muộn (≥ 1h) |
+| `PAYMENT_PROVIDERS_MOCK_ALLOW_IN_PRODUCTION` | `false` | Cổng mock không thu tiền thật: chỉ chạy ở production khi bật cờ này |
 
 ## API
 
@@ -105,7 +116,7 @@ Mọi response đều theo khung chung:
 cmd/server/main.go      # wiring + graceful shutdown
 internal/
 ├── config/             # viper: config.yaml + .env + biến môi trường
-├── database/           # kết nối GORM, AutoMigrate, seed admin, health check
+├── database/           # kết nối GORM, seed admin, health check
 ├── dto/                # request/response struct + binding rule
 ├── models/             # entity GORM
 ├── repository/         # interface + implement, chỉ chạm DB

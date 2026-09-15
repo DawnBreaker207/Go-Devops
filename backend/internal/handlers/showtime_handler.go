@@ -8,7 +8,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// ShowtimeHandler handles showtime scheduling and serving.
 type ShowtimeHandler struct {
 	showtimeService service.ShowtimeService
 }
@@ -111,6 +110,27 @@ func (h *ShowtimeHandler) Delete(c *gin.Context) {
 //	@Router			/movies/{id}/showtimes [get]
 func (h *ShowtimeHandler) ListForMovie(c *gin.Context) {
 	items, err := h.showtimeService.ListByMovie(c.Request.Context(), c.Param("id"), c.Query("date"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, items)
+}
+
+// List godoc
+//
+//	@Summary		Showtimes on sale for a date, all movies
+//	@Description	Hides draft/ended movies, started showtimes and halls without full prices. A day without showtimes returns an empty list.
+//	@Tags			showtimes
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			date	query		string	false	"Date (YYYY-MM-DD), default today"
+//	@Success		200		{object}	response.Body{data=[]dto.ShowtimeListItem}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Router			/showtimes [get]
+func (h *ShowtimeHandler) List(c *gin.Context) {
+	items, err := h.showtimeService.ListByDate(c.Request.Context(), c.Query("date"))
 	if err != nil {
 		response.Error(c, err)
 		return

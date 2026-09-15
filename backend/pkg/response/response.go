@@ -68,6 +68,11 @@ func List(c *gin.Context, items any, page, pageSize int, total int64) {
 
 // Error maps errors to HTTP status and business code.
 func Error(c *gin.Context, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeError(c, apperrors.PayloadTooLarge("request body is too large"))
+		return
+	}
 	var validationErrs validator.ValidationErrors
 	if errors.As(err, &validationErrs) {
 		appErr := apperrors.Validation("validation failed").WithDetails(validationDetails(validationErrs))
@@ -82,9 +87,18 @@ func Error(c *gin.Context, err error) {
 	writeError(c, appErr)
 }
 
+// setRetryAfter mirrors a retry_after_seconds detail into the Retry-After
+// header (429 answers).
+func setRetryAfter(c *gin.Context, appErr *apperrors.AppError) {
+	if secs, ok := appErr.Details["retry_after_seconds"]; ok {
+		c.Header("Retry-After", secs)
+	}
+}
+
 // Abort writes an error and stops the middleware chain.
 func Abort(c *gin.Context, err error) {
 	appErr := apperrors.From(err)
+	setRetryAfter(c, appErr)
 	c.Set(audit.ErrorMsgKey, appErr.Message)
 	c.AbortWithStatusJSON(appErr.Status, Body{
 		Code:    appErr.Code,
@@ -94,6 +108,7 @@ func Abort(c *gin.Context, err error) {
 }
 
 func writeError(c *gin.Context, appErr *apperrors.AppError) {
+	setRetryAfter(c, appErr)
 	c.Set(audit.ErrorMsgKey, appErr.Message)
 	c.JSON(appErr.Status, Body{
 		Code:    appErr.Code,

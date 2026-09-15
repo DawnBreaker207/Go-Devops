@@ -1,6 +1,260 @@
 basePath: /api/v1
 definitions:
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest:
+  dto.BoxOfficeDayResponse:
+    properties:
+      count:
+        type: integer
+      date:
+        example: "2026-09-14"
+        type: string
+      total:
+        type: integer
+    type: object
+  dto.ChangePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        example: newsecret123
+        maxLength: 72
+        minLength: 6
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
+  dto.CounterSellRequest:
+    properties:
+      customer_name:
+        maxLength: 255
+        type: string
+      customer_phone:
+        maxLength: 20
+        type: string
+      seat_ids:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      show_id:
+        type: string
+    required:
+    - seat_ids
+    - show_id
+    type: object
+  dto.CreateUserRequest:
+    properties:
+      email:
+        example: staff1@cinema.local
+        maxLength: 255
+        type: string
+      full_name:
+        maxLength: 255
+        minLength: 2
+        type: string
+      password:
+        maxLength: 72
+        minLength: 6
+        type: string
+      role:
+        enum:
+        - staff
+        - admin
+        example: staff
+        type: string
+    required:
+    - email
+    - full_name
+    - password
+    - role
+    type: object
+  dto.DailyAggregateResponse:
+    properties:
+      breakdown:
+        additionalProperties: {}
+        type: object
+      capacity:
+        type: integer
+      occupancy_rate:
+        type: number
+      report_date:
+        type: string
+      seats_sold:
+        type: integer
+      tickets_sold:
+        type: integer
+      total_revenue:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  dto.DailyReportResponse:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/dto.DailyAggregateResponse'
+        type: array
+      from:
+        example: "2026-09-08"
+        type: string
+      tickets_sold:
+        type: integer
+      to:
+        example: "2026-09-14"
+        type: string
+      total_revenue:
+        type: integer
+    type: object
+  dto.ForgotPasswordRequest:
+    properties:
+      email:
+        example: admin@cinema.local
+        maxLength: 255
+        type: string
+    required:
+    - email
+    type: object
+  dto.HallPriceResponse:
+    properties:
+      price:
+        type: integer
+      seat_type:
+        type: string
+    type: object
+  dto.HallRequest:
+    properties:
+      gaps:
+        example:
+        - '["D5"'
+        - '"D6"]'
+        items:
+          type: string
+        maxItems: 200
+        type: array
+      name:
+        example: Phong 2
+        maxLength: 255
+        minLength: 1
+        type: string
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        description: Must hold a positive price for each of the 4 seat types.
+        example:
+          couple: 160000
+          recliner: 130000
+          standard: 70000
+          vip: 100000
+        type: object
+      rows:
+        example: 8
+        maximum: 50
+        minimum: 1
+        type: integer
+      seat_types:
+        additionalProperties:
+          items:
+            type: string
+          type: array
+        description: 'Optional: rows not listed are standard.'
+        type: object
+      seats_per_row:
+        example: 12
+        maximum: 50
+        minimum: 1
+        type: integer
+      spans:
+        description: |-
+          Anchors of 2-column seats, e.g. ["D3"] makes one seat spanning D3-D4; the
+          neighbor column keeps no seat of its own.
+        example:
+        - '["D3"]'
+        items:
+          type: string
+        maxItems: 100
+        type: array
+    required:
+    - name
+    - prices
+    - rows
+    - seats_per_row
+    type: object
+  dto.HallResponse:
+    properties:
+      created_at:
+        type: string
+      gaps:
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      name:
+        type: string
+      rows:
+        type: integer
+      seat_types:
+        additionalProperties:
+          items:
+            type: string
+          type: array
+        type: object
+      seats_per_row:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  dto.HeldSeat:
+    properties:
+      col_number:
+        type: integer
+      label:
+        type: string
+      price:
+        type: integer
+      row_label:
+        type: string
+      seat_type:
+        type: string
+      showtime_seat_id:
+        type: string
+    type: object
+  dto.HoldRequest:
+    properties:
+      idempotency_key:
+        maxLength: 128
+        minLength: 1
+        type: string
+      seat_ids:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      show_id:
+        type: string
+    required:
+    - seat_ids
+    - show_id
+    type: object
+  dto.HoldResponse:
+    properties:
+      booking_id:
+        type: string
+      expires_at:
+        type: string
+      replaced_booking_id:
+        type: string
+      seats:
+        items:
+          $ref: '#/definitions/dto.HeldSeat'
+        type: array
+      showtime_id:
+        type: string
+      total_amount:
+        type: integer
+    type: object
+  dto.LoginRequest:
     properties:
       email:
         example: admin@cinema.local
@@ -13,7 +267,7 @@ definitions:
     - email
     - password
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse:
+  dto.LoginResponse:
     properties:
       access_token:
         type: string
@@ -26,10 +280,32 @@ definitions:
         example: Bearer
         type: string
       user:
-        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+        $ref: '#/definitions/dto.UserResponse'
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest:
+  dto.LogoutRequest:
     properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  dto.MovieRequest:
+    properties:
+      age_rating:
+        description: AgeRating is Vietnamese film classification; empty defaults to
+          P.
+        enum:
+        - P
+        - K
+        - T13
+        - T16
+        - T18
+        example: T18
+        type: string
+      cast:
+        example: Leonardo DiCaprio, Joseph Gordon-Levitt
+        maxLength: 2000
+        type: string
       description:
         maxLength: 5000
         type: string
@@ -64,6 +340,10 @@ definitions:
         maxLength: 255
         minLength: 1
         type: string
+      trailer_url:
+        example: https://www.youtube.com/watch?v=YoHD9XEInc0
+        maxLength: 512
+        type: string
     required:
     - director
     - duration
@@ -72,8 +352,12 @@ definitions:
     - status
     - title
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse:
+  dto.MovieResponse:
     properties:
+      age_rating:
+        type: string
+      cast:
+        type: string
       created_at:
         type: string
       description:
@@ -95,17 +379,199 @@ definitions:
         type: string
       title:
         type: string
+      trailer_url:
+        type: string
       updated_at:
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest:
+  dto.OrderDetailResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      paid_at:
+        type: string
+      payment:
+        $ref: '#/definitions/dto.PaymentSummary'
+      showtime:
+        $ref: '#/definitions/dto.OrderShowtime'
+      showtime_id:
+        type: string
+      status:
+        type: string
+      status_reason:
+        type: string
+      tickets:
+        items:
+          $ref: '#/definitions/dto.TicketResponse'
+        type: array
+      total_amount:
+        type: integer
+    type: object
+  dto.OrderShowtime:
+    properties:
+      age_rating:
+        type: string
+      end_at:
+        type: string
+      ended:
+        type: boolean
+      hall_id:
+        type: string
+      hall_name:
+        type: string
+      movie_id:
+        type: string
+      movie_title:
+        type: string
+      start_at:
+        type: string
+      started:
+        type: boolean
+    type: object
+  dto.OrderStatusResponse:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      paid_at:
+        type: string
+      payment:
+        $ref: '#/definitions/dto.PaymentSummary'
+      showtime:
+        $ref: '#/definitions/dto.OrderShowtime'
+      showtime_id:
+        type: string
+      status:
+        type: string
+      status_reason:
+        type: string
+      total_amount:
+        type: integer
+    type: object
+  dto.PayRequest:
+    properties:
+      provider:
+        example: mock
+        maxLength: 32
+        type: string
+    type: object
+  dto.PayResponse:
+    properties:
+      expires_at:
+        type: string
+      payment_id:
+        type: string
+      provider:
+        type: string
+      redirect_url:
+        type: string
+      txn_ref:
+        type: string
+    type: object
+  dto.PaymentProviderResponse:
+    properties:
+      default:
+        type: boolean
+      display_name:
+        type: string
+      name:
+        example: mock
+        type: string
+    type: object
+  dto.PaymentReturnResponse:
+    properties:
+      booking_id:
+        type: string
+      booking_reason:
+        type: string
+      booking_status:
+        type: string
+      payment_id:
+        type: string
+      payment_status:
+        type: string
+    type: object
+  dto.PaymentSummary:
+    properties:
+      amount:
+        type: integer
+      id:
+        type: string
+      paid_amount:
+        type: integer
+      paid_at:
+        type: string
+      provider:
+        type: string
+      refunded_at:
+        type: string
+      status:
+        type: string
+      status_reason:
+        type: string
+      txn_ref:
+        type: string
+    type: object
+  dto.PriceRequest:
+    properties:
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        example:
+          standard: 80000
+          vip: 120000
+        type: object
+    required:
+    - prices
+    type: object
+  dto.RedeemRequestBody:
+    properties:
+      showtime_id:
+        type: string
+    required:
+    - showtime_id
+    type: object
+  dto.RedeemResponse:
+    properties:
+      age_rating:
+        type: string
+      checkin_closes_at:
+        type: string
+      checkin_opens_at:
+        description: Check-in window, so the gate can tell when the doors open or
+          closed.
+        type: string
+      hall_name:
+        type: string
+      movie_title:
+        type: string
+      seat_label:
+        type: string
+      showtime_id:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: string
+      ticket_id:
+        type: string
+    type: object
+  dto.RefreshRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest:
+  dto.RegisterRequest:
     properties:
       email:
         example: admin@cinema.local
@@ -126,7 +592,241 @@ definitions:
     - full_name
     - password
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse:
+  dto.ResetPasswordRequest:
+    properties:
+      new_password:
+        example: newsecret123
+        maxLength: 72
+        minLength: 6
+        type: string
+      token:
+        type: string
+    required:
+    - new_password
+    - token
+    type: object
+  dto.SeatMapResponse:
+    properties:
+      age_rating:
+        type: string
+      end_at:
+        type: string
+      hall_id:
+        type: string
+      hall_name:
+        type: string
+      movie_id:
+        type: string
+      movie_title:
+        type: string
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      seats:
+        items:
+          $ref: '#/definitions/dto.SeatMapSeat'
+        type: array
+      showtime_id:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.SeatMapSeat:
+    properties:
+      col_number:
+        type: integer
+      col_span:
+        type: integer
+      id:
+        type: string
+      is_gap:
+        type: boolean
+      label:
+        type: string
+      price:
+        type: integer
+      row_label:
+        type: string
+      seat_type:
+        type: string
+      showtime_seat_id:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.SeatResponse:
+    properties:
+      col_number:
+        type: integer
+      col_span:
+        type: integer
+      hall_id:
+        type: string
+      id:
+        type: string
+      is_gap:
+        type: boolean
+      label:
+        type: string
+      row_label:
+        type: string
+      seat_type:
+        type: string
+    type: object
+  dto.SeatUpdateRequest:
+    properties:
+      is_gap:
+        description: Omitted keeps the current value.
+        type: boolean
+      seat_type:
+        enum:
+        - standard
+        - vip
+        - couple
+        - recliner
+        type: string
+    type: object
+  dto.ShowtimeListItem:
+    properties:
+      age_rating:
+        type: string
+      end_at:
+        type: string
+      from_price:
+        type: integer
+      hall_id:
+        type: string
+      hall_name:
+        type: string
+      id:
+        type: string
+      movie_id:
+        type: string
+      movie_title:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.ShowtimeRequest:
+    properties:
+      hall_id:
+        type: string
+      movie_id:
+        example: 10000000-0000-0000-0000-000000000001
+        type: string
+      start_at:
+        example: "2026-09-15T19:00:00+07:00"
+        type: string
+      status:
+        description: Status is optional; omitted keeps the current value on update.
+        enum:
+        - open
+        - closed
+        type: string
+    required:
+    - hall_id
+    - movie_id
+    - start_at
+    type: object
+  dto.ShowtimeResponse:
+    properties:
+      age_rating:
+        type: string
+      created_at:
+        type: string
+      end_at:
+        type: string
+      hall_id:
+        type: string
+      hall_name:
+        type: string
+      id:
+        type: string
+      movie_id:
+        type: string
+      movie_title:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.StaffBoardResponse:
+    properties:
+      date:
+        example: "2026-09-14"
+        type: string
+      showtimes:
+        items:
+          $ref: '#/definitions/dto.StaffShowtimeResponse'
+        type: array
+    type: object
+  dto.StaffShowtimeResponse:
+    properties:
+      available:
+        type: integer
+      capacity:
+        type: integer
+      checked_in:
+        type: integer
+      end_at:
+        type: string
+      hall_name:
+        type: string
+      held:
+        type: integer
+      id:
+        type: string
+      movie_title:
+        type: string
+      sold:
+        type: integer
+      start_at:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.StaffTicketResponse:
+    properties:
+      booking_id:
+        type: string
+      id:
+        type: string
+      seat_label:
+        type: string
+      seat_type:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.TicketResponse:
+    properties:
+      code:
+        type: string
+      id:
+        type: string
+      price:
+        type: integer
+      seat_label:
+        type: string
+      seat_type:
+        type: string
+      showtime_seat_id:
+        type: string
+      status:
+        type: string
+    type: object
+  dto.TokenResponse:
     properties:
       access_token:
         type: string
@@ -139,8 +839,45 @@ definitions:
         example: Bearer
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse:
+  dto.UpdateProfileRequest:
     properties:
+      full_name:
+        example: Nguyen Van A
+        maxLength: 255
+        minLength: 2
+        type: string
+      phone:
+        example: "0901234567"
+        maxLength: 20
+        type: string
+    required:
+    - full_name
+    type: object
+  dto.UpdateUserRequest:
+    properties:
+      active:
+        type: boolean
+      role:
+        enum:
+        - customer
+        - staff
+        - admin
+        example: staff
+        type: string
+    type: object
+  dto.UploadResponse:
+    properties:
+      content_type:
+        type: string
+      size:
+        type: integer
+      url:
+        type: string
+    type: object
+  dto.UserResponse:
+    properties:
+      active:
+        type: boolean
       created_at:
         type: string
       email:
@@ -149,12 +886,26 @@ definitions:
         type: string
       id:
         type: string
+      phone:
+        type: string
       role:
         type: string
       updated_at:
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body:
+  handlers.HealthStatus:
+    properties:
+      database:
+        example: up
+        type: string
+      service:
+        example: BackEnd-CP
+        type: string
+      status:
+        example: ok
+        type: string
+    type: object
+  response.Body:
     properties:
       code:
         example: 0
@@ -168,7 +919,7 @@ definitions:
         example: success
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta:
+  response.Meta:
     properties:
       page:
         example: 1
@@ -183,41 +934,33 @@ definitions:
         example: 5
         type: integer
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged:
+  response.Paged:
     properties:
       items: {}
       meta:
-        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta'
-    type: object
-  internal_handlers.HealthStatus:
-    properties:
-      database:
-        example: up
-        type: string
-      service:
-        example: BackEnd-CP
-        type: string
-      status:
-        example: ok
-        type: string
+        $ref: '#/definitions/response.Meta'
     type: object
 info:
   contact: {}
-  description: API quan ly rap chieu phim cua Cinema Project.
+  description: API for the Cinema Project box-office system.
   title: BackEnd-CP API
   version: "1.0"
 paths:
-  /auth/login:
-    post:
-      consumes:
-      - application/json
+  /admin/batch/jobs:
+    get:
       parameters:
-      - description: Email va mat khau
-        in: body
-        name: payload
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest'
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Filter by job_name
+        in: query
+        name: search
+        type: string
       produces:
       - application/json
       responses:
@@ -225,20 +968,783 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse'
+                  $ref: '#/definitions/response.Paged'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Batch job run history
+      tags:
+      - batch
+  /admin/batch/jobs/{name}/run:
+    post:
+      consumes:
+      - application/json
+      description: Answers 202 once the run is registered; follow its status in /admin/batch/jobs.
+      parameters:
+      - description: Job name (e.g. closeDay, sweepExpiredHolds)
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Start a job now, in the background
+      tags:
+      - batch
+  /admin/halls:
+    get:
+      parameters:
+      - default: 1
+        description: Current page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Records per page
+        in: query
+        name: page_size
+        type: integer
+      - description: Search by hall name
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/dto.HallResponse'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: List halls (paginated)
+      tags:
+      - halls
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Hall layout
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.HallRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.HallResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      summary: Dang nhap
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create a hall and generate its seat grid
+      tags:
+      - halls
+  /admin/halls/{id}:
+    get:
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.HallResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get hall details
+      tags:
+      - halls
+  /admin/halls/{id}/prices:
+    get:
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.HallPriceResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get the prices of a hall
+      tags:
+      - halls
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Price per seat type
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.PriceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.HallPriceResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Set prices for all seat types of a hall
+      tags:
+      - halls
+  /admin/halls/{id}/seats:
+    get:
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.SeatResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get the seat grid of a hall
+      tags:
+      - halls
+  /admin/halls/{id}/seats/{seatId}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Seat ID
+        in: path
+        name: seatId
+        required: true
+        type: string
+      - description: Seat changes
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SeatUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SeatResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Change a seat's type or gap flag
+      tags:
+      - halls
+  /admin/reports/daily:
+    get:
+      description: 'Reads daily_aggregates written by closeDay: confirmed bookings
+        by payment time. Default range: last 7 days. Staff and customers get 403.'
+      parameters:
+      - description: YYYY-MM-DD
+        in: query
+        name: from
+        type: string
+      - description: YYYY-MM-DD (default today)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.DailyReportResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Revenue per closed day (admin)
+      tags:
+      - reports
+  /admin/showtimes:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Showtime details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ShowtimeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.ShowtimeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Schedule a showtime in a hall
+      tags:
+      - showtimes
+  /admin/showtimes/{id}:
+    delete:
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Delete a showtime
+      tags:
+      - showtimes
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Showtime details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ShowtimeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.ShowtimeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Reschedule a showtime
+      tags:
+      - showtimes
+  /admin/uploads/poster:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'multipart/form-data field "file": JPEG, PNG or WebP. Returns the
+        URL to put in poster_url.'
+      parameters:
+      - description: Poster image
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UploadResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Upload a movie poster (admin/staff)
+      tags:
+      - media
+  /admin/users:
+    get:
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Email or name
+        in: query
+        name: search
+        type: string
+      - description: customer | staff | admin
+        in: query
+        name: role
+        type: string
+      - description: Filter by lock state
+        in: query
+        name: active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/dto.UserResponse'
+                        type: array
+                    type: object
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: List accounts (admin)
+      tags:
+      - admin-users
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create a staff or admin account (admin)
+      tags:
+      - admin-users
+  /admin/users/{id}:
+    patch:
+      consumes:
+      - application/json
+      description: Send active and/or role. A locked account can not log in, refresh,
+        hold seats or pay; its confirmed tickets still pass the gate. Admins can not
+        lock themselves, change their own role, or lock/demote the last active admin.
+        Also served as PUT.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Lock state
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Lock/unlock an account and/or change its role (admin)
+      tags:
+      - admin-users
+  /auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Always answers 200 so the existence of an account is never leaked.
+      parameters:
+      - description: Account email
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Request a password reset email
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email and password
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: account locked
+          schema:
+            $ref: '#/definitions/response.Body'
+        "429":
+          description: too many failed attempts
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token to revoke
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: invalid or expired token
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: 'Sign out: revokes the whole session family'
       tags:
       - auth
   /auth/refresh:
@@ -251,7 +1757,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest'
+          $ref: '#/definitions/dto.RefreshRequest'
       produces:
       - application/json
       responses:
@@ -259,20 +1765,20 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse'
+                  $ref: '#/definitions/dto.TokenResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      summary: Lam moi access token
+            $ref: '#/definitions/response.Body'
+      summary: Refresh access token
       tags:
       - auth
   /auth/register:
@@ -280,12 +1786,12 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Thong tin dang ky
+      - description: Registration details
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest'
+          $ref: '#/definitions/dto.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -293,25 +1799,60 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+                  $ref: '#/definitions/dto.UserResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      summary: Dang ky tai khoan
+            $ref: '#/definitions/response.Body'
+      summary: Register account
       tags:
       - auth
-  /health:
-    get:
-      description: Kiem tra service va ket noi database
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "400":
+          description: invalid, expired, or already used token
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Redeem a password reset token
+      tags:
+      - auth
+  /auth/terms-accept:
+    post:
+      consumes:
+      - application/json
+      description: Verifies the credentials, records the accepted terms revision and
+        issues a token pair. Needed when login answers 428.
+      parameters:
+      - description: Email and password
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
       produces:
       - application/json
       responses:
@@ -319,34 +1860,60 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_handlers.HealthStatus'
+                  $ref: '#/definitions/dto.LoginResponse'
               type: object
-        "503":
-          description: Service Unavailable
+        "400":
+          description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      summary: Health check
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "428":
+          description: terms not required or already accepted
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Accept the current terms and sign in
       tags:
-      - health
-  /movies:
+      - auth
+  /events/shows/{id}:
     get:
+      description: 'No JWT: the realtime token is the credential. Events: connected,
+        seats (debounced ~100ms); ": ping" every 15s.'
       parameters:
-      - default: 1
-        description: Trang hien tai
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Realtime token from /events/token
         in: query
-        name: page
-        type: integer
-      - default: 10
-        description: So ban ghi moi trang
+        name: token
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: SSE stream of seat changes for a showtime
+      tags:
+      - events
+  /events/token:
+    get:
+      description: The token (not the JWT) goes into the EventSource URL. Valid 30s,
+        reusable for reconnects, bound to the showtime.
+      parameters:
+      - description: Showtime ID
         in: query
-        name: page_size
-        type: integer
-      - description: Tim theo ten phim, dao dien, the loai
-        in: query
-        name: search
+        name: show_id
+        required: true
         type: string
       produces:
       - application/json
@@ -355,41 +1922,127 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create a short-lived realtime token for one showtime
+      tags:
+      - events
+  /health:
+    get:
+      description: Service and database status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/handlers.HealthStatus'
+              type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Health check
+      tags:
+      - health
+  /healthz:
+    get:
+      description: 200 when the DB pings, 503 otherwise; no complex payload.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Body'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Infrastructure probe
+      tags:
+      - health
+  /movies:
+    get:
+      parameters:
+      - default: 1
+        description: Current page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Records per page
+        in: query
+        name: page_size
+        type: integer
+      - description: Search by title, director, or genre
+        in: query
+        name: search
+        type: string
+      - description: draft | showing | ended (customers never see drafts)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
                   allOf:
-                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - $ref: '#/definitions/response.Paged'
                   - properties:
                       items:
                         items:
-                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+                          $ref: '#/definitions/dto.MovieResponse'
                         type: array
                     type: object
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
       security:
       - BearerAuth: []
-      summary: Danh sach phim (co phan trang)
+      summary: List movies (paginated)
       tags:
       - movies
     post:
       consumes:
       - application/json
       parameters:
-      - description: Thong tin phim
+      - description: Movie details
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest'
+          $ref: '#/definitions/dto.MovieRequest'
       produces:
       - application/json
       responses:
@@ -397,22 +2050,22 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+                  $ref: '#/definitions/dto.MovieResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
       security:
       - BearerAuth: []
-      summary: Them phim moi
+      summary: Create a new movie
       tags:
       - movies
   /movies/{id}:
@@ -429,18 +2082,18 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
       security:
       - BearerAuth: []
-      summary: Xoa phim
+      summary: Delete a movie
       tags:
       - movies
     get:
@@ -457,22 +2110,22 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+                  $ref: '#/definitions/dto.MovieResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
       security:
       - BearerAuth: []
-      summary: Chi tiet mot phim
+      summary: Get movie details
       tags:
       - movies
     put:
@@ -484,12 +2137,12 @@ paths:
         name: id
         required: true
         type: string
-      - description: Thong tin phim
+      - description: Movie details
         in: body
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest'
+          $ref: '#/definitions/dto.MovieRequest'
       produces:
       - application/json
       responses:
@@ -497,29 +2150,411 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
+                  $ref: '#/definitions/dto.MovieResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
       security:
       - BearerAuth: []
-      summary: Cap nhat phim
+      summary: Update a movie
       tags:
       - movies
-  /users/me:
+  /movies/{id}/showtimes:
+    get:
+      parameters:
+      - description: Movie ID
+        in: path
+        name: id
+        type: string
+      - description: Date (YYYY-MM-DD)
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.ShowtimeListItem'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: List showtimes of a movie for a date
+      tags:
+      - showtimes
+  /orders:
+    get:
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/dto.OrderStatusResponse'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: List the current user's orders
+      tags:
+      - orders
+  /orders/{id}:
+    get:
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.OrderDetailResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get the e-ticket of one order (reconciled, with ticket codes)
+      tags:
+      - orders
+  /orders/{id}/cancel:
+    post:
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.OrderStatusResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Release an unpaid hold now
+      tags:
+      - orders
+  /orders/{id}/confirm:
+    post:
+      description: Reconciles with the provider, then confirms (issues tickets) or
+        reports the refund. Idempotent.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.OrderDetailResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Settle a paid booking
+      tags:
+      - orders
+  /orders/{id}/pay:
+    post:
+      consumes:
+      - application/json
+      description: Returns the provider checkout URL. The amount comes from the booking.
+        Paying again with the same provider returns the open checkout; another provider
+        opens a new attempt.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Provider from GET /payments/providers (empty = default)
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.PayRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PayResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Start payment for a booking with a chosen provider
+      tags:
+      - orders
+  /orders/{id}/status:
+    get:
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.OrderStatusResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get booking status (reconciles with the provider)
+      tags:
+      - orders
+  /orders/hold:
+    post:
+      consumes:
+      - application/json
+      description: Reserves seats for 10 minutes and locks their price. A second hold
+        of the same user/show replaces the first without extending its expiry.
+      parameters:
+      - description: Seats to hold
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.HoldRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.HoldResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Hold seats for a showtime
+      tags:
+      - orders
+  /payments/{provider}/ipn:
+    post:
+      description: 'Outside JWT: the provider signature is the credential. GET or
+        POST depending on the gateway; the answer follows the gateway''s own contract.'
+      parameters:
+      - description: Provider name, e.g. mock
+        in: path
+        name: provider
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not Found
+      summary: Provider IPN callback
+      tags:
+      - payments
+  /payments/{provider}/return:
+    get:
+      description: Verifies the redirect, reconciles with the provider, then redirects
+        to payment.return_redirect_url (or answers JSON when unset).
+      parameters:
+      - description: Provider name, e.g. mock
+        in: path
+        name: provider
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.PaymentReturnResponse'
+              type: object
+        "303":
+          description: See Other
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      summary: Browser return from a provider checkout
+      tags:
+      - payments
+  /payments/providers:
     get:
       produces:
       - application/json
@@ -528,27 +2563,402 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - $ref: '#/definitions/response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+                  items:
+                    $ref: '#/definitions/dto.PaymentProviderResponse'
+                  type: array
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: List the payment providers a customer can choose
+      tags:
+      - payments
+  /shows/{id}/seats:
+    get:
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.SeatMapResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            $ref: '#/definitions/response.Body'
       security:
       - BearerAuth: []
-      summary: Thong tin tai khoan dang dang nhap
+      summary: Get the seat grid of a showtime with prices
+      tags:
+      - showtimes
+  /showtimes:
+    get:
+      description: Hides draft/ended movies, started showtimes and halls without full
+        prices. A day without showtimes returns an empty list.
+      parameters:
+      - description: Date (YYYY-MM-DD), default today
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.ShowtimeListItem'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Showtimes on sale for a date, all movies
+      tags:
+      - showtimes
+  /staff/boxoffice/day:
+    get:
+      parameters:
+      - description: YYYY-MM-DD, default today
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.BoxOfficeDayResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Counter sales of a day (close-day report)
+      tags:
+      - staff
+  /staff/dashboard:
+    get:
+      parameters:
+      - description: Local date YYYY-MM-DD (default today)
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.StaffBoardResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: 'Staff board: showtimes of a day with seats sold / held / checked in'
+      tags:
+      - staff
+  /staff/orders:
+    post:
+      consumes:
+      - application/json
+      description: 'Sells tickets for cash to someone without an account: booking
+        is confirmed immediately, no email.'
+      parameters:
+      - description: Showtime, seats and walk-in details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CounterSellRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.OrderDetailResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: seat already taken
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Walk-in sale at the counter
+      tags:
+      - staff
+  /staff/showtimes/{id}/tickets:
+    get:
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: issued | redeemed
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.StaffTicketResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: 'Tickets of a showtime (status=issued: still waiting at the gate)'
+      tags:
+      - staff
+  /tickets/{id}/redeem:
+    post:
+      consumes:
+      - application/json
+      description: 'id is the ticket id or the code read from the QR. Verdict: ok
+        | used | wrong_show | not_found | too_early | closed (outside the check-in
+        window, returned as checkin_opens_at / checkin_closes_at).'
+      parameters:
+      - description: Ticket ID or QR code
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Showtime at the gate
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RedeemRequestBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RedeemResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Check a ticket in at the gate (staff)
+      tags:
+      - tickets
+  /users/me:
+    delete:
+      description: 409 while a confirmed ticket is still to come; then the account
+        is scrubbed and sessions revoked.
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/response.Body'
+        "409":
+          description: account still holds confirmed tickets
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Delete own account (right to erasure)
+      tags:
+      - users
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Current logged-in account info
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: New full name and phone
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Update own full name and phone
+      tags:
+      - users
+  /users/me/password:
+    put:
+      consumes:
+      - application/json
+      description: Revokes all other sessions; the current one gets a fresh token
+        pair.
+      parameters:
+      - description: Current and new password
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.TokenResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Body'
+        "401":
+          description: wrong current password
+          schema:
+            $ref: '#/definitions/response.Body'
+      security:
+      - BearerAuth: []
+      summary: Change the current password
       tags:
       - users
 securityDefinitions:
   BearerAuth:
-    description: 'Nhap theo dinh dang: Bearer <access_token>'
+    description: 'Header format: Bearer <access_token>'
     in: header
     name: Authorization
     type: apiKey

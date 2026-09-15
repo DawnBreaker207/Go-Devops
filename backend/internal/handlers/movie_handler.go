@@ -4,11 +4,17 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/middleware"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
-// MovieHandler handles movie requests.
+func canSeeDrafts(c *gin.Context) bool {
+	role := middleware.CurrentUserRole(c)
+	return role == models.RoleAdmin || role == models.RoleStaff
+}
+
 type MovieHandler struct {
 	movieService service.MovieService
 }
@@ -26,19 +32,20 @@ func NewMovieHandler(movieService service.MovieService) *MovieHandler {
 //	@Param			page		query		int		false	"Current page"	default(1)
 //	@Param			page_size	query		int		false	"Records per page"	default(10)
 //	@Param			search		query		string	false	"Search by title, director, or genre"
+//	@Param			status		query		string	false	"draft | showing | ended (customers never see drafts)"
 //	@Success		200			{object}	response.Body{data=response.Paged{items=[]dto.MovieResponse}}
 //	@Failure		400			{object}	response.Body
 //	@Failure		401			{object}	response.Body
 //	@Router			/movies [get]
 func (h *MovieHandler) List(c *gin.Context) {
-	var query dto.PageQuery
+	var query dto.MovieListQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
 		response.Error(c, err)
 		return
 	}
 	query.Normalize()
 
-	movies, total, err := h.movieService.List(c.Request.Context(), query)
+	movies, total, err := h.movieService.List(c.Request.Context(), query, canSeeDrafts(c))
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -59,7 +66,7 @@ func (h *MovieHandler) List(c *gin.Context) {
 //	@Failure		404	{object}	response.Body
 //	@Router			/movies/{id} [get]
 func (h *MovieHandler) Detail(c *gin.Context) {
-	movie, err := h.movieService.GetByID(c.Request.Context(), c.Param("id"))
+	movie, err := h.movieService.GetByID(c.Request.Context(), c.Param("id"), canSeeDrafts(c))
 	if err != nil {
 		response.Error(c, err)
 		return

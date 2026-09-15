@@ -6,7 +6,7 @@ MIGRATE_URL ?= postgres://postgres:postgres@localhost:5432/cinema?sslmode=disabl
 DATABASE_NAME ?= cinema
 DATABASE_USER ?= postgres
 
-.PHONY: help run build test lint fmt tidy swag migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
+.PHONY: help run build test test-system chaos test-load test-migrate test-race lint fmt tidy swag migrate migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
 
 help: ## Liet ke cac lenh co san
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -18,8 +18,27 @@ build: ## Build binary vao bin/
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build -ldflags="-s -w" -o $(BIN_DIR)/$(APP_NAME) $(MAIN_PKG)
 
-test: ## Chay unit test
-	go test ./... -race -count=1
+test: ## Chay toan bo test (can Postgres + RabbitMQ: docker compose up -d postgres rabbitmq)
+	go test ./... -count=1
+
+test-system: ## Bring the real stack up (postgres + rabbitmq) and run the full suite against it
+	docker compose up -d postgres rabbitmq
+	go test ./... -count=1
+
+chaos: ## Real fault injection: builds cmd/server, runs it as a real OS process, hard-kills and restarts it mid-hold, checks recovery over HTTP + SQL (needs postgres on localhost:5432 + the migrate CLI on PATH)
+	go test -tags chaos ./internal/chaostest/... -v -count=1 -timeout 5m
+
+test-load: ## Real HTTP load: ~300 virtual users against a running server, prints p50/p95/error rate (NFR-PERF-01/02). Point BASE_URL at a running `make run` / docker-up target
+	go run ./cmd/loadtest -base-url "$${BASE_URL:-http://localhost:8080}" -vus 300 -duration 60s -bootstrap
+
+test-migrate: ## Round-trips the schema migrations (up -> down -all- -> up) on a scratch DB and diffs the schema against a single up (needs postgres on localhost:5432 + the migrate CLI on PATH)
+	./scripts/test-migrate.sh
+
+test-race: ## Chay test voi -race trong Docker (race detector can gcc/CGO)
+	docker run --rm -v "$(CURDIR):/src" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /src \
+		-e CGO_ENABLED=1 -e TEST_DB_HOST=host.docker.internal \
+		-e QUEUE_TEST_URL=amqp://guest:guest@host.docker.internal:5672/ \
+		golang:1.26 go test -race -count=1 ./...
 
 lint: ## Chay go vet (cai golangci-lint de kiem tra sau hon)
 	go vet ./...
@@ -33,6 +52,8 @@ tidy: ## Don dep go.mod / go.sum
 swag: ## Sinh lai swagger docs vao thu muc docs/
 	@command -v $(SWAG) >/dev/null 2>&1 || go install github.com/swaggo/swag/cmd/swag@latest
 	$(SWAG) init -g cmd/server/main.go -o docs --parseDependency --parseInternal
+
+migrate: migrate-up ## Alias apply schema migrations
 
 migrate-up: ## Apply schema migrations
 	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
@@ -60,9 +81,7 @@ migrate-create-seed: ## Scaffold a seed script: make migrate-create-seed name=sa
 	touch migrations/seed/$$f; \
 	echo created migrations/seed/$$f
 
-docker-up: ## Apply schema, then start postgres + rabbitmq + backend
-	@command -v migrate >/dev/null 2>&1 || (echo "install: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest" && exit 1)
-	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
+docker-up: ## Build and start postgres + rabbitmq + migrate + backend (set secrets or APP_ENV=development in .env)
 	docker compose up -d --build
 
 docker-down: ## Dung va xoa container

@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Status of one batch job run.
 const (
 	BatchRunning = "running"
 	BatchSuccess = "success"
@@ -16,15 +15,12 @@ const (
 	BatchStopped = "stopped"
 )
 
-// Job trigger sources.
 const (
 	TriggerCron    = "cron"
 	TriggerManual  = "manual"
 	TriggerConfirm = "confirm"
 )
 
-// BatchJob logs EACH job run: name, trigger, processed/skipped rows, status,
-// error. This is the audit trail for job behaviour.
 type BatchJob struct {
 	ID            string     `gorm:"type:uuid;primaryKey" json:"id"`
 	JobName       string     `gorm:"type:varchar(128);not null" json:"job_name"`
@@ -47,8 +43,6 @@ func (j *BatchJob) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// DailyAggregate is the per-day revenue rollup written by the closeDay job.
-// UNIQUE report_date prevents double-counting on reruns.
 type DailyAggregate struct {
 	ID            string         `gorm:"type:uuid;primaryKey" json:"id"`
 	ReportDate    time.Time      `gorm:"type:date;not null;uniqueIndex" json:"report_date"`
