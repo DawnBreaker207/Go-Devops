@@ -77,7 +77,10 @@ services:
         condition: service_completed_successfully
     environment:
       # Production by default: the server refuses to start with empty or dev
-      # secrets there. For a local stack put APP_ENV=development in .env.
+      # secrets there. For a local stack put APP_ENV=development in .env AND set
+      # JWT_ACCESS_SECRET/JWT_REFRESH_SECRET/PAYMENT_PROVIDERS_MOCK_SECRET —
+      # these default to empty here, which overrides config.yaml and fails fast
+      # rather than silently running without them.
       APP_ENV: ${APP_ENV:-production}
       SERVER_PORT: 8080
       SERVER_TRUSTED_PROXIES: ${SERVER_TRUSTED_PROXIES:-}
