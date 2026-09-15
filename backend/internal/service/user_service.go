@@ -23,6 +23,7 @@ type UserService interface {
 	Create(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error)
 	Update(ctx context.Context, actorID, userID string, req dto.UpdateUserRequest) (*dto.UserResponse, error)
 	UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*dto.UserResponse, error)
+	DeleteMe(ctx context.Context, userID string) error
 }
 
 type userService struct {
@@ -70,6 +71,60 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.
 	}
 	result := dto.NewUserResponse(user)
 	return &result, nil
+}
+
+// DeleteMe erases the caller's account under the right to erasure. Confirmed
+// tickets still to come come first, so they block the delete (409); afterwards
+// personal fields are scrubbed, sessions dropped and unpaid holds expired.
+func (s *userService) DeleteMe(ctx context.Context, userID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		user, err := s.userRepo.LockByID(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if user == nil {
+			return apperrors.ErrUserNotFound
+		}
+
+		var owed int64
+		if err := tx.Model(&models.Booking{}).
+			Joins("JOIN showtimes ON showtimes.id = bookings.showtime_id").
+			Where("bookings.user_id = ? AND bookings.status = ? AND showtimes.end_at > NOW()",
+				userID, models.BookingConfirmed).Count(&owed).Error; err != nil {
+			return err
+		}
+		if owed > 0 {
+			return apperrors.ErrAccountHoldsTickets
+		}
+
+		if err := tx.Model(&models.Booking{}).
+			Where("user_id = ? AND status = ?", userID, models.BookingPending).
+			Update("status", models.BookingExpired).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&models.RefreshToken{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&models.PasswordResetToken{}).Error; err != nil {
+			return err
+		}
+
+		anonEmail := "deleted-" + userID + "@anon.invalid"
+		if err := tx.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]any{
+			"email": anonEmail, "full_name": "", "phone": "",
+			"password": anonEmail + "!", "role": models.RoleCustomer,
+			"active": false, "accepted_terms_version": 0,
+		}).Error; err != nil {
+			return err
+		}
+
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = userID
+			rec.Before = map[string]any{"email": user.Email}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
 }
 
 func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse, error) {

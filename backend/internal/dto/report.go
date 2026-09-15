@@ -24,6 +24,13 @@ type StaffBoardResponse struct {
 	Showtimes []StaffShowtimeResponse `json:"showtimes"`
 }
 
+// BoxOfficeDayResponse settles the counter's day: walk-in sales only.
+type BoxOfficeDayResponse struct {
+	Date  string `json:"date" example:"2026-09-14"`
+	Count int64  `json:"count"`
+	Total int64  `json:"total"`
+}
+
 // StaffTicketResponse is one ticket of a showtime at the gate.
 type StaffTicketResponse struct {
 	ID        string    `json:"id"`

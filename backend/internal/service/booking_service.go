@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -64,6 +65,7 @@ type BookingService interface {
 	Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	List(ctx context.Context, userID string, q dto.PageQuery) ([]dto.OrderStatusResponse, int64, error)
 	Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error)
+	CounterSell(ctx context.Context, req dto.CounterSellRequest) (*dto.OrderDetailResponse, error)
 	SweepExpired(ctx context.Context, limit int) (SweepResult, error)
 }
 
@@ -658,6 +660,7 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 		TicketID:        row.ID,
 		ShowtimeID:      row.ShowtimeID,
 		MovieTitle:      row.MovieTitle,
+		AgeRating:       row.AgeRating,
 		HallName:        row.HallName,
 		SeatLabel:       dto.SeatLabel(row.RowLabel, row.ColNumber),
 		StartAt:         &startAt,
@@ -815,6 +818,171 @@ func (s *bookingService) orderDetail(ctx context.Context, b *models.Booking) (*d
 	return res, nil
 }
 
+// CounterSell sells tickets at the till to a walk-in: cash is collected, the
+// booking is confirmed immediately and no ticket email goes out. Seats are sold
+// straight from 'available' under row locks, so an online hold or finalize on
+// the same seat can not race past it.
+func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellRequest) (*dto.OrderDetailResponse, error) {
+	seatIDs := uniqueStrings(req.SeatIDs)
+	if len(seatIDs) <= 0 || len(req.SeatIDs) != len(seatIDs) {
+		return nil, apperrors.Validation("duplicate or missing seats in the request")
+	}
+	if len(seatIDs) > s.maxSeats {
+		return nil, apperrors.ErrSeatLimitExceeded.WithDetails(map[string]string{"max": strconv.Itoa(s.maxSeats)})
+	}
+
+	var (
+		booking models.Booking
+		showID  string
+		sold    []string
+	)
+	err := s.inTx(ctx, func(tx *gorm.DB) error {
+		now, err := s.repo.Now(ctx, tx)
+		if err != nil {
+			return err
+		}
+		showtime, err := s.repo.LockShowtime(ctx, tx, req.ShowID)
+		if err != nil {
+			return err
+		}
+		if showtime == nil {
+			return apperrors.ErrShowtimeNotFound
+		}
+		if showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now) {
+			return apperrors.ErrShowtimeClosed
+		}
+		showing, err := s.repo.MovieShowing(ctx, tx, showtime.MovieID)
+		if err != nil {
+			return err
+		}
+		if !showing {
+			return apperrors.ErrShowtimeClosed
+		}
+
+		locked, err := s.repo.LockSeats(ctx, tx, showtime.ID, seatIDs)
+		if err != nil {
+			return err
+		}
+		byID := make(map[string]models.ShowtimeSeat, len(locked))
+		physIDs := make([]string, 0, len(seatIDs))
+		for _, seat := range locked {
+			byID[seat.ID] = seat
+			physIDs = append(physIDs, seat.SeatID)
+		}
+		phys, err := s.repo.SeatsByIDs(ctx, tx, physIDs)
+		if err != nil {
+			return err
+		}
+		prices, err := s.repo.PricesByHall(ctx, tx, showtime.HallID)
+		if err != nil {
+			return err
+		}
+
+		var taken, gaps []string
+		for _, id := range seatIDs {
+			seat, ok := byID[id]
+			if !ok {
+				return apperrors.Validation("seat does not belong to this showtime").
+					WithDetails(map[string]string{"seat_id": id})
+			}
+			label := dto.SeatLabel(phys[seat.SeatID].RowLabel, phys[seat.SeatID].ColNumber)
+			switch {
+			case phys[seat.SeatID].IsGap:
+				gaps = append(gaps, label)
+			case seat.Status != models.SeatStatusAvailable:
+				taken = append(taken, label)
+			}
+		}
+		if len(gaps) > 0 {
+			return apperrors.ErrSeatNotSellable.WithDetails(map[string]string{"seats": strings.Join(gaps, ",")})
+		}
+		if len(taken) > 0 {
+			return apperrors.ErrSeatTaken.WithDetails(map[string]string{"seats": strings.Join(taken, ",")})
+		}
+
+		var total int64
+		bseats := make([]models.BookingSeat, 0, len(seatIDs))
+		labels := make([]string, 0, len(seatIDs))
+		for _, id := range seatIDs {
+			seatType := phys[byID[id].SeatID].SeatType
+			price, ok := prices[seatType]
+			if !ok || price <= 0 {
+				return apperrors.ErrMissingHallPrice.WithDetails(map[string]string{"seat_type": seatType})
+			}
+			total += price
+			labels = append(labels, dto.SeatLabel(phys[byID[id].SeatID].RowLabel, phys[byID[id].SeatID].ColNumber))
+			bseats = append(bseats, models.BookingSeat{
+				ShowtimeSeatID: id,
+				SeatType:       seatType,
+				Price:          price,
+			})
+		}
+
+		booking = models.Booking{
+			ShowtimeID:    showtime.ID,
+			CustomerName:  strings.TrimSpace(req.CustomerName),
+			CustomerPhone: strings.TrimSpace(req.CustomerPhone),
+			Status:        models.BookingPending,
+			TotalAmount:   total,
+		}
+		if err := s.repo.CreateCounterBooking(ctx, tx, &booking); err != nil {
+			return err
+		}
+		for i := range bseats {
+			bseats[i].BookingID = booking.ID
+		}
+		if err := s.repo.CreateBookingSeats(ctx, tx, bseats); err != nil {
+			return err
+		}
+
+		for _, bs := range bseats {
+			n, err := s.repo.SellSeatAtCounter(ctx, tx, bs.ShowtimeSeatID)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return fmt.Errorf("counter sell %s: seat changed under row lock", bs.ShowtimeSeatID)
+			}
+			sold = append(sold, bs.ShowtimeSeatID)
+		}
+
+		tickets := make([]models.Ticket, 0, len(bseats))
+		for _, bs := range bseats {
+			tickets = append(tickets, models.Ticket{
+				BookingID:      booking.ID,
+				ShowtimeSeatID: bs.ShowtimeSeatID,
+				Price:          bs.Price,
+				Code:           newTicketCode(),
+				Status:         models.TicketIssued,
+			})
+		}
+		if err := s.repo.CreateTickets(ctx, tx, tickets); err != nil {
+			return err
+		}
+		n, err := s.repo.ConfirmBooking(ctx, tx, booking.ID)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("confirm counter booking %s: row changed under lock", booking.ID)
+		}
+		booking.Status = models.BookingConfirmed
+		showID = showtime.ID
+		return s.audit(ctx, tx, "orders.counter_sell", "booking", booking.ID, map[string]any{
+			"status": models.BookingConfirmed, "tickets": len(tickets), "total": total, "seats": labels,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.broadcast(showID, "sold", sold)
+	b, err := s.repo.FindByID(context.WithoutCancel(ctx), booking.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.orderDetail(ctx, b)
+}
+
 func orderStatus(b *models.Booking, pay *models.Payment, show *repository.ShowtimeInfoRow) dto.OrderStatusResponse {
 	res := dto.OrderStatusResponse{
 		ID:           b.ID,
@@ -831,6 +999,7 @@ func orderStatus(b *models.Booking, pay *models.Payment, show *repository.Showti
 		res.Showtime = &dto.OrderShowtime{
 			MovieID:    show.MovieID,
 			MovieTitle: show.MovieTitle,
+			AgeRating:  show.AgeRating,
 			HallID:     show.HallID,
 			HallName:   show.HallName,
 			StartAt:    show.StartAt,

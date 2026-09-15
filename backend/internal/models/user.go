@@ -20,6 +20,9 @@ type User struct {
 	FullName string `gorm:"type:varchar(255);not null" json:"full_name"`
 	Phone    string `gorm:"type:varchar(20)" json:"phone,omitempty"`
 	Role     string `gorm:"type:varchar(32);not null;default:customer" json:"role"`
+	// AcceptedTermsVersion is the terms revision the account agreed to; a user
+	// with AcceptedTermsVersion < the configured version can not log in.
+	AcceptedTermsVersion int             `gorm:"not null;default:0" json:"accepted_terms_version"`
 	// Active false locks the account: no login, refresh, hold or pay.
 	Active    bool           `gorm:"not null;default:true" json:"active"`
 	CreatedAt time.Time      `json:"created_at"`

@@ -74,6 +74,36 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.OK(c, result)
 }
 
+// AcceptTerms godoc
+//
+//	@Summary		Accept the current terms and sign in
+//	@Description	Verifies the credentials, records the accepted terms revision and issues a token pair. Needed when login answers 428.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			payload	body	dto.LoginRequest	true	"Email and password"
+//	@Success		200		{object}	response.Body{data=dto.LoginResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		428		{object}	response.Body	"terms not required or already accepted"
+//	@Router			/auth/terms-accept [post]
+func (h *AuthHandler) AcceptTerms(c *gin.Context) {
+	var req dto.LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	req.ClientIP = c.ClientIP()
+
+	result, err := h.authService.AcceptTerms(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.OK(c, result)
+}
+
 // Refresh godoc
 //
 //	@Summary		Refresh access token

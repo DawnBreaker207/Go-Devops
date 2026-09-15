@@ -54,6 +54,7 @@ const (
 	CodeNotFound           = 40400
 	CodeConflict           = 40900
 	CodePayloadTooLarge    = 41300
+	CodeTermsRequired      = 42800
 	CodeTooManyRequests    = 42900
 	CodeInternal           = 50000
 	CodeBadGateway         = 50200
@@ -127,6 +128,11 @@ func Conflict(message string) *AppError {
 // PayloadTooLarge returns 413 when a request body exceeds its limit.
 func PayloadTooLarge(message string) *AppError {
 	return newError(http.StatusRequestEntityTooLarge, CodePayloadTooLarge, message)
+}
+
+// PreconditionRequired returns 428 when the account must accept the current terms first.
+func PreconditionRequired(message string) *AppError {
+	return newError(http.StatusPreconditionRequired, CodeTermsRequired, message)
 }
 
 // TooManyRequests returns 429 when a request exceeds the rate limit.
@@ -216,6 +222,8 @@ var (
 
 	ErrAccountLocked         = Forbidden("account is locked")
 	ErrTooManyLoginAttempts  = TooManyRequests("too many failed login attempts, try again later")
+	ErrTermsRequired         = PreconditionRequired("you must accept the current terms before continuing")
+	ErrAccountHoldsTickets   = Conflict("the account still holds confirmed tickets to come; use or refund them before deleting")
 	ErrCannotLockSelf        = Conflict("you can not lock your own account")
 	ErrLastAdmin             = Conflict("at least one active admin must remain")
 	ErrCannotDemoteSelf      = Conflict("you can not change your own role")

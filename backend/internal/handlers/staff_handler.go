@@ -3,16 +3,18 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
 
 type StaffHandler struct {
-	reports service.ReportService
+	reports  service.ReportService
+	bookings service.BookingService
 }
 
-func NewStaffHandler(reports service.ReportService) *StaffHandler {
-	return &StaffHandler{reports: reports}
+func NewStaffHandler(reports service.ReportService, bookings service.BookingService) *StaffHandler {
+	return &StaffHandler{reports: reports, bookings: bookings}
 }
 
 // Dashboard godoc
@@ -55,4 +57,51 @@ func (h *StaffHandler) Tickets(c *gin.Context) {
 		return
 	}
 	response.OK(c, tickets)
+}
+
+// CounterSell godoc
+//
+//	@Summary		Walk-in sale at the counter
+//	@Description	Sells tickets for cash to someone without an account: booking is confirmed immediately, no email.
+//	@Tags			staff
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			payload	body		dto.CounterSellRequest	true	"Showtime, seats and walk-in details"
+//	@Success		200		{object}	response.Body{data=dto.OrderDetailResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		403		{object}	response.Body
+//	@Failure		409		{object}	response.Body	"seat already taken"
+//	@Router			/staff/orders [post]
+func (h *StaffHandler) CounterSell(c *gin.Context) {
+	var req dto.CounterSellRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	order, err := h.bookings.CounterSell(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, order)
+}
+
+// BoxOfficeDay godoc
+//
+//	@Summary		Counter sales of a day (close-day report)
+//	@Tags			staff
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			date	query	string	false	"YYYY-MM-DD, default today"
+//	@Success		200		{object}	response.Body{data=dto.BoxOfficeDayResponse}
+//	@Failure		400		{object}	response.Body
+//	@Router			/staff/boxoffice/day [get]
+func (h *StaffHandler) BoxOfficeDay(c *gin.Context) {
+	day, err := h.reports.BoxOfficeDay(c.Request.Context(), c.Query("date"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, day)
 }

@@ -35,6 +35,7 @@ type TicketGateRow struct {
 	StartAt       time.Time `gorm:"column:start_at"`
 	HallName      string    `gorm:"column:hall_name"`
 	MovieTitle    string    `gorm:"column:movie_title"`
+	AgeRating     string    `gorm:"column:age_rating"`
 	RowLabel      string    `gorm:"column:row_label"`
 	ColNumber     int       `gorm:"column:col_number"`
 }
@@ -43,9 +44,11 @@ type BookingHeader struct {
 	ID          string    `gorm:"column:id"`
 	Status      string    `gorm:"column:status"`
 	TotalAmount int64     `gorm:"column:total_amount"`
+	SoldVia     string    `gorm:"column:sold_via"`
 	Email       string    `gorm:"column:email"`
 	FullName    string    `gorm:"column:full_name"`
 	MovieTitle  string    `gorm:"column:movie_title"`
+	AgeRating   string    `gorm:"column:age_rating"`
 	HallName    string    `gorm:"column:hall_name"`
 	StartAt     time.Time `gorm:"column:start_at"`
 }
@@ -54,6 +57,7 @@ type ShowtimeInfoRow struct {
 	ID         string    `gorm:"column:id"`
 	MovieID    string    `gorm:"column:movie_id"`
 	MovieTitle string    `gorm:"column:movie_title"`
+	AgeRating  string    `gorm:"column:age_rating"`
 	HallID     string    `gorm:"column:hall_id"`
 	HallName   string    `gorm:"column:hall_name"`
 	StartAt    time.Time `gorm:"column:start_at"`
@@ -77,6 +81,7 @@ type BookingRepository interface {
 	MovieShowing(ctx context.Context, tx *gorm.DB, movieID string) (bool, error)
 
 	Create(ctx context.Context, tx *gorm.DB, booking *models.Booking) error
+	CreateCounterBooking(ctx context.Context, tx *gorm.DB, booking *models.Booking) error
 	CreateBookingSeats(ctx context.Context, tx *gorm.DB, seats []models.BookingSeat) error
 	BookingSeats(ctx context.Context, tx *gorm.DB, bookingID string) ([]models.BookingSeat, error)
 
@@ -89,6 +94,7 @@ type BookingRepository interface {
 	HoldSeat(ctx context.Context, tx *gorm.DB, id, userID string, heldUntil time.Time) (int64, error)
 	ReleaseHeldSeat(ctx context.Context, tx *gorm.DB, id, userID string, version int64) (int64, error)
 	SellSeat(ctx context.Context, tx *gorm.DB, id, userID string, version int64) (int64, error)
+	SellSeatAtCounter(ctx context.Context, tx *gorm.DB, id string) (int64, error)
 	SeatsByIDs(ctx context.Context, tx *gorm.DB, ids []string) (map[string]models.Seat, error)
 	PricesByHall(ctx context.Context, tx *gorm.DB, hallID string) (map[string]int64, error)
 
@@ -402,7 +408,7 @@ func (r *bookingRepository) ShowtimeInfos(ctx context.Context, ids []string) (ma
 	}
 	var rows []ShowtimeInfoRow
 	if err := r.db.WithContext(ctx).Raw(`SELECT st.id, st.movie_id, m.title AS movie_title,
-			st.hall_id, h.name AS hall_name, st.start_at, st.end_at
+			m.age_rating AS age_rating, st.hall_id, h.name AS hall_name, st.start_at, st.end_at
 		FROM showtimes st
 		JOIN movies m ON m.id = st.movie_id
 		JOIN halls h ON h.id = st.hall_id
@@ -425,7 +431,7 @@ func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*Tic
 	var rows []TicketGateRow
 	if err := r.db.WithContext(ctx).Raw(`SELECT t.id, t.code, t.status, b.status AS booking_status,
 			b.showtime_id, st.start_at, h.name AS hall_name, m.title AS movie_title,
-			s.row_label, s.col_number
+			m.age_rating AS age_rating, s.row_label, s.col_number
 		FROM tickets t
 		JOIN bookings b ON b.id = t.booking_id
 		JOIN showtimes st ON st.id = b.showtime_id
@@ -546,7 +552,8 @@ const MaxTicketEmailAttempts = 6
 func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]string, error) {
 	var ids []string
 	if err := r.db.WithContext(ctx).Model(&models.Booking{}).
-		Where("status = ? AND email_sent_at IS NULL AND email_attempts < ?", models.BookingConfirmed, MaxTicketEmailAttempts).
+		Where("status = ? AND sold_via = ? AND email_sent_at IS NULL AND email_attempts < ?",
+			models.BookingConfirmed, models.SoldViaOnline, MaxTicketEmailAttempts).
 		Where("email_claimed_until IS NULL OR email_claimed_until < NOW()").
 		Order("created_at").Limit(limit).Pluck("id", &ids).Error; err != nil {
 		return nil, fmt.Errorf("find bookings awaiting email: %w", err)
@@ -559,9 +566,9 @@ func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]s
 func (r *bookingRepository) ClaimEmail(ctx context.Context, id string) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(`UPDATE bookings
 		SET email_claimed_until = NOW() + INTERVAL '5 minutes', email_attempts = email_attempts + 1
-		WHERE id = ? AND status = ? AND email_sent_at IS NULL AND email_attempts < ?
+		WHERE id = ? AND status = ? AND sold_via = ? AND email_sent_at IS NULL AND email_attempts < ?
 		  AND (email_claimed_until IS NULL OR email_claimed_until < NOW())`,
-		id, models.BookingConfirmed, MaxTicketEmailAttempts)
+		id, models.BookingConfirmed, models.SoldViaOnline, MaxTicketEmailAttempts)
 	if res.Error != nil {
 		return 0, fmt.Errorf("claim ticket email: %w", res.Error)
 	}
@@ -589,10 +596,10 @@ func (r *bookingRepository) ReleaseEmailClaim(ctx context.Context, id string) (i
 
 func (r *bookingRepository) BookingHeader(ctx context.Context, id string) (*BookingHeader, error) {
 	var rows []BookingHeader
-	if err := r.db.WithContext(ctx).Raw(`SELECT b.id, b.status, b.total_amount, u.email, u.full_name,
-			m.title AS movie_title, h.name AS hall_name, st.start_at
+	if err := r.db.WithContext(ctx).Raw(`SELECT b.id, b.status, b.total_amount, b.sold_via, u.email, u.full_name,
+			m.title AS movie_title, m.age_rating AS age_rating, h.name AS hall_name, st.start_at
 		FROM bookings b
-		JOIN users u ON u.id = b.user_id
+		LEFT JOIN users u ON u.id = b.user_id
 		JOIN showtimes st ON st.id = b.showtime_id
 		JOIN movies m ON m.id = st.movie_id
 		JOIN halls h ON h.id = st.hall_id
@@ -603,4 +610,33 @@ func (r *bookingRepository) BookingHeader(ctx context.Context, id string) (*Book
 		return nil, nil
 	}
 	return &rows[0], nil
+}
+
+// CreateCounterBooking inserts a walk-in sale: no account, no payment, cash
+// collected at the counter (paid_at = NOW()), straight to confirmed by the service.
+func (r *bookingRepository) CreateCounterBooking(ctx context.Context, tx *gorm.DB, b *models.Booking) error {
+	if b.ID == "" {
+		b.ID = uuid.NewString()
+	}
+	if err := r.conn(ctx, tx).Exec(`INSERT INTO bookings
+		(id, showtime_id, user_id, sold_via, customer_name, customer_phone, status, total_amount,
+		 paid_at, created_at, updated_at)
+		VALUES (?, ?, NULL, ?, NULLIF(?, ''), NULLIF(?, ''), 'pending', ?, NOW(), NOW(), NOW())`,
+		b.ID, b.ShowtimeID, models.SoldViaCounter, b.CustomerName, b.CustomerPhone, b.TotalAmount).Error; err != nil {
+		return fmt.Errorf("create counter booking: %w", err)
+	}
+	return nil
+}
+
+// SellSeatAtCounter sells a free seat directly at the till: only an AVAILABLE
+// seat can be upgraded to SOLD, fencing concurrent holds and finalizes.
+func (r *bookingRepository) SellSeatAtCounter(ctx context.Context, tx *gorm.DB, id string) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE showtime_seats
+		SET status = ?, held_by = NULL, held_until = NULL, version = version + 1, updated_at = NOW()
+		WHERE id = ? AND status = ?`,
+		models.SeatStatusSold, id, models.SeatStatusAvailable)
+	if res.Error != nil {
+		return 0, fmt.Errorf("sell seat at counter: %w", res.Error)
+	}
+	return res.RowsAffected, nil
 }

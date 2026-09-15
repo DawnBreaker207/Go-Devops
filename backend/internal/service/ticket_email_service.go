@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"strconv"
+	"strings"
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
@@ -99,6 +100,7 @@ type emailTicket struct {
 type emailView struct {
 	FullName   string
 	MovieTitle string
+	AgeRating  string
 	HallName   string
 	StartAt    string
 	Total      string
@@ -112,6 +114,7 @@ var ticketEmailTemplate = template.Must(template.New("tickets").Parse(`<!doctype
 <p>Đơn của bạn đã được xác nhận.<br>
 <b>Phòng:</b> {{.HallName}}<br>
 <b>Suất chiếu:</b> {{.StartAt}}<br>
+<b>Độ tuổi:</b> {{.AgeRating}}<br>
 <b>Tổng tiền:</b> {{.Total}}</p>
 <table cellpadding="8" style="border-collapse:collapse">
 {{range .Tickets}}<tr style="border-top:1px solid #d0d7de">
@@ -137,6 +140,7 @@ func (s *ticketEmailService) compose(ctx context.Context, bookingID string) (not
 	view := emailView{
 		FullName:   header.FullName,
 		MovieTitle: header.MovieTitle,
+		AgeRating:  ageRatingText(header.AgeRating),
 		HallName:   header.HallName,
 		StartAt:    header.StartAt.In(s.location).Format("15:04 02/01/2006"),
 		Total:      formatVND(header.TotalAmount),
@@ -163,6 +167,14 @@ func (s *ticketEmailService) compose(ctx context.Context, bookingID string) (not
 		Subject: "Vé xem phim " + header.MovieTitle,
 		HTML:    body.String(),
 	}, nil
+}
+
+// ageRatingText renders the rating code for the email: "Mọi lứa tuổi (P)" or "Từ 13 tuổi (T13)".
+func ageRatingText(code string) string {
+	if code == "" || code == "P" {
+		return "Mọi lứa tuổi (P)"
+	}
+	return "Từ " + strings.TrimPrefix(code, "T") + " tuổi (" + code + ")"
 }
 
 // formatVND renders 120000 as "120.000 ₫".

@@ -27,6 +27,7 @@ type UserRepository interface {
 	SetRole(ctx context.Context, tx *gorm.DB, id, role string) error
 	SetPassword(ctx context.Context, tx *gorm.DB, id, hash string) error
 	UpdateProfile(ctx context.Context, tx *gorm.DB, id, fullName, phone string) error
+	SetAcceptedTerms(ctx context.Context, tx *gorm.DB, id string, version int) error
 }
 
 type userRepository struct {
@@ -159,6 +160,13 @@ func (r *userRepository) UpdateProfile(ctx context.Context, tx *gorm.DB, id, ful
 	if err := tx.WithContext(ctx).Exec(`UPDATE users SET full_name = ?, phone = NULLIF(?, ''), updated_at = NOW() WHERE id = ?`,
 		fullName, phone, id).Error; err != nil {
 		return fmt.Errorf("update user profile: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepository) SetAcceptedTerms(ctx context.Context, tx *gorm.DB, id string, version int) error {
+	if err := tx.WithContext(ctx).Exec(`UPDATE users SET accepted_terms_version = ?, updated_at = NOW() WHERE id = ?`, version, id).Error; err != nil {
+		return fmt.Errorf("set accepted terms: %w", err)
 	}
 	return nil
 }

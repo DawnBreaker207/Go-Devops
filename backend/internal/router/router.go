@@ -99,6 +99,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		// No user yet: Audit only stashes IP and user agent; services fill the actor on success.
 		auth.POST("/register", middleware.Audit(db, "auth.register", "user"), h.Auth.Register)
 		auth.POST("/login", middleware.Audit(db, "auth.login", "user"), h.Auth.Login)
+		auth.POST("/terms-accept", middleware.Audit(db, "auth.accept_terms", "user"), h.Auth.AcceptTerms)
 		auth.POST("/refresh", middleware.Audit(db, "auth.refresh", "user"), h.Auth.Refresh)
 		auth.POST("/logout", middleware.Audit(db, "auth.logout", "user"), h.Auth.Logout)
 		auth.POST("/forgot-password", middleware.Audit(db, "auth.forgot_password", "user"), h.Auth.ForgotPassword)
@@ -119,6 +120,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 	{
 		protected.GET("/users/me", h.User.Me)
 		protected.PUT("/users/me", middleware.Audit(db, "users.update_profile", "user"), h.User.UpdateMe)
+		protected.DELETE("/users/me", middleware.Audit(db, "users.delete_me", "user"), h.User.DeleteMe)
 		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)
 
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
@@ -175,6 +177,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		staff.Use(middleware.RequireRoles(models.RoleStaff, models.RoleAdmin))
 		{
 			staff.GET("/dashboard", h.Staff.Dashboard)
+			staff.GET("/boxoffice/day", h.Staff.BoxOfficeDay)
+			staff.POST("/orders", middleware.Audit(db, "staff.counter_sell", "booking"), h.Staff.CounterSell)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
 		}
 

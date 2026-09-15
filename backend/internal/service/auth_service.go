@@ -38,6 +38,7 @@ var dummyPasswordHash = sync.OnceValue(func() []byte {
 type AuthService interface {
 	Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error)
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
+	AcceptTerms(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string) (*dto.TokenResponse, error)
 	Logout(ctx context.Context, refreshToken string) error
 	ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error)
@@ -55,15 +56,18 @@ type authService struct {
 	resetTTL    time.Duration
 	jwtManager  *jwt.Manager
 	loginGuard  *ratelimit.FailureLimiter
+	// termsVersion is the current terms revision; 0 disables the acceptance gate.
+	termsVersion int
 }
 
 // NewAuthService: loginGuard may be nil (no failed-login lockout).
 func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, tokens repository.RefreshTokenRepository,
 	jwtManager *jwt.Manager, loginGuard *ratelimit.FailureLimiter,
 	resetTokens repository.PasswordResetTokenRepository, mailer notify.Mailer,
-	resetURL string, resetTTL time.Duration) AuthService {
+	resetURL string, resetTTL time.Duration, termsVersion int) AuthService {
 	return &authService{db: db, userRepo: userRepo, tokens: tokens, resetTokens: resetTokens,
-		mailer: mailer, resetURL: resetURL, resetTTL: resetTTL, jwtManager: jwtManager, loginGuard: loginGuard}
+		mailer: mailer, resetURL: resetURL, resetTTL: resetTTL, jwtManager: jwtManager,
+		loginGuard: loginGuard, termsVersion: termsVersion}
 }
 
 func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error) {
@@ -105,6 +109,60 @@ func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 
 // Login counts wrong passwords per email+IP; the 5th in a row locks that pair out.
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
+	user, err := s.authenticate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if s.termsVersion > 0 && user.AcceptedTermsVersion < s.termsVersion {
+		return nil, apperrors.ErrTermsRequired.WithDetails(map[string]string{
+			"required_terms_version": strconv.Itoa(s.termsVersion),
+			"accepted_terms_version": strconv.Itoa(user.AcceptedTermsVersion),
+		})
+	}
+
+	pair, err := s.issueTokens(ctx, s.db, user, "")
+	if err != nil {
+		return nil, err
+	}
+	s.auditSuccess(ctx, "auth.login", user.ID, user.Role, nil)
+
+	return &dto.LoginResponse{
+		TokenResponse: newTokenResponse(pair),
+		User:          dto.NewUserResponse(user),
+	}, nil
+}
+
+// AcceptTerms records that the account agreed to the current terms and signs it in.
+func (s *authService) AcceptTerms(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
+	if s.termsVersion <= 0 {
+		return nil, apperrors.Validation("terms acceptance is not required")
+	}
+	user, err := s.authenticate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if user.AcceptedTermsVersion >= s.termsVersion {
+		return nil, apperrors.Validation("terms already accepted")
+	}
+	if err := s.userRepo.SetAcceptedTerms(ctx, s.db, user.ID, s.termsVersion); err != nil {
+		return nil, err
+	}
+	user.AcceptedTermsVersion = s.termsVersion
+
+	pair, err := s.issueTokens(ctx, s.db, user, "")
+	if err != nil {
+		return nil, err
+	}
+	s.auditSuccess(ctx, "auth.accept_terms", user.ID, user.Role, nil)
+
+	return &dto.LoginResponse{
+		TokenResponse: newTokenResponse(pair),
+		User:          dto.NewUserResponse(user),
+	}, nil
+}
+
+// authenticate runs the shared credential, lockout and account checks.
+func (s *authService) authenticate(ctx context.Context, req dto.LoginRequest) (*models.User, error) {
 	email := normalizeEmail(req.Email)
 	guardKey := email + "|" + req.ClientIP
 	if s.loginGuard != nil {
@@ -136,17 +194,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	if !user.Active {
 		return nil, apperrors.ErrAccountLocked
 	}
-
-	pair, err := s.issueTokens(ctx, s.db, user, "")
-	if err != nil {
-		return nil, err
-	}
-	s.auditSuccess(ctx, "auth.login", user.ID, user.Role, nil)
-
-	return &dto.LoginResponse{
-		TokenResponse: newTokenResponse(pair),
-		User:          dto.NewUserResponse(user),
-	}, nil
+	return user, nil
 }
 
 // Refresh rotates the refresh token. A token presented twice is a replay: its whole

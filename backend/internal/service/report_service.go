@@ -16,6 +16,7 @@ type ReportService interface {
 	DailyReport(ctx context.Context, from, to string) (*dto.DailyReportResponse, error)
 	StaffBoard(ctx context.Context, date string) (*dto.StaffBoardResponse, error)
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]dto.StaffTicketResponse, error)
+	BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error)
 }
 
 type reportService struct {
@@ -158,6 +159,24 @@ func (s *reportService) ShowtimeTickets(ctx context.Context, showtimeID, status 
 		})
 	}
 	return out, nil
+}
+
+// BoxOfficeDay settles the counter: how many walk-in sales the register took.
+func (s *reportService) BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error) {
+	day := time.Now()
+	if date != "" {
+		parsed, err := time.ParseInLocation(dto.DateLayout, date, s.location)
+		if err != nil {
+			return nil, apperrors.Validation("date must follow format YYYY-MM-DD")
+		}
+		day = parsed
+	}
+	label, from, to := s.dayBounds(day)
+	count, total, err := s.repo.CounterSalesDay(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.BoxOfficeDayResponse{Date: label, Count: count, Total: total}, nil
 }
 
 func newDailyAggregateResponse(a *models.DailyAggregate) *dto.DailyAggregateResponse {

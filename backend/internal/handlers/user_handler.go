@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
@@ -61,6 +63,24 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 	response.OK(c, user)
+}
+
+// DeleteMe godoc
+//
+//	@Summary		Delete own account (right to erasure)
+//	@Description	409 while a confirmed ticket is still to come; then the account is scrubbed and sessions revoked.
+//	@Tags			users
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		204	{object}	response.Body
+//	@Failure		409	{object}	response.Body	"account still holds confirmed tickets"
+//	@Router			/users/me [delete]
+func (h *UserHandler) DeleteMe(c *gin.Context) {
+	if err := h.userService.DeleteMe(c.Request.Context(), middleware.CurrentUserID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // List godoc

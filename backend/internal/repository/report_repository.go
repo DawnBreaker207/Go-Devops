@@ -39,6 +39,7 @@ type ReportRepository interface {
 	DailyAggregates(ctx context.Context, from, to string) ([]models.DailyAggregate, error)
 	ShowtimeBoard(ctx context.Context, from, to time.Time) ([]ShowtimeBoardRow, error)
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]ShowtimeTicketRow, error)
+	CounterSalesDay(ctx context.Context, from, to time.Time) (count, total int64, err error)
 }
 
 type reportRepository struct {
@@ -161,4 +162,19 @@ func (r *reportRepository) ShowtimeTickets(ctx context.Context, showtimeID, stat
 		return nil, fmt.Errorf("showtime tickets: %w", err)
 	}
 	return rows, nil
+}
+
+// CounterSalesDay sums the walk-in sales collected at the counter within [from, to).
+func (r *reportRepository) CounterSalesDay(ctx context.Context, from, to time.Time) (int64, int64, error) {
+	var row struct {
+		Count int64 `gorm:"column:count"`
+		Total int64 `gorm:"column:total"`
+	}
+	if err := r.db.WithContext(ctx).Raw(`SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total
+		FROM bookings
+		WHERE sold_via = ? AND status != 'pending' AND paid_at >= ? AND paid_at < ?`,
+		models.SoldViaCounter, from, to).Scan(&row).Error; err != nil {
+		return 0, 0, fmt.Errorf("counter sales day: %w", err)
+	}
+	return row.Count, row.Total, nil
 }

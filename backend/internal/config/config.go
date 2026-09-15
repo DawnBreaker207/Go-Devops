@@ -32,6 +32,9 @@ type Config struct {
 
 // AccountConfig wires the self-service account flows.
 type AccountConfig struct {
+	// TermsVersion is the current terms revision; 0 disables the gate. A user
+	// whose AcceptedTermsVersion is older can not log in until they accept.
+	TermsVersion int `mapstructure:"terms_version"`
 	// PasswordResetURL is the frontend page the reset link points to; the token is appended
 	// as ?token=<hex>. Reset tokens stay valid PasswordResetTTL (5m-24h).
 	PasswordResetURL string        `mapstructure:"password_reset_url"`

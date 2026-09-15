@@ -84,7 +84,7 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Booking:  handlers.NewBookingHandler(h.svc),
 		SSE:      handlers.NewSSEHandler(h.hub, h.tokens, h.showtimes),
 		Payment:  handlers.NewPaymentHandler(h.providers, h.svc, ""),
-		Staff:    handlers.NewStaffHandler(h.reports),
+		Staff:    handlers.NewStaffHandler(h.reports, h.svc),
 		Report:   handlers.NewReportHandler(h.reports),
 		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
 	})

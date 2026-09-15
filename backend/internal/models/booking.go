@@ -15,6 +15,13 @@ const (
 	BookingRefunded  = "refunded"
 )
 
+// A booking is sold online (shown in the customer's list) or at the counter for
+// a walk-in without an account (no user_id, no payment, no email).
+const (
+	SoldViaOnline  = "online"
+	SoldViaCounter = "counter"
+)
+
 const (
 	ReasonReplaced        = "replaced" // a newer hold of the same user/show replaced it
 	ReasonHoldExpired     = "hold_expired"
@@ -28,13 +35,18 @@ const (
 // At most one PENDING booking per user per showtime (partial unique index).
 type Booking struct {
 	ID             string     `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID         string     `gorm:"type:uuid;not null" json:"user_id"`
+	UserID         string     `gorm:"type:uuid;index" json:"user_id,omitempty"`
 	ShowtimeID     string     `gorm:"type:uuid;not null" json:"showtime_id"`
 	Status         string     `gorm:"type:varchar(16);not null;default:pending" json:"status"`
 	StatusReason   *string    `gorm:"type:varchar(64)" json:"status_reason,omitempty"`
 	TotalAmount    int64      `gorm:"not null;default:0" json:"total_amount"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	IdempotencyKey *string    `gorm:"type:varchar(128)" json:"idempotency_key,omitempty"`
+	// SoldVia: online bookings carry a user and a payment; counter bookings are
+	// walk-in sales with no account, no payment and no ticket email.
+	SoldVia        string     `gorm:"type:varchar(16);not null;default:online" json:"sold_via"`
+	CustomerName   string     `gorm:"type:varchar(255)" json:"customer_name,omitempty"`
+	CustomerPhone  string     `gorm:"type:varchar(20)" json:"customer_phone,omitempty"`
 	// PaymentID is the attempt whose collected money this booking carries.
 	PaymentID         *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
 	PaidAt            *time.Time `json:"paid_at,omitempty"`

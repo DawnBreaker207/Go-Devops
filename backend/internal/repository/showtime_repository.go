@@ -15,12 +15,14 @@ type ShowtimeRow struct {
 	HallName    string `gorm:"column:hall_name"`
 	MovieTitle  string `gorm:"column:movie_title"`
 	MovieStatus string `gorm:"column:movie_status"`
+	AgeRating   string `gorm:"column:age_rating"`
 }
 
 type ShowtimePickRow struct {
 	ID         string    `gorm:"column:id"`
 	MovieID    string    `gorm:"column:movie_id"`
 	MovieTitle string    `gorm:"column:movie_title"`
+	AgeRating  string    `gorm:"column:age_rating"`
 	HallID     string    `gorm:"column:hall_id"`
 	HallName   string    `gorm:"column:hall_name"`
 	StartAt    time.Time `gorm:"column:start_at"`
@@ -119,7 +121,8 @@ func (r *ShowtimeRepository) FindByID(ctx context.Context, id string) (*Showtime
 		Model(&models.Showtime{}).
 		Select(`showtimes.id, showtimes.movie_id, showtimes.hall_id, showtimes.start_at,
 			showtimes.end_at, showtimes.status, showtimes.created_at, showtimes.updated_at,
-			halls.name AS hall_name, movies.title AS movie_title, movies.status AS movie_status`).
+			halls.name AS hall_name, movies.title AS movie_title, movies.status AS movie_status,
+			movies.age_rating AS age_rating`).
 		Joins("JOIN halls ON halls.id = showtimes.hall_id").
 		Joins("JOIN movies ON movies.id = showtimes.movie_id").
 		Where("showtimes.id = ?", id).
@@ -160,7 +163,8 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 	var rows []ShowtimePickRow
 	q := r.db.WithContext(ctx).
 		Model(&models.Showtime{}).
-		Select(`showtimes.id, showtimes.movie_id, movies.title AS movie_title, showtimes.hall_id,
+		Select(`showtimes.id, showtimes.movie_id, movies.title AS movie_title,
+			movies.age_rating AS age_rating, showtimes.hall_id,
 			showtimes.start_at, showtimes.end_at, showtimes.status, halls.name AS hall_name,
 			MIN(hall_prices.price) AS from_price`).
 		Joins("JOIN movies ON movies.id = showtimes.movie_id AND movies.deleted_at IS NULL AND movies.status = ?", models.MovieStatusShowing).
@@ -176,7 +180,7 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 		Where("showtimes.start_at >= ?", now).
 		Where(`showtimes.hall_id IN (SELECT hall_id FROM hall_prices
 			GROUP BY hall_id HAVING count(DISTINCT seat_type) = ?)`, len(models.AllSeatTypes)).
-		Group("showtimes.id, movies.title, halls.name").
+		Group("showtimes.id, movies.id, halls.name").
 		Order("showtimes.start_at").
 		Scan(&rows).Error
 	return rows, err

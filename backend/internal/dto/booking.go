@@ -9,6 +9,15 @@ type HoldRequest struct {
 	IdempotencyKey string   `json:"idempotency_key" binding:"omitempty,min=1,max=128"`
 }
 
+// CounterSellRequest is a walk-in sale at the till: no account, no payment
+// provider; cash is collected and the booking is confirmed immediately.
+type CounterSellRequest struct {
+	ShowID        string   `json:"show_id" binding:"required"`
+	SeatIDs       []string `json:"seat_ids" binding:"required,min=1"`
+	CustomerName  string   `json:"customer_name" binding:"omitempty,max=255"`
+	CustomerPhone string   `json:"customer_phone" binding:"omitempty,max=20"`
+}
+
 type HeldSeat struct {
 	ShowtimeSeatID string `json:"showtime_seat_id"`
 	Label          string `json:"label"`
@@ -58,6 +67,7 @@ type OrderStatusResponse struct {
 type OrderShowtime struct {
 	MovieID    string    `json:"movie_id"`
 	MovieTitle string    `json:"movie_title"`
+	AgeRating  string    `json:"age_rating"`
 	HallID     string    `json:"hall_id"`
 	HallName   string    `json:"hall_name"`
 	StartAt    time.Time `json:"start_at"`
@@ -92,6 +102,7 @@ type RedeemResponse struct {
 	TicketID   string     `json:"ticket_id,omitempty"`
 	ShowtimeID string     `json:"showtime_id,omitempty"`
 	MovieTitle string     `json:"movie_title,omitempty"`
+	AgeRating  string     `json:"age_rating,omitempty"`
 	HallName   string     `json:"hall_name,omitempty"`
 	SeatLabel  string     `json:"seat_label,omitempty"`
 	StartAt    *time.Time `json:"start_at,omitempty"`

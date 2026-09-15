@@ -253,7 +253,7 @@ func newEnv(t *testing.T) *env {
 	e.jwt = jwt.NewManager("test-access-secret", "test-refresh-secret", "test", 15*time.Minute, time.Hour)
 	guard := ratelimit.NewFailureLimiter(5, 5*time.Minute, func() time.Time { return e.now })
 	e.auth = service.NewAuthService(testDB, userRepo, repository.NewRefreshTokenRepository(testDB), e.jwt, guard,
-		repository.NewPasswordResetTokenRepository(testDB), e.mailer, "http://test.local/reset-password", 30*time.Minute)
+		repository.NewPasswordResetTokenRepository(testDB), e.mailer, "http://test.local/reset-password", 30*time.Minute, 0)
 	e.accounts = service.NewUserService(testDB, userRepo)
 	e.reports = service.NewReportService(repository.NewReportRepository(testDB), repository.NewShowtimeRepository(testDB), time.UTC)
 	e.movies = service.NewMovieService(testDB, repository.NewMovieRepository(testDB))
