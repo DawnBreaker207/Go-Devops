@@ -25,7 +25,7 @@ type HallRequest struct {
 	Spans          []string `json:"spans" binding:"omitempty,max=100" example:"[\"D3\"]"`
 	ScreenPosition string   `json:"screen_position" binding:"omitempty,oneof=front back" example:"front"`
 	// Column numbers after which there is a vertical aisle, display only.
-	AisleAfterCols []int `json:"aisle_after_cols" binding:"omitempty,max=49" example:"[4,8]"`
+	AisleAfterCols []int `json:"aisle_after_cols" binding:"omitempty,max=49" example:"4"`
 	// Must hold a positive price for each of the 4 seat types.
 	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
 }
@@ -50,7 +50,7 @@ type CloneHallRequest struct {
 type SeatSelector struct {
 	Labels []string `json:"labels" binding:"omitempty,max=500" example:"[\"A1\",\"A2\"]"`
 	Rows   []string `json:"rows" binding:"omitempty,max=50" example:"[\"A\",\"B\"]"`
-	Cols   []int    `json:"cols" binding:"omitempty,max=50" example:"[1,2]"`
+	Cols   []int    `json:"cols" binding:"omitempty,max=50" example:"1"`
 	// Inclusive rectangle, e.g. "A1:C4".
 	Range string `json:"range" binding:"omitempty,max=16" example:"A1:C4"`
 }

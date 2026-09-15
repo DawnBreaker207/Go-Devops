@@ -48,9 +48,10 @@ password: admin123                (APP_ADMIN_PASSWORD)
 | `make run` | Chạy server |
 | `make build` | Build binary vào `bin/backend-cp` |
 | `make test` | `go test ./...` (cần Postgres + RabbitMQ đang chạy) |
-| `make test-system` | `docker compose up -d postgres rabbitmq` rồi `go test ./... -count=1` |
-| `make chaos` | Chạy các test race/concurrency (`Race` / `Stress` / `Concurrent` trong tên) trong container `golang:1.26` với `-race` |
-| `make load` | Chạy riêng `TestStress_NoSeatSoldTwice` với `-timeout 30m` |
+| `make test-system` | `docker compose up -d postgres rabbitmq` rồi `go test ./... -count=1` trên toàn bộ stack thật |
+| `make chaos` | Build `cmd/server` thật, chạy làm tiến trình OS thật, kill -9 + khởi động lại giữa lúc giữ ghế, kiểm phục hồi qua HTTP + SQL (`internal/chaostest`, cần Postgres ở `localhost:5432` + CLI `migrate`) |
+| `make test-load` | `cmd/loadtest`: ~300 virtual user thật qua HTTP đọc catalog + giữ/huỷ ghế, in p50/p95/tỉ lệ lỗi, chặn theo NFR-PERF-01/02. Trỏ `BASE_URL` vào server đang chạy |
+| `make test-migrate` | Round-trip migration (up → down hết → up) trên DB tạm, diff schema với một lượt up duy nhất (`scripts/test-migrate.sh`) |
 | `make test-race` | Chạy toàn bộ test với `-race` trong container `golang:1.26` (race detector cần gcc) |
 | `make lint` | `go vet ./...` |
 | `make fmt` / `make tidy` | Format source / dọn `go.mod` |
