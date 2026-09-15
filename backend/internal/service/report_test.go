@@ -13,6 +13,40 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment/mock"
 )
 
+// T18: GET /admin/reports/daily counts only confirmed, paid money — a
+// pending hold and a refunded booking on the same day do not inflate it.
+func TestHTTP_DailyReportExcludesPending(t *testing.T) {
+	h := newHTTPEnv(t)
+	admin, _ := h.login(models.RoleAdmin)
+
+	confirmed := h.confirmed(h.users[0], "A1")
+	h.mustHold(h.users[1], "A2") // pending: must not count
+	refunded := h.mustHold(h.users[2], "A3")
+	ref := h.pay(h.users[2], refunded.BookingID)
+	h.capture(ref, mock.CaptureOptions{AmountDelta: 1000}) // forces a refund, not a sale
+	if ack := h.ipn(ref); ack != payment.AckProcessed {
+		t.Fatalf("ack = %s", ack)
+	}
+	h.wantStatus(refunded.BookingID, models.BookingRefunded)
+
+	day := (*h.booking(confirmed).PaidAt).UTC().Format(dto.DateLayout)
+	if _, err := h.reports.CloseDay(h.ctx, *h.booking(confirmed).PaidAt); err != nil {
+		t.Fatalf("closeDay: %v", err)
+	}
+
+	status, _, body := h.call(http.MethodGet, "/api/v1/admin/reports/daily?from="+day+"&to="+day, admin, nil)
+	if status != http.StatusOK {
+		t.Fatalf("HTTP %d %v", status, body["message"])
+	}
+	data := dataMap(body)
+	if revenue := int64(data["total_revenue"].(float64)); revenue != priceStandard {
+		t.Fatalf("total_revenue = %d, want %d (only the confirmed A1 sale)", revenue, priceStandard)
+	}
+	if sold := int64(data["tickets_sold"].(float64)); sold != 1 {
+		t.Fatalf("tickets_sold = %d, want 1", sold)
+	}
+}
+
 // T24 / E-B2 / E-D4: closing a day twice keeps one row with the same numbers; only confirmed money counts.
 func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 	e := newEnv(t)

@@ -157,6 +157,39 @@ func TestSSEStream(t *testing.T) {
 	}
 }
 
+// T37 / NFR-PERF-03: a seat event reaches a connected SSE client within
+// 150ms, measured for real from hub.Broadcast to the client reading the
+// frame off the wire — not just "eventually arrives" with no timing bound.
+func TestSSEStream_SeatEventLatencyUnder150ms(t *testing.T) {
+	srv, hub, tokens := startSSEServer(t, 0, func(h *SSEHandler) { h.debounce = 20 * time.Millisecond })
+	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
+
+	resp, err := http.Get(srv.URL + "/events/shows/show-a?token=" + token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	frames := make(chan sseFrame, 8)
+	go readFrames(bufio.NewReader(resp.Body), frames)
+	nextFrame(t, frames, "retry", time.Second)
+	nextFrame(t, frames, "connected", time.Second)
+
+	const budget = 150 * time.Millisecond
+	for round := 0; round < 5; round++ {
+		start := time.Now()
+		hub.Broadcast("show-a", sse.SeatEvent{ShowtimeID: "show-a", Seats: []sse.SeatUpdate{{ID: fmt.Sprintf("s%d", round), Status: "held"}}})
+		f := nextFrame(t, frames, "seats", budget)
+		elapsed := time.Since(start)
+		t.Logf("round %d: broadcast to client read = %v", round, elapsed)
+		if elapsed > budget {
+			t.Fatalf("round %d: %v, want <= %v", round, elapsed, budget)
+		}
+		if f.data == "" {
+			t.Fatalf("round %d: empty payload", round)
+		}
+	}
+}
+
 func TestSSEStream_StalledClientIsDropped(t *testing.T) {
 	srv, hub, tokens := startSSEServer(t, 0, func(h *SSEHandler) {
 		h.debounce = 5 * time.Millisecond

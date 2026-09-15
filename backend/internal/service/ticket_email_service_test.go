@@ -1,15 +1,57 @@
 package service_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
+	"html"
+	"image/png"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/makiuchi-d/gozxing"
+	"github.com/makiuchi-d/gozxing/qrcode"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/jobs"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 )
+
+var qrDataURIPattern = regexp.MustCompile(`data:image/png;base64,([^"]+)"`)
+
+// decodeQRCodes extracts every embedded QR PNG from an email's HTML and
+// decodes each one back to the text it encodes. html/template HTML-escapes
+// "+" in a template.URL's data URI (into "&#43;", which any HTML/email
+// client decodes back before treating the attribute as a URL), so the
+// captured base64 is HTML-unescaped first.
+func decodeQRCodes(t *testing.T, rawHTML string) []string {
+	t.Helper()
+	matches := qrDataURIPattern.FindAllStringSubmatch(rawHTML, -1)
+	texts := make([]string, 0, len(matches))
+	reader := qrcode.NewQRCodeReader()
+	for i, m := range matches {
+		raw, err := base64.StdEncoding.DecodeString(html.UnescapeString(m[1]))
+		if err != nil {
+			t.Fatalf("qr %d: base64 decode: %v", i, err)
+		}
+		img, err := png.Decode(bytes.NewReader(raw))
+		if err != nil {
+			t.Fatalf("qr %d: png decode: %v", i, err)
+		}
+		bmp, err := gozxing.NewBinaryBitmapFromImage(img)
+		if err != nil {
+			t.Fatalf("qr %d: bitmap: %v", i, err)
+		}
+		result, err := reader.Decode(bmp, nil)
+		if err != nil {
+			t.Fatalf("qr %d: decode: %v", i, err)
+		}
+		texts = append(texts, result.GetText())
+	}
+	return texts
+}
 
 // T23 / E-ML1 / E-ML2: one email with a QR per ticket; a broken mailer never touches the sale and is retried.
 func TestTicketEmails(t *testing.T) {
@@ -35,6 +77,17 @@ func TestTicketEmails(t *testing.T) {
 	for _, tk := range order.Tickets {
 		if !strings.Contains(html, tk.Code) || !strings.Contains(html, "Ghế "+tk.SeatLabel) {
 			t.Fatalf("email misses ticket %s", tk.SeatLabel)
+		}
+	}
+	// T42: decode each embedded QR PNG for real and check it encodes the
+	// matching ticket's own code (order of the two images follows the tickets).
+	decoded := decodeQRCodes(t, html)
+	if len(decoded) != len(order.Tickets) {
+		t.Fatalf("decoded %d QR codes, want %d", len(decoded), len(order.Tickets))
+	}
+	for i, tk := range order.Tickets {
+		if decoded[i] != tk.Code {
+			t.Fatalf("QR %d decodes to %q, want the ticket code %q", i, decoded[i], tk.Code)
 		}
 	}
 
