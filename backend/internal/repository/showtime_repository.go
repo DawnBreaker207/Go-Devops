@@ -93,7 +93,14 @@ func (r *ShowtimeRepository) Update(tx *gorm.DB, showtime *models.Showtime) erro
 		Updates(showtime).Error
 }
 
+// Delete soft-deletes a showtime, also forcing status to closed so a
+// deleted showtime is never left looking "open" to anything reading the
+// column directly. Must run inside a transaction.
 func (r *ShowtimeRepository) Delete(tx *gorm.DB, showtimeID string) error {
+	if err := tx.Model(&models.Showtime{}).Where("id = ?", showtimeID).
+		Update("status", models.ShowtimeClosed).Error; err != nil {
+		return err
+	}
 	return tx.Delete(&models.Showtime{}, "id = ?", showtimeID).Error
 }
 

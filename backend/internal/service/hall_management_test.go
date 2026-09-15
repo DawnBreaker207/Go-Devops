@@ -243,10 +243,27 @@ func TestHallDelete_BlockedByUnfinishedShowtime(t *testing.T) {
 		t.Fatalf("delete with a showtime to come: err = %v", err)
 	}
 	e.must(e.showtimes.Delete(e.ctx, show.ID))
+
+	// A soft-deleted showtime is also forced closed, so nothing reading the
+	// status column directly ever sees a "still open" deleted showtime.
+	var deletedShow models.Showtime
+	e.must(e.db.Unscoped().First(&deletedShow, "id = ?", show.ID).Error)
+	if deletedShow.Status != models.ShowtimeClosed || !deletedShow.DeletedAt.Valid {
+		t.Fatalf("deleted showtime = %+v, want status=closed and deleted_at set", deletedShow)
+	}
+
 	if err := e.halls.DeleteHall(e.ctx, hall.ID); err != nil {
 		t.Fatalf("delete once its showtime is gone: %v", err)
 	}
 	if _, err := e.halls.GetByID(e.ctx, hall.ID); httpStatus(err) != http.StatusNotFound {
 		t.Fatalf("deleted hall still found: err = %v", err)
+	}
+
+	// A soft-deleted hall is also forced inactive, so active/deleted_at never
+	// disagree forever.
+	var deletedHall models.Hall
+	e.must(e.db.Unscoped().First(&deletedHall, "id = ?", hall.ID).Error)
+	if deletedHall.Active || !deletedHall.DeletedAt.Valid {
+		t.Fatalf("deleted hall = %+v, want active=false and deleted_at set", deletedHall)
 	}
 }

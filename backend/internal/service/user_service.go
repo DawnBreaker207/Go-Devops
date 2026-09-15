@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -79,6 +80,11 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.
 // personal fields are scrubbed, sessions dropped and unpaid holds expired.
 // The route restricts this to the customer role, so the account being erased
 // is never an admin: no "last admin" guard is needed here.
+//
+// Unlike Update (admin lock/unlock, reversible via active), this also sets
+// deleted_at: the row disappears from every default GORM query (List,
+// GetByID, Update's own lookup), so there is no path left for an admin to
+// "unlock" an erased account back to life with its scrubbed data.
 func (s *userService) DeleteMe(ctx context.Context, userID, password string) error {
 	current, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -87,7 +93,7 @@ func (s *userService) DeleteMe(ctx context.Context, userID, password string) err
 	if err := bcrypt.CompareHashAndPassword([]byte(current.Password), []byte(password)); err != nil {
 		return apperrors.ErrInvalidCredentials
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		user, err := s.userRepo.LockByID(ctx, tx, userID)
 		if err != nil {
 			return err
@@ -123,18 +129,27 @@ func (s *userService) DeleteMe(ctx context.Context, userID, password string) err
 		if err := tx.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]any{
 			"email": anonEmail, "full_name": "", "phone": "",
 			"password": anonEmail + "!", "role": models.RoleCustomer,
-			"active": false, "accepted_terms_version": 0,
+			"active": false, "accepted_terms_version": 0, "deleted_at": time.Now(),
 		}).Error; err != nil {
 			return err
 		}
 
+		// No PII in the audit trail: the scrubbed row itself (by resource_id)
+		// is enough to cross-reference internally, and the whole point of
+		// erasure is that the original email must not linger anywhere.
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = userID
-			rec.Before = map[string]any{"email": user.Email}
 			return audit.In(ctx, tx, rec)
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	for _, fn := range s.onChange {
+		fn(userID)
+	}
+	return nil
 }
 
 func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse, error) {

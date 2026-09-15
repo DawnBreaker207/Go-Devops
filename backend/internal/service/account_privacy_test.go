@@ -2,15 +2,66 @@ package service_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
+
+// An erased account is gone, not just locked: an admin can no longer "find"
+// it to flip active back on, unlike a plain lock (Update active=false).
+func TestAccount_DeleteMeBlocksReactivation(t *testing.T) {
+	e := newEnv(t)
+	u := e.newUser(models.RoleCustomer, "erased-reactivate@test.local", "secret123")
+	admin := e.newUser(models.RoleAdmin, "admin-reactivate@test.local", "secret123")
+
+	e.must(e.accounts.DeleteMe(e.ctx, u.ID, "secret123"))
+
+	if _, err := e.accounts.Update(e.ctx, admin.ID, u.ID, setActive(true)); !isAppErr(err, apperrors.ErrUserNotFound) {
+		t.Fatalf("admin reactivating an erased account = %v, want ErrUserNotFound", err)
+	}
+	if _, err := e.accounts.GetByID(e.ctx, u.ID); !isAppErr(err, apperrors.ErrUserNotFound) {
+		t.Fatalf("GetByID an erased account = %v, want ErrUserNotFound", err)
+	}
+	list, _, err := e.accounts.List(e.ctx, dto.UserListQuery{PageQuery: dto.PageQuery{Page: 1, PageSize: 50}})
+	e.must(err)
+	for _, row := range list {
+		if row.ID == u.ID {
+			t.Fatalf("erased account %s still appears in the admin list", u.ID)
+		}
+	}
+}
+
+// DeleteMe must invalidate the account status cache immediately, the same
+// way Update (lock/unlock) already does — otherwise a still-valid access
+// token for the just-erased account keeps passing the cached check for up
+// to the cache TTL.
+func TestAccount_DeleteMeInvalidatesStatusCacheAtOnce(t *testing.T) {
+	e := newEnv(t)
+	u := e.newUser(models.RoleCustomer, "erased-cache@test.local", "secret123")
+
+	cache := service.NewAccountStatusCache(repository.NewUserRepository(e.db), time.Hour)
+	accounts := service.NewUserService(e.db, repository.NewUserRepository(e.db), cache.Invalidate)
+
+	// Warm the cache with the pre-erasure (active) status.
+	active, _, err := cache.Status(e.ctx, u.ID)
+	e.must(err)
+	if !active {
+		t.Fatal("control: account should start active")
+	}
+
+	e.must(accounts.DeleteMe(e.ctx, u.ID, "secret123"))
+
+	if _, _, err := cache.Status(e.ctx, u.ID); !errors.Is(err, apperrors.ErrInvalidToken) {
+		t.Fatalf("status right after erasure = %v, want ErrInvalidToken (not a stale cached active=true)", err)
+	}
+}
 
 // T65: with terms enforcement on, login answers 428 until the account accepts
 // the current revision; terms-accept re-verifies the password and signs in.
@@ -91,13 +142,26 @@ func TestAccount_DeleteMeErasesAfterTicketsUsed(t *testing.T) {
 	}
 
 	e.moveShowStart(e.showID, -120*time.Minute)
-	e.must(e.accounts.DeleteMe(e.ctx, uid, "secret123"))
+	// Stash an audit context like middleware.Audit would in production, so
+	// the users.delete_me row is actually written (DeleteMe only writes it
+	// when a Record is already stashed on the context).
+	auditCtx := audit.Stash(e.ctx, audit.Record{ActorID: uid, ActorRole: "customer", Action: "users.delete_me", ResourceType: "user"})
+	e.must(e.accounts.DeleteMe(auditCtx, uid, "secret123"))
 
+	// Unscoped: the row is now soft-deleted, so a plain query no longer finds it.
 	var anon models.User
-	e.must(e.db.First(&anon, "id = ?", uid).Error)
+	e.must(e.db.Unscoped().First(&anon, "id = ?", uid).Error)
 	if anon.Email != "deleted-"+uid+"@anon.invalid" || anon.FullName != "" || anon.Phone != "" ||
-		anon.Active || anon.Password == u.Password {
+		anon.Active || anon.Password == u.Password || !anon.DeletedAt.Valid {
 		t.Fatalf("anonymized user = %+v", anon)
+	}
+
+	// Erased, not just locked: a plain (scoped) lookup no longer finds the
+	// account at all, so nothing — including List/GetByID/Update — can see it.
+	var count int64
+	e.must(e.db.Model(&models.User{}).Where("id = ?", uid).Count(&count).Error)
+	if count != 0 {
+		t.Fatalf("erased user still visible to a default query: count=%d", count)
 	}
 
 	var refreshCount, resetCount int64
@@ -114,5 +178,15 @@ func TestAccount_DeleteMeErasesAfterTicketsUsed(t *testing.T) {
 
 	if _, err := e.auth.Login(e.ctx, dto.LoginRequest{Email: u.Email, Password: "secret123", ClientIP: "10.0.0.1"}); !errors.Is(err, apperrors.ErrInvalidCredentials) {
 		t.Fatalf("login after erasure = %v", err)
+	}
+
+	// The audit trail of an erasure must not itself keep the erased email —
+	// that would defeat the whole point of the right to erasure.
+	var beforeJSON, afterJSON string
+	e.must(e.db.Raw(`SELECT COALESCE(before_json::text, ''), COALESCE(after_json::text, '')
+		FROM audit_logs WHERE action = 'users.delete_me' AND resource_id = ?`, uid).
+		Row().Scan(&beforeJSON, &afterJSON))
+	if strings.Contains(beforeJSON, u.Email) || strings.Contains(afterJSON, u.Email) {
+		t.Fatalf("delete_me audit row still holds the real email: before=%s after=%s", beforeJSON, afterJSON)
 	}
 }

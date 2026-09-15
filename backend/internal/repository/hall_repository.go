@@ -136,8 +136,13 @@ func (r *HallRepository) UpdateHall(tx *gorm.DB, hall *models.Hall) error {
 		Updates(hall).Error
 }
 
-// DeleteHall soft-deletes a hall. It must run inside a transaction.
+// DeleteHall soft-deletes a hall, also turning off active so the two flags
+// never disagree forever (a deleted hall is never "still active"). Must run
+// inside a transaction.
 func (r *HallRepository) DeleteHall(tx *gorm.DB, hallID string) error {
+	if err := tx.Model(&models.Hall{}).Where("id = ?", hallID).Update("active", false).Error; err != nil {
+		return err
+	}
 	return tx.Delete(&models.Hall{}, "id = ?", hallID).Error
 }
 
