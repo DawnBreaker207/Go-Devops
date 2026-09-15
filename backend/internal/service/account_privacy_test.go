@@ -83,12 +83,15 @@ func TestAccount_DeleteMeErasesAfterTicketsUsed(t *testing.T) {
 	e.auth.Login(e.ctx, dto.LoginRequest{Email: u.Email, Password: "secret123", ClientIP: "10.0.0.1"})
 	e.must(e.auth.ForgotPassword(e.ctx, u.Email))
 
-	if err := e.accounts.DeleteMe(e.ctx, uid); !errors.Is(err, apperrors.ErrAccountHoldsTickets) {
+	if err := e.accounts.DeleteMe(e.ctx, uid, "secret123"); !errors.Is(err, apperrors.ErrAccountHoldsTickets) {
 		t.Fatalf("delete with tickets to come = %v", err)
+	}
+	if err := e.accounts.DeleteMe(e.ctx, uid, "wrong-password"); !errors.Is(err, apperrors.ErrInvalidCredentials) {
+		t.Fatalf("delete with the wrong password = %v", err)
 	}
 
 	e.moveShowStart(e.showID, -120*time.Minute)
-	e.must(e.accounts.DeleteMe(e.ctx, uid))
+	e.must(e.accounts.DeleteMe(e.ctx, uid, "secret123"))
 
 	var anon models.User
 	e.must(e.db.First(&anon, "id = ?", uid).Error)

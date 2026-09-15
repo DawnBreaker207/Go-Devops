@@ -68,15 +68,23 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 // DeleteMe godoc
 //
 //	@Summary		Delete own account (right to erasure)
-//	@Description	409 while a confirmed ticket is still to come; then the account is scrubbed and sessions revoked.
+//	@Description	Requires the current password. 401 on a wrong password; 409 while a confirmed ticket is still to come; then the account is scrubbed and sessions revoked.
 //	@Tags			users
+//	@Accept			json
 //	@Produce		json
 //	@Security		BearerAuth
-//	@Success		204	{object}	response.Body
-//	@Failure		409	{object}	response.Body	"account still holds confirmed tickets"
+//	@Param			payload	body		dto.DeleteAccountRequest	true	"Current password"
+//	@Success		204		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		409		{object}	response.Body	"account still holds confirmed tickets"
 //	@Router			/users/me [delete]
 func (h *UserHandler) DeleteMe(c *gin.Context) {
-	if err := h.userService.DeleteMe(c.Request.Context(), middleware.CurrentUserID(c)); err != nil {
+	var req dto.DeleteAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.userService.DeleteMe(c.Request.Context(), middleware.CurrentUserID(c), req.Password); err != nil {
 		response.Error(c, err)
 		return
 	}

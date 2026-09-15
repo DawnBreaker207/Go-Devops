@@ -23,7 +23,7 @@ type UserService interface {
 	Create(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error)
 	Update(ctx context.Context, actorID, userID string, req dto.UpdateUserRequest) (*dto.UserResponse, error)
 	UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*dto.UserResponse, error)
-	DeleteMe(ctx context.Context, userID string) error
+	DeleteMe(ctx context.Context, userID, password string) error
 }
 
 type userService struct {
@@ -73,10 +73,20 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.
 	return &result, nil
 }
 
-// DeleteMe erases the caller's account under the right to erasure. Confirmed
+// DeleteMe erases the caller's account under the right to erasure. The
+// current password must be re-entered, since this is irreversible. Confirmed
 // tickets still to come come first, so they block the delete (409); afterwards
 // personal fields are scrubbed, sessions dropped and unpaid holds expired.
-func (s *userService) DeleteMe(ctx context.Context, userID string) error {
+// The route restricts this to the customer role, so the account being erased
+// is never an admin: no "last admin" guard is needed here.
+func (s *userService) DeleteMe(ctx context.Context, userID, password string) error {
+	current, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(current.Password), []byte(password)); err != nil {
+		return apperrors.ErrInvalidCredentials
+	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		user, err := s.userRepo.LockByID(ctx, tx, userID)
 		if err != nil {

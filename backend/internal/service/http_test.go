@@ -162,6 +162,8 @@ func TestHTTP_RoleScopes(t *testing.T) {
 		{"staff creates accounts", http.MethodPost, "/api/v1/admin/users", staff, map[string]string{"email": "x@test.local", "password": "secret123", "full_name": "X", "role": "staff"}, http.StatusForbidden},
 		{"staff changes prices", http.MethodPut, "/api/v1/halls/" + h.hallID + "/prices", customer, map[string]any{"prices": fullPrices()}, http.StatusForbidden},
 		{"staff holds seats", http.MethodPost, "/api/v1/orders/hold", staff, map[string]any{"show_id": h.showID, "seat_ids": h.ids("A1")}, http.StatusForbidden},
+		{"staff self-erases", http.MethodDelete, "/api/v1/users/me", staff, map[string]string{"password": "secret123"}, http.StatusForbidden},
+		{"admin self-erases", http.MethodDelete, "/api/v1/users/me", admin, map[string]string{"password": "secret123"}, http.StatusForbidden},
 		{"no token", http.MethodGet, "/api/v1/orders", "", nil, http.StatusUnauthorized},
 	}
 	for _, c := range cases {

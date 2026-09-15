@@ -67,3 +67,8 @@ type UpdateProfileRequest struct {
 	FullName string `json:"full_name" binding:"required,min=2,max=255" example:"Nguyen Van A"`
 	Phone    string `json:"phone" binding:"omitempty,max=20" example:"0901234567"`
 }
+
+// DeleteAccountRequest re-confirms the password before an irreversible erasure.
+type DeleteAccountRequest struct {
+	Password string `json:"password" binding:"required" example:"secret123"`
+}
