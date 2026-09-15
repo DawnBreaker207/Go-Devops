@@ -211,7 +211,7 @@ func newEnv(t *testing.T) *env {
 	e.movieID = movie.ID
 
 	hallRepo := repository.NewHallRepository(testDB)
-	e.halls = service.NewHallService(testDB, hallRepo)
+	e.halls = service.NewHallService(testDB, hallRepo, nil)
 	hall, err := e.halls.Create(ctx, dto.HallRequest{
 		Name: "Hall 1", Rows: 2, SeatsPerRow: 5,
 		SeatTypes: map[string][]string{"vip": {"2"}},
@@ -222,7 +222,7 @@ func newEnv(t *testing.T) *env {
 	e.hallID = hall.ID
 
 	e.showtimes = service.NewShowtimeService(testDB, repository.NewShowtimeRepository(testDB), hallRepo,
-		repository.NewMovieRepository(testDB), 20, time.UTC)
+		repository.NewMovieRepository(testDB), 20, time.UTC, nil, 0)
 	e.showID = e.newShowtime(3 * time.Hour)
 	e.seat = e.seatsOf(e.showID)
 

@@ -37,6 +37,9 @@ type RedisConfig struct {
 	Password string        `mapstructure:"password"`
 	DB       int           `mapstructure:"db"`
 	TTL      time.Duration `mapstructure:"ttl"`
+	// ShowtimesTTL is much shorter than TTL: a showtime must fall out of "on
+	// sale" listings close to when it actually starts or closes.
+	ShowtimesTTL time.Duration `mapstructure:"showtimes_ttl"`
 }
 
 // AccountConfig wires the self-service account flows.
@@ -467,4 +470,5 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.db", 0)
 	v.SetDefault("redis.ttl", "5m")
+	v.SetDefault("redis.showtimes_ttl", "60s")
 }

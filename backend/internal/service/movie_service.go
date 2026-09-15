@@ -46,12 +46,35 @@ func defaultAgeRating(rating string) string {
 	return rating
 }
 
+// movieListCache is what a cached List result carries.
+type movieListCache struct {
+	Items []dto.MovieResponse `json:"items"`
+	Total int64                `json:"total"`
+}
+
 func (s *movieService) List(ctx context.Context, query dto.MovieListQuery, includeDrafts bool) ([]dto.MovieResponse, int64, error) {
+	var key string
+	if !includeDrafts {
+		key = movieListKey(catalogGeneration(ctx, s.cache), includeDrafts, query.Status, query.Genre,
+			query.Sort, query.Order, query.Search, query.Page, query.PageSize)
+		if raw, ok, err := s.cache.Get(ctx, key); err == nil && ok {
+			var cached movieListCache
+			if json.Unmarshal([]byte(raw), &cached) == nil {
+				return cached.Items, cached.Total, nil
+			}
+		}
+	}
 	movies, total, err := s.movieRepo.List(ctx, query, includeDrafts)
 	if err != nil {
 		return nil, 0, err
 	}
-	return dto.NewMovieResponses(movies), total, nil
+	items := dto.NewMovieResponses(movies)
+	if !includeDrafts {
+		if raw, err := json.Marshal(movieListCache{Items: items, Total: total}); err == nil {
+			_ = s.cache.Set(ctx, key, string(raw), s.cacheTTL)
+		}
+	}
+	return items, total, nil
 }
 
 func (s *movieService) GetByID(ctx context.Context, id string, includeDrafts bool) (*dto.MovieResponse, error) {
@@ -111,6 +134,7 @@ func (s *movieService) Create(ctx context.Context, req dto.MovieRequest) (*dto.M
 	}); err != nil {
 		return nil, err
 	}
+	bumpCatalog(ctx, s.cache)
 
 	result := dto.NewMovieResponse(movie)
 	return &result, nil
@@ -179,6 +203,7 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 
 	result := dto.NewMovieResponse(movie)
 	s.cache.Del(ctx, movieKey(id))
+	bumpCatalog(ctx, s.cache)
 	return &result, nil
 }
 
@@ -210,5 +235,6 @@ func (s *movieService) Delete(ctx context.Context, id string) error {
 	// Only after commit: busting first would let a concurrent reader
 	// repopulate the cache with the pre-delete row before it lands.
 	s.cache.Del(ctx, movieKey(id))
+	bumpCatalog(ctx, s.cache)
 	return nil
 }

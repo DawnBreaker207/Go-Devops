@@ -74,6 +74,9 @@ redis:
   password: ""
   db: 0
   ttl: 5m
+  # Showtime listings expire fast: a showtime must fall off "on sale" close
+  # to when it actually starts or closes, not up to 5 minutes late.
+  showtimes_ttl: 60s
 
 # Booking: seat hold TTL and per-booking seat cap.
 booking:

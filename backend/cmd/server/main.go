@@ -103,14 +103,14 @@ func run() error {
 	// Locks and role changes reach already-issued tokens within accountStatusTTL.
 	accountStatus := service.NewAccountStatusCache(userRepo, accountStatusTTL)
 	userService := service.NewUserService(db, userRepo, accountStatus.Invalidate)
-	var movieCache *cache.Cache
+	var catalogCache *cache.Cache
 	if cfg.Redis.Addr != "" {
-		movieCache = cache.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
-		defer movieCache.Close()
+		catalogCache = cache.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+		defer catalogCache.Close()
 	}
-	movieService := service.NewMovieService(db, movieRepo, movieCache, cfg.Redis.TTL)
-	hallService := service.NewHallService(db, hallRepo)
-	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location)
+	movieService := service.NewMovieService(db, movieRepo, catalogCache, cfg.Redis.TTL)
+	hallService := service.NewHallService(db, hallRepo, catalogCache)
+	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location, catalogCache, cfg.Redis.ShowtimesTTL)
 
 	providers, err := buildPaymentProviders(cfg)
 	if err != nil {

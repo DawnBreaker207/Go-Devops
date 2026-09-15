@@ -62,6 +62,47 @@ func TestCache_SetGetExpireDel(t *testing.T) {
 	}
 }
 
+// T53: an unreachable Redis fails an operation quickly (bounded by the
+// client's dial/op timeouts) with an error, rather than hanging — the
+// service layer treats that error as a cache miss and reads the DB (see
+// TestMovies_ReadsSucceedWhenRedisUnreachable in internal/service).
+func TestCache_UnreachableFailsFastNotHang(t *testing.T) {
+	c := cache.New("127.0.0.1:1", "", 0) // nothing listens on port 1
+	t.Cleanup(func() { _ = c.Close() })
+	ctx := context.Background()
+
+	start := time.Now()
+	_, _, err := c.Get(ctx, "unreachable")
+	if err == nil {
+		t.Fatal("get against an unreachable redis returned no error")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("get took %v, want it bounded by the client's own dial/op timeout", elapsed)
+	}
+}
+
+func TestCache_Incr(t *testing.T) {
+	c := dialOrSkip(t)
+	t.Cleanup(func() { _ = c.Close() })
+	ctx := context.Background()
+	key := "t53:gen:" + time.Now().Format(time.RFC3339Nano)
+	t.Cleanup(func() { _ = c.Del(context.Background(), key) })
+
+	first, err := c.Incr(ctx, key)
+	if err != nil || first != 1 {
+		t.Fatalf("first incr = %d, %v, want 1, nil", first, err)
+	}
+	second, err := c.Incr(ctx, key)
+	if err != nil || second != 2 {
+		t.Fatalf("second incr = %d, %v, want 2, nil", second, err)
+	}
+
+	var nilCache *cache.Cache
+	if n, err := nilCache.Incr(ctx, key); err != nil || n != 0 {
+		t.Fatalf("nil cache incr = %d, %v, want 0, nil", n, err)
+	}
+}
+
 func TestCache_NilIsNoop(t *testing.T) {
 	var c *cache.Cache
 	ctx := context.Background()

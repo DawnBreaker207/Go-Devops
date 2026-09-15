@@ -10,6 +10,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/cache"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"gorm.io/gorm"
 )
@@ -33,10 +34,13 @@ type HallService interface {
 type hallService struct {
 	db       *gorm.DB
 	hallRepo *repository.HallRepository
+	cache    *cache.Cache
 }
 
-func NewHallService(db *gorm.DB, hallRepo *repository.HallRepository) HallService {
-	return &hallService{db: db, hallRepo: hallRepo}
+// NewHallService optionally busts the showtime-listing cache on a price
+// change; a nil cache disables it.
+func NewHallService(db *gorm.DB, hallRepo *repository.HallRepository, c *cache.Cache) HallService {
+	return &hallService{db: db, hallRepo: hallRepo, cache: c}
 }
 
 func (s *hallService) List(ctx context.Context, query dto.PageQuery) ([]dto.HallResponse, int64, error) {
@@ -567,6 +571,8 @@ func (s *hallService) SetPrices(ctx context.Context, hallID string, req dto.Pric
 	if err != nil {
 		return nil, err
 	}
+	// Showtime listings show hall_prices' MIN as from_price.
+	bumpCatalog(ctx, s.cache)
 
 	response := make([]dto.HallPriceResponse, 0, len(req.Prices))
 	for _, seatType := range models.AllSeatTypes {

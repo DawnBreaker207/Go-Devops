@@ -26,6 +26,10 @@ func New(addr, password string, db int) *Cache {
 	return &Cache{rdb: redis.NewClient(&redis.Options{
 		Addr: addr, Password: password, DB: db,
 		DialTimeout: dialTimeout, ReadTimeout: opTimeout, WriteTimeout: opTimeout,
+		// A cache miss must fail once and fall through to the DB, not retry a
+		// dead connection several times first (go-redis retries 3 times by
+		// default, multiplying the worst-case latency of a brownout).
+		MaxRetries: -1,
 	})}
 }
 
@@ -78,4 +82,16 @@ func (c *Cache) Del(ctx context.Context, keys ...string) error {
 		return nil
 	}
 	return c.rdb.Del(ctx, keys...).Err()
+}
+
+// Incr atomically increments key (creating it at 1 if absent) and returns the
+// new value; a nil cache always reads as generation 0, which still makes a
+// stable (if unshared) cache key. Used as a generation counter: every list
+// cache key embeds it, so bumping it invalidates every list key at once
+// without a SCAN — the old ones just age out via TTL, unread.
+func (c *Cache) Incr(ctx context.Context, key string) (int64, error) {
+	if c == nil {
+		return 0, nil
+	}
+	return c.rdb.Incr(ctx, key).Result()
 }

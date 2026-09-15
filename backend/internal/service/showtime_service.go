@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/cache"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"gorm.io/gorm"
 )
@@ -64,9 +66,13 @@ type showtimeService struct {
 	movie    repository.MovieRepository
 	cleanup  time.Duration
 	location *time.Location
+	cache    *cache.Cache
+	cacheTTL time.Duration
 }
 
-func NewShowtimeService(db *gorm.DB, showtime *repository.ShowtimeRepository, hall *repository.HallRepository, movie repository.MovieRepository, cleanupMinutes int, location *time.Location) ShowtimeService {
+// NewShowtimeService optionally caches public showtime listings; a nil cache disables it.
+func NewShowtimeService(db *gorm.DB, showtime *repository.ShowtimeRepository, hall *repository.HallRepository, movie repository.MovieRepository,
+	cleanupMinutes int, location *time.Location, c *cache.Cache, cacheTTL time.Duration) ShowtimeService {
 	return &showtimeService{
 		db:       db,
 		showtime: showtime,
@@ -74,6 +80,8 @@ func NewShowtimeService(db *gorm.DB, showtime *repository.ShowtimeRepository, ha
 		movie:    movie,
 		cleanup:  time.Duration(cleanupMinutes) * time.Minute,
 		location: location,
+		cache:    c,
+		cacheTTL: cacheTTL,
 	}
 }
 
@@ -158,6 +166,7 @@ func (s *showtimeService) Create(ctx context.Context, req dto.ShowtimeRequest) (
 	if err != nil {
 		return nil, err
 	}
+	bumpCatalog(ctx, s.cache)
 	result := &dto.ShowtimeResponse{
 		ID:      showtime.ID,
 		MovieID: showtime.MovieID,
@@ -318,6 +327,7 @@ func (s *showtimeService) Update(ctx context.Context, id string, req dto.Showtim
 	if err != nil {
 		return nil, err
 	}
+	bumpCatalog(ctx, s.cache)
 
 	return &dto.ShowtimeResponse{
 		ID:      id,
@@ -337,7 +347,7 @@ func (s *showtimeService) Delete(ctx context.Context, id string) error {
 	if row == nil {
 		return apperrors.ErrShowtimeNotFound
 	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		// Lock first, check after: an in-flight hold share-locks the row, so its booking
 		// is committed and seen by the check; a later hold finds the showtime gone.
 		current, err := s.showtime.LockForUpdate(tx, id)
@@ -363,7 +373,11 @@ func (s *showtimeService) Delete(ctx context.Context, id string) error {
 			return audit.In(ctx, tx, rec)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	bumpCatalog(ctx, s.cache)
+	return nil
 }
 
 func (s *showtimeService) ListByMovie(ctx context.Context, movieID, date string) ([]dto.ShowtimeListItem, error) {
@@ -383,6 +397,24 @@ func (s *showtimeService) ListByDate(ctx context.Context, date string) ([]dto.Sh
 }
 
 func (s *showtimeService) pickDay(ctx context.Context, movieID, date string) ([]dto.ShowtimeListItem, error) {
+	key := showtimeListKey(catalogGeneration(ctx, s.cache), movieID, date)
+	if raw, ok, err := s.cache.Get(ctx, key); err == nil && ok {
+		var cached []dto.ShowtimeListItem
+		if json.Unmarshal([]byte(raw), &cached) == nil {
+			return cached, nil
+		}
+	}
+	result, err := s.pickDayUncached(ctx, movieID, date)
+	if err != nil {
+		return nil, err
+	}
+	if raw, err := json.Marshal(result); err == nil {
+		_ = s.cache.Set(ctx, key, string(raw), s.cacheTTL)
+	}
+	return result, nil
+}
+
+func (s *showtimeService) pickDayUncached(ctx context.Context, movieID, date string) ([]dto.ShowtimeListItem, error) {
 	day := time.Now().In(s.location)
 	if date != "" {
 		parsed, err := time.ParseInLocation(dto.DateLayout, date, s.location)
