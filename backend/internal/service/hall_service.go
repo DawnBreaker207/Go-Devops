@@ -200,8 +200,6 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 		Name:           strings.TrimSpace(req.Name),
 		Rows:           req.Rows,
 		SeatsPerRow:    req.SeatsPerRow,
-		SeatTypes:      req.SeatTypes,
-		Gaps:           req.Gaps,
 		ScreenPosition: req.ScreenPosition,
 		AisleAfterCols: req.AisleAfterCols,
 		Active:         true,
@@ -238,14 +236,8 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 	return &result, nil
 }
 
-// normalizeHallJSON: nil would be stored as JSON null in the not-null jsonb columns.
+// normalizeHallJSON: nil would be stored as JSON null in the not-null jsonb column.
 func normalizeHallJSON(hall *models.Hall) {
-	if hall.Gaps == nil {
-		hall.Gaps = []string{}
-	}
-	if hall.SeatTypes == nil {
-		hall.SeatTypes = map[string][]string{}
-	}
 	if hall.AisleAfterCols == nil {
 		hall.AisleAfterCols = []int{}
 	}
@@ -276,8 +268,6 @@ func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHal
 		Name:           strings.TrimSpace(req.Name),
 		Rows:           source.Rows,
 		SeatsPerRow:    source.SeatsPerRow,
-		SeatTypes:      source.SeatTypes,
-		Gaps:           source.Gaps,
 		ScreenPosition: source.ScreenPosition,
 		AisleAfterCols: source.AisleAfterCols,
 		Active:         true,
@@ -698,7 +688,6 @@ func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req d
 		}
 
 		current.Rows, current.SeatsPerRow = req.Rows, req.SeatsPerRow
-		current.SeatTypes, current.Gaps = req.SeatTypes, req.Gaps
 		current.ScreenPosition, current.AisleAfterCols = req.ScreenPosition, req.AisleAfterCols
 		normalizeHallJSON(current)
 		if err := s.hallRepo.UpdateHall(tx, current); err != nil {

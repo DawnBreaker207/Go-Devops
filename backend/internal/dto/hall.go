@@ -87,17 +87,15 @@ type SeatUpdateRequest struct {
 }
 
 type HallResponse struct {
-	ID             string              `json:"id"`
-	Name           string              `json:"name"`
-	Rows           int                 `json:"rows"`
-	SeatsPerRow    int                 `json:"seats_per_row"`
-	SeatTypes      map[string][]string `json:"seat_types"`
-	Gaps           []string            `json:"gaps"`
-	ScreenPosition string              `json:"screen_position"`
-	AisleAfterCols []int               `json:"aisle_after_cols"`
-	Active         bool                `json:"active"`
-	CreatedAt      time.Time           `json:"created_at"`
-	UpdatedAt      time.Time           `json:"updated_at"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Rows           int       `json:"rows"`
+	SeatsPerRow    int       `json:"seats_per_row"`
+	ScreenPosition string    `json:"screen_position"`
+	AisleAfterCols []int     `json:"aisle_after_cols"`
+	Active         bool      `json:"active"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func NewHallResponse(hall *models.Hall) HallResponse {
@@ -106,8 +104,6 @@ func NewHallResponse(hall *models.Hall) HallResponse {
 		Name:           hall.Name,
 		Rows:           hall.Rows,
 		SeatsPerRow:    hall.SeatsPerRow,
-		SeatTypes:      hall.SeatTypes,
-		Gaps:           hall.Gaps,
 		ScreenPosition: hall.ScreenPosition,
 		AisleAfterCols: hall.AisleAfterCols,
 		Active:         hall.Active,

@@ -22,18 +22,16 @@ const (
 )
 
 type Hall struct {
-	ID             string              `gorm:"type:uuid;primaryKey" json:"id"`
-	Name           string              `gorm:"type:varchar(255);not null" json:"name"`
-	Rows           int                 `gorm:"not null" json:"rows"`
-	SeatsPerRow    int                 `gorm:"not null" json:"seats_per_row"`
-	SeatTypes      map[string][]string `gorm:"serializer:json;type:jsonb;not null" json:"seat_types"`
-	Gaps           []string            `gorm:"serializer:json;type:jsonb;not null" json:"gaps"`
-	ScreenPosition string              `gorm:"type:varchar(8);not null;default:front" json:"screen_position"`
-	AisleAfterCols []int               `gorm:"serializer:json;type:jsonb;not null" json:"aisle_after_cols"`
-	Active         bool                `gorm:"not null;default:true" json:"active"`
-	CreatedAt      time.Time           `json:"created_at"`
-	UpdatedAt      time.Time           `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt      `gorm:"index" json:"-"`
+	ID             string         `gorm:"type:uuid;primaryKey" json:"id"`
+	Name           string         `gorm:"type:varchar(255);not null" json:"name"`
+	Rows           int            `gorm:"not null" json:"rows"`
+	SeatsPerRow    int            `gorm:"not null" json:"seats_per_row"`
+	ScreenPosition string         `gorm:"type:varchar(8);not null;default:front" json:"screen_position"`
+	AisleAfterCols []int          `gorm:"serializer:json;type:jsonb;not null" json:"aisle_after_cols"`
+	Active         bool           `gorm:"not null;default:true" json:"active"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Hall) TableName() string { return "halls" }

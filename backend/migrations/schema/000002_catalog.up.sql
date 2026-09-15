@@ -37,8 +37,9 @@ CREATE TABLE IF NOT EXISTS halls (
     name           VARCHAR(255) NOT NULL,
     rows           INTEGER      NOT NULL CHECK (rows > 0),
     seats_per_row  INTEGER      NOT NULL CHECK (seats_per_row > 0),
-    seat_types     JSONB        NOT NULL DEFAULT '{}',
-    gaps           JSONB        NOT NULL DEFAULT '[]',
+    -- Which seat type/gap each seat is lives on `seats` itself, per seat, not
+    -- here: a row-level "seat_types"/"gaps" recipe would go stale the moment
+    -- a bulk or per-seat edit gives one row more than one seat type.
     -- Where the screen sits relative to row A, for the seat-map renderer.
     screen_position VARCHAR(8)  NOT NULL DEFAULT 'front',
     -- Column numbers after which there is a vertical aisle (display only).

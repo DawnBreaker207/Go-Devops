@@ -85,9 +85,6 @@ func TestHallCreate_AllStandardWithoutSeatTypes(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Plain Hall", Rows: 2, SeatsPerRow: 3, Prices: fullPrices()})
 	e.must(err)
-	if hall.SeatTypes == nil {
-		t.Fatal("seat_types should be an empty object, not null")
-	}
 	if n := e.count(`SELECT COUNT(*) FROM seats WHERE hall_id = ? AND seat_type = 'standard'`, hall.ID); n != 6 {
 		t.Fatalf("standard seats = %d, want 6", n)
 	}
