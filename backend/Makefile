@@ -6,7 +6,7 @@ MIGRATE_URL ?= postgres://postgres:postgres@localhost:5432/cinema?sslmode=disabl
 DATABASE_NAME ?= cinema
 DATABASE_USER ?= postgres
 
-.PHONY: help run build test test-race lint fmt tidy swag migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
+.PHONY: help run build test test-system chaos load test-race lint fmt tidy swag migrate migrate-up migrate-down migrate-seed migrate-db-reset migrate-create migrate-create-seed docker-up docker-down clean
 
 help: ## Liet ke cac lenh co san
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -20,6 +20,19 @@ build: ## Build binary vao bin/
 
 test: ## Chay toan bo test (can Postgres + RabbitMQ: docker compose up -d postgres rabbitmq)
 	go test ./... -count=1
+
+test-system: ## Bai toan toan thang tren toan bo stack (postgres + rabbitmq) — chay lai referent tests T18/T37/T42/I4
+	docker compose up -d postgres rabbitmq
+	go test ./... -count=1
+
+chaos: ## Cha race + concurrency + stress (+ T37 seat-sold-once, T18 movie-not-selling) trong Docker (can CGO)
+	docker run --rm -v "$(CURDIR):/src" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /src \
+		-e CGO_ENABLED=1 -e TEST_DB_HOST=host.docker.internal \
+		-e QUEUE_TEST_URL=amqp://guest:guest@host.docker.internal:5672/ \
+		golang:1.26 go test -race -count=1 -run 'Race|Stress|Concurrent' ./internal/...
+
+load: ## Stress/load nhieu vong: TestStress_NoSeatSoldTwice (T37 single-sale invariant)
+	go test -count=1 -run 'TestStress_NoSeatSoldTwice' -timeout 30m ./internal/service/
 
 test-race: ## Chay test voi -race trong Docker (race detector can gcc/CGO)
 	docker run --rm -v "$(CURDIR):/src" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /src \
@@ -39,6 +52,8 @@ tidy: ## Don dep go.mod / go.sum
 swag: ## Sinh lai swagger docs vao thu muc docs/
 	@command -v $(SWAG) >/dev/null 2>&1 || go install github.com/swaggo/swag/cmd/swag@latest
 	$(SWAG) init -g cmd/server/main.go -o docs --parseDependency --parseInternal
+
+migrate: migrate-up ## Alias apply schema migrations
 
 migrate-up: ## Apply schema migrations
 	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
