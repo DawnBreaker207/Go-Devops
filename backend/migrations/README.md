@@ -20,6 +20,9 @@ sequence.
 | 000003  | booking & payment | bookings, booking_seats, tickets, payments |
 | 000004  | audit             | audit_logs |
 | 000005  | batch & report    | batch_jobs, daily_aggregates |
+| 000006  | terms             | `users.accepted_terms_version` (ALTER) |
+| 000007  | box office        | `bookings` walk-in columns: `customer_name`, `customer_phone`, `sold_via`, relaxed `paid_at`/`payment_id` check (ALTER) |
+| 000008  | seat spans & overlap | `seats.col_span` (ALTER), btree_gist extension + EXCLUDE constraint on showtimes |
 
 Rules:
 
