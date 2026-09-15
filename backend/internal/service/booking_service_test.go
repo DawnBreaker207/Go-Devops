@@ -703,7 +703,44 @@ func assertRefunded(t *testing.T, e *env, bookingID, ref string) {
 	if n := e.count(`SELECT COUNT(*) FROM tickets WHERE booking_id = ?`, bookingID); n != 0 {
 		t.Fatalf("tickets on refunded booking = %d", n)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE resource_id = ? AND action = 'orders.refund'`, bookingID); n != 1 {
+	// resource_type/resource_id key off the payment attempt refunded, not the
+	// booking; booking_id is the stable correlation column instead.
+	if n := e.count(`SELECT COUNT(*) FROM audit_logs
+		WHERE booking_id = ? AND action = 'orders.refund' AND resource_type = 'payment' AND resource_id = ?`,
+		bookingID, p.ID); n != 1 {
 		t.Fatalf("refund audit rows = %d, want 1", n)
+	}
+}
+
+// A booking's whole lifecycle (hold, pay, webhook, confirm) touches 3
+// different resource_type/resource_id (booking, payment, booking again) —
+// booking_id is the one column that stays the same across all of them, so
+// "the full history of this order" is a single indexed query.
+func TestAudit_BookingIDCorrelatesWholeOrderLifecycle(t *testing.T) {
+	e := newEnv(t)
+	bookingID := e.confirmed(e.users[0], "A1")
+
+	var resourceTypes []string
+	e.must(e.db.Raw(`SELECT DISTINCT resource_type FROM audit_logs WHERE booking_id = ? ORDER BY resource_type`,
+		bookingID).Scan(&resourceTypes).Error)
+	want := []string{"booking", "payment"}
+	if len(resourceTypes) != len(want) {
+		t.Fatalf("resource_types with booking_id=%s = %v, want %v", bookingID, resourceTypes, want)
+	}
+	for i, rt := range want {
+		if resourceTypes[i] != rt {
+			t.Fatalf("resource_types = %v, want %v", resourceTypes, want)
+		}
+	}
+
+	var actions []string
+	e.must(e.db.Raw(`SELECT action FROM audit_logs WHERE booking_id = ? ORDER BY created_at`, bookingID).
+		Scan(&actions).Error)
+	wantActions := map[string]bool{"orders.hold": true, "orders.pay": true, "orders.confirm": true}
+	for _, a := range actions {
+		delete(wantActions, a)
+	}
+	if len(wantActions) != 0 {
+		t.Fatalf("actions for booking %s = %v, missing %v", bookingID, actions, wantActions)
 	}
 }

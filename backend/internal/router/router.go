@@ -37,6 +37,7 @@ type Handlers struct {
 	Staff    *handlers.StaffHandler
 	Report   *handlers.ReportHandler
 	Media    *handlers.MediaHandler
+	Audit    *handlers.AuditHandler
 }
 
 type Limiters struct {
@@ -148,7 +149,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.PUT("/halls/:id", middleware.Audit(db, "admin.update_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateHall)
 			catalog.PUT("/halls/:id/layout", middleware.Audit(db, "admin.update_hall_layout", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.RegenerateLayout)
 			catalog.DELETE("/halls/:id", middleware.Audit(db, "admin.delete_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteHall)
-			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
+			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
 			catalog.PUT("/halls/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
 			catalog.PUT("/halls/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)
@@ -187,7 +188,9 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		{
 			staff.GET("/dashboard", h.Staff.Dashboard)
 			staff.GET("/boxoffice/day", h.Staff.BoxOfficeDay)
-			staff.POST("/orders", middleware.Audit(db, "staff.counter_sell", "booking"), h.Staff.CounterSell)
+			// Same action name as the success row the service writes in-transaction
+			// (orders.counter_sell) — filtering by action must show both outcomes.
+			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
 		}
 
@@ -218,6 +221,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		admin.Use(middleware.RequireRoles(models.RoleAdmin))
 		{
 			admin.GET("/batch/jobs", h.Batch.List)
+			admin.GET("/audit-logs", h.Audit.List)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
 	}

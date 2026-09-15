@@ -125,7 +125,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		if err := s.payments.Create(ctx, tx, attempt); err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, "orders.pay", "payment", attempt.ID, map[string]any{
+		return s.audit(ctx, tx, "orders.pay", "payment", attempt.ID, b.ID, map[string]any{
 			"booking_id": b.ID, "provider": name, "txn_ref": attempt.TxnRef, "amount": attempt.Amount,
 		})
 	})
@@ -164,7 +164,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 			if _, err := s.payments.MarkFailed(bg, tx, attempt.ID, models.PaymentReasonCreateFailed); err != nil {
 				return err
 			}
-			return s.audit(bg, tx, "payments.create_failed", "payment", attempt.ID,
+			return s.audit(bg, tx, "payments.create_failed", "payment", attempt.ID, booking.ID,
 				map[string]any{"booking_id": booking.ID, "provider": name, "error": createErr.Error()})
 		}); ferr != nil {
 			logger.Warn("failed checkout not recorded", logger.String("payment_id", attempt.ID), logger.Err(ferr))
@@ -315,7 +315,7 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 			if _, err := s.payments.MarkFailed(ctx, tx, attempt.ID, models.PaymentReasonDeclined); err != nil {
 				return err
 			}
-			return s.audit(ctx, tx, "payments.failed", "payment", attempt.ID,
+			return s.audit(ctx, tx, "payments.failed", "payment", attempt.ID, bookingID,
 				map[string]any{"booking_id": attempt.BookingID, "provider": providerName, "source": source})
 		case payment.StatePaid:
 		default:
@@ -331,7 +331,7 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 				return err
 			}
 			out.refunds = append(out.refunds, attempt.ID)
-			return s.audit(ctx, tx, "orders.refund", "payment", attempt.ID, map[string]any{
+			return s.audit(ctx, tx, "orders.refund", "payment", attempt.ID, bookingID, map[string]any{
 				"booking_id": b.ID, "reason": models.PaymentReasonDuplicate, "amount": n.Amount, "source": source,
 			})
 		}
@@ -525,7 +525,7 @@ func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.
 		return fmt.Errorf("confirm booking %s: row changed under lock", b.ID)
 	}
 	out.confirmed = true
-	return s.audit(ctx, tx, "orders.confirm", "booking", b.ID, map[string]any{
+	return s.audit(ctx, tx, "orders.confirm", "booking", b.ID, b.ID, map[string]any{
 		"status": models.BookingConfirmed, "tickets": len(tickets), "total": total,
 		"payment_id": derefString(b.PaymentID), "source": source,
 	})
@@ -558,7 +558,11 @@ func (s *bookingService) refundTx(ctx context.Context, tx *gorm.DB, b *models.Bo
 		return fmt.Errorf("refund payment %s: not in paid state", *b.PaymentID)
 	}
 	out.refunds = append(out.refunds, *b.PaymentID)
-	return s.audit(ctx, tx, "orders.refund", "booking", b.ID, map[string]any{
+	// resource_type="payment" here matches the other orders.refund call site
+	// (the duplicate-capture case in applyNotification): both refund a
+	// payment attempt, so both key off the payment, with booking_id as the
+	// correlation field rather than the primary resource.
+	return s.audit(ctx, tx, "orders.refund", "payment", *b.PaymentID, b.ID, map[string]any{
 		"status": models.BookingRefunded, "reason": reason, "amount": b.TotalAmount,
 		"payment_id": *b.PaymentID, "source": source,
 	})
@@ -610,7 +614,7 @@ func (s *bookingService) settleRefund(ctx context.Context, paymentID string) boo
 		if err != nil || n == 0 {
 			return err
 		}
-		return s.audit(ctx, tx, "payments.refunded", "payment", attempt.ID, map[string]any{
+		return s.audit(ctx, tx, "payments.refunded", "payment", attempt.ID, attempt.BookingID, map[string]any{
 			"booking_id": attempt.BookingID, "provider": attempt.Provider, "amount": amount,
 			"reason": derefString(attempt.StatusReason),
 		})
@@ -633,7 +637,7 @@ func (s *bookingService) deferRefund(ctx context.Context, attempt *models.Paymen
 	}
 	logger.Error("refund keeps failing, needs a look",
 		logger.String("payment_id", attempt.ID), logger.String("provider", attempt.Provider))
-	if err := s.audit(ctx, s.db, "payments.refund_stuck", "payment", attempt.ID, map[string]any{
+	if err := s.audit(ctx, s.db, "payments.refund_stuck", "payment", attempt.ID, attempt.BookingID, map[string]any{
 		"booking_id": attempt.BookingID, "provider": attempt.Provider,
 		"attempts": attempt.RefundAttempts, "error": reason,
 	}); err != nil {
@@ -721,7 +725,7 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 				return err
 			}
 			abandoned = true
-			return s.audit(ctx, tx, "payments.abandoned", "payment", attempt.ID,
+			return s.audit(ctx, tx, "payments.abandoned", "payment", attempt.ID, attempt.BookingID,
 				map[string]any{"booking_id": attempt.BookingID, "provider": attempt.Provider})
 		})
 		if err != nil {

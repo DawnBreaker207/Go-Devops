@@ -278,7 +278,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		if n == 0 {
 			return nil, nil, apperrors.Internal("replaced booking changed under lock")
 		}
-		if err := s.audit(ctx, tx, "orders.expire", "booking", old.ID,
+		if err := s.audit(ctx, tx, "orders.expire", "booking", old.ID, old.ID,
 			map[string]any{"status": models.BookingExpired, "reason": reason, "source": "new_hold"}); err != nil {
 			return nil, nil, err
 		}
@@ -411,7 +411,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	if replacedID != "" {
 		after["replaced_booking_id"] = replacedID
 	}
-	if err := s.audit(ctx, tx, "orders.hold", "booking", booking.ID, after); err != nil {
+	if err := s.audit(ctx, tx, "orders.hold", "booking", booking.ID, booking.ID, after); err != nil {
 		return nil, nil, err
 	}
 
@@ -605,7 +605,7 @@ func (s *bookingService) Cancel(ctx context.Context, userID, bookingID string) (
 		if n == 0 {
 			return apperrors.Internal("booking changed under lock")
 		}
-		return s.audit(ctx, tx, "orders.cancel", "booking", b.ID,
+		return s.audit(ctx, tx, "orders.cancel", "booking", b.ID, b.ID,
 			map[string]any{"status": models.BookingExpired, "reason": models.ReasonCanceled, "released_seats": len(released)})
 	})
 	if err != nil {
@@ -651,7 +651,7 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 	}
 	if row == nil || row.BookingStatus != models.BookingConfirmed {
 		res := &dto.RedeemResponse{Status: models.RedeemNotFound}
-		s.auditScan(ctx, "", showtimeID, res.Status)
+		s.auditScan(ctx, "", "", showtimeID, res.Status)
 		return res, nil
 	}
 	startAt := row.StartAt
@@ -682,7 +682,7 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 		res.Status = models.RedeemClosed
 	}
 	if res.Status != "" {
-		s.auditScan(ctx, row.ID, showtimeID, res.Status)
+		s.auditScan(ctx, row.ID, row.BookingID, showtimeID, res.Status)
 		return res, nil
 	}
 
@@ -696,7 +696,7 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 		if used {
 			return nil
 		}
-		return s.audit(ctx, tx, "staff.redeem_ticket", "ticket", row.ID,
+		return s.audit(ctx, tx, "staff.redeem_ticket", "ticket", row.ID, row.BookingID,
 			map[string]any{"status": models.TicketRedeemed, "showtime_id": showtimeID})
 	})
 	if err != nil {
@@ -705,13 +705,13 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 	res.Status = models.RedeemOK
 	if used {
 		res.Status = models.RedeemUsed
-		s.auditScan(ctx, row.ID, showtimeID, res.Status)
+		s.auditScan(ctx, row.ID, row.BookingID, showtimeID, res.Status)
 	}
 	return res, nil
 }
 
 // auditScan never logs the scanned code: the ticket id, when known, stands for it.
-func (s *bookingService) auditScan(ctx context.Context, ticketID, showtimeID, verdict string) {
+func (s *bookingService) auditScan(ctx context.Context, ticketID, bookingID, showtimeID, verdict string) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
 		rec = audit.Record{ActorRole: "system"}
@@ -719,6 +719,7 @@ func (s *bookingService) auditScan(ctx context.Context, ticketID, showtimeID, ve
 	rec.Action = "staff.redeem_ticket"
 	rec.ResourceType = "ticket"
 	rec.ResourceID = ticketID
+	rec.BookingID = bookingID
 	rec.Before = nil
 	rec.After = map[string]any{"showtime_id": showtimeID, "verdict": verdict}
 	rec.Outcome = audit.OutcomeFailure
@@ -755,7 +756,10 @@ func (s *bookingService) broadcast(showtimeID, status string, ids []string) {
 	s.hub.Broadcast(showtimeID, sse.SeatEvent{ShowtimeID: showtimeID, Seats: updates})
 }
 
-func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourceType, resourceID string, after map[string]any) error {
+// audit writes a success row for an order-lifecycle event. bookingID is the
+// stable correlation key (see internal/audit doc comment) — pass it even
+// when resourceType/resourceID is "payment" or "ticket", not just "booking".
+func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourceType, resourceID, bookingID string, after map[string]any) error {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
 		rec = audit.Record{ActorRole: "system"}
@@ -763,6 +767,7 @@ func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourc
 	rec.Action = action
 	rec.ResourceType = resourceType
 	rec.ResourceID = resourceID
+	rec.BookingID = bookingID
 	rec.Before = nil
 	rec.After = after
 	rec.Outcome = audit.OutcomeSuccess
@@ -968,7 +973,7 @@ func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellReq
 		}
 		booking.Status = models.BookingConfirmed
 		showID = showtime.ID
-		return s.audit(ctx, tx, "orders.counter_sell", "booking", booking.ID, map[string]any{
+		return s.audit(ctx, tx, "orders.counter_sell", "booking", booking.ID, booking.ID, map[string]any{
 			"status": models.BookingConfirmed, "tickets": len(tickets), "total": total, "seats": labels,
 		})
 	})

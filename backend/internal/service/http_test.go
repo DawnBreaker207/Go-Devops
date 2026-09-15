@@ -87,6 +87,7 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Staff:    handlers.NewStaffHandler(h.reports, h.svc),
 		Report:   handlers.NewReportHandler(h.reports),
 		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
+		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
 	})
 }
 
@@ -164,12 +165,59 @@ func TestHTTP_RoleScopes(t *testing.T) {
 		{"staff holds seats", http.MethodPost, "/api/v1/orders/hold", staff, map[string]any{"show_id": h.showID, "seat_ids": h.ids("A1")}, http.StatusForbidden},
 		{"staff self-erases", http.MethodDelete, "/api/v1/users/me", staff, map[string]string{"password": "secret123"}, http.StatusForbidden},
 		{"admin self-erases", http.MethodDelete, "/api/v1/users/me", admin, map[string]string{"password": "secret123"}, http.StatusForbidden},
+		{"staff reads audit log", http.MethodGet, "/api/v1/admin/audit-logs", staff, nil, http.StatusForbidden},
+		{"customer reads audit log", http.MethodGet, "/api/v1/admin/audit-logs", customer, nil, http.StatusForbidden},
 		{"no token", http.MethodGet, "/api/v1/orders", "", nil, http.StatusUnauthorized},
 	}
 	for _, c := range cases {
 		if status, _, body := h.call(c.method, c.path, c.token, c.body); status != c.want {
 			t.Errorf("%s: HTTP %d (%v), want %d", c.name, status, body["message"], c.want)
 		}
+	}
+}
+
+// GET /admin/audit-logs: filtering by booking_id returns every event of that
+// order's lifecycle regardless of resource_type, and pagination works.
+func TestHTTP_AuditLogsFilterByBooking(t *testing.T) {
+	h := newHTTPEnv(t)
+	admin, _ := h.login(models.RoleAdmin)
+	bookingID := h.confirmed(h.users[0], "A1")
+
+	status, _, body := h.call(http.MethodGet, "/api/v1/admin/audit-logs?booking_id="+bookingID, admin, nil)
+	if status != http.StatusOK {
+		t.Fatalf("HTTP %d %v", status, body["message"])
+	}
+	data := dataMap(body)
+	items, _ := data["items"].([]any)
+	if len(items) < 3 {
+		t.Fatalf("audit rows for booking %s = %d, want at least 3 (hold, pay, confirm)", bookingID, len(items))
+	}
+	seenActions := map[string]bool{}
+	for _, it := range items {
+		row, _ := it.(map[string]any)
+		if row["booking_id"] != bookingID {
+			t.Fatalf("row booking_id = %v, want %s", row["booking_id"], bookingID)
+		}
+		seenActions[row["action"].(string)] = true
+	}
+	for _, want := range []string{"orders.hold", "orders.pay", "orders.confirm"} {
+		if !seenActions[want] {
+			t.Fatalf("missing action %q in %v", want, seenActions)
+		}
+	}
+
+	status, _, body = h.call(http.MethodGet, "/api/v1/admin/audit-logs?page=1&page_size=1&booking_id="+bookingID, admin, nil)
+	if status != http.StatusOK {
+		t.Fatalf("HTTP %d %v", status, body["message"])
+	}
+	data = dataMap(body)
+	items, _ = data["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("page_size=1 returned %d items", len(items))
+	}
+	meta, _ := data["meta"].(map[string]any)
+	if int64(meta["total"].(float64)) < 3 {
+		t.Fatalf("meta.total = %v, want at least 3", meta["total"])
 	}
 }
 

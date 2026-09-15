@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     action        VARCHAR(64)  NOT NULL,
     resource_type VARCHAR(64)  NOT NULL,
     resource_id   VARCHAR(128),
+    -- Stable correlation key across a booking's whole lifecycle: hold, pay,
+    -- webhook, refund and redeem all touch different resource_type/id
+    -- (booking/payment/ticket), but share this one column, so "everything
+    -- that happened to order X" is a single indexed WHERE, not a guess
+    -- across 3 kinds of resource_id.
+    booking_id    UUID REFERENCES bookings(id),
     before_json   JSONB,
     after_json    JSONB,
     ip            VARCHAR(64),
@@ -22,3 +28,4 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs (actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs (resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_booking_id ON audit_logs (booking_id) WHERE booking_id IS NOT NULL;

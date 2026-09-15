@@ -30,6 +30,7 @@ type TicketGateRow struct {
 	ID            string    `gorm:"column:id"`
 	Code          string    `gorm:"column:code"`
 	Status        string    `gorm:"column:status"`
+	BookingID     string    `gorm:"column:booking_id"`
 	BookingStatus string    `gorm:"column:booking_status"`
 	ShowtimeID    string    `gorm:"column:showtime_id"`
 	StartAt       time.Time `gorm:"column:start_at"`
@@ -429,7 +430,7 @@ func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*Tic
 		where, arg = "t.id = ?", ref
 	}
 	var rows []TicketGateRow
-	if err := r.db.WithContext(ctx).Raw(`SELECT t.id, t.code, t.status, b.status AS booking_status,
+	if err := r.db.WithContext(ctx).Raw(`SELECT t.id, t.code, t.status, b.id AS booking_id, b.status AS booking_status,
 			b.showtime_id, st.start_at, h.name AS hall_name, m.title AS movie_title,
 			m.age_rating AS age_rating, s.row_label, s.col_number
 		FROM tickets t
@@ -508,8 +509,8 @@ func (r *bookingRepository) ExpireOverdueUnpaid(ctx context.Context, limit int) 
 			  )
 			RETURNING id, showtime_id
 		)
-		INSERT INTO audit_logs (id, actor_role, action, resource_type, resource_id, after_json, outcome, created_at)
-		SELECT gen_random_uuid(), 'system', 'orders.expire', 'booking', id::text,
+		INSERT INTO audit_logs (id, actor_role, action, resource_type, resource_id, booking_id, after_json, outcome, created_at)
+		SELECT gen_random_uuid(), 'system', 'orders.expire', 'booking', id::text, id,
 			jsonb_build_object('status', 'expired', 'reason', 'hold_expired', 'showtime_id', showtime_id, 'source', 'sweep'),
 			'success', NOW()
 		FROM expired`, limit)

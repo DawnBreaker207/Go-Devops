@@ -16,6 +16,7 @@ type AuditLog struct {
 	Action       string         `gorm:"type:varchar(64);not null" json:"action"`
 	ResourceType string         `gorm:"type:varchar(64);not null" json:"resource_type"`
 	ResourceID   string         `gorm:"type:varchar(128)" json:"resource_id,omitempty"`
+	BookingID    *string        `gorm:"type:uuid" json:"booking_id,omitempty"`
 	BeforeJSON   map[string]any `gorm:"serializer:json;type:jsonb" json:"before_json,omitempty"`
 	AfterJSON    map[string]any `gorm:"serializer:json;type:jsonb" json:"after_json,omitempty"`
 	IP           string         `gorm:"type:varchar(64)" json:"ip,omitempty"`

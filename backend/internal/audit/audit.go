@@ -1,4 +1,26 @@
 // Package audit writes audit rows in the same transaction as the business change.
+//
+// Action naming convention — <namespace>.<verb>, one action name shared by
+// both the success row (written in-transaction by the service) and the
+// failure row (written by middleware.Audit outside any transaction), so
+// filtering by action always shows both outcomes together:
+//
+//   - auth.*     — identity: login, register, refresh, logout, password reset.
+//   - users.*    — customer self-service on their own profile (change
+//     password, update profile, delete_me).
+//   - admin.*    — admin/staff mutating catalog & system config (movies,
+//     halls, seats, showtimes, users, media, batch jobs).
+//   - orders.*   — actions a customer or staff member initiates in a
+//     booking's lifecycle (hold, pay, confirm, cancel, expire, counter_sell).
+//   - payments.* — state the system/a webhook drives on its own (failed,
+//     refunded, refund_stuck, abandoned, a rejected/forged callback).
+//   - staff.*    — floor actions outside the standard order lifecycle
+//     (ticket redeem, both the ok and the refused scan).
+//
+// Every event that belongs to a booking's lifecycle — regardless of which of
+// booking/payment/ticket it is primarily about — should set Record.BookingID,
+// so "the full history of order X" is one indexed query instead of chasing
+// resource_id across three different resource_types.
 package audit
 
 import (
@@ -23,6 +45,7 @@ type Record struct {
 	Action       string
 	ResourceType string
 	ResourceID   string
+	BookingID    string // set whenever this event belongs to a booking's lifecycle
 	Before       map[string]any
 	After        map[string]any
 	IP           string
@@ -69,6 +92,7 @@ func In(ctx context.Context, db *gorm.DB, r Record) error {
 		Action:       truncate(r.Action, 64),
 		ResourceType: truncate(r.ResourceType, 64),
 		ResourceID:   truncate(r.ResourceID, 128),
+		BookingID:    nullableUUID(r.BookingID),
 		BeforeJSON:   r.Before,
 		AfterJSON:    r.After,
 		IP:           truncate(r.IP, 64),

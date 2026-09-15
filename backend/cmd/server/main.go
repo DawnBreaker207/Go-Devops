@@ -193,6 +193,7 @@ func run() error {
 		Staff:    handlers.NewStaffHandler(reportService, bookingService),
 		Report:   handlers.NewReportHandler(reportService),
 		Media:    handlers.NewMediaHandler(mediaService, mediaDir, maxUpload),
+		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
 	})
 
 	server := &http.Server{

@@ -53,7 +53,6 @@ func TestAudit_EveryStateChangeIsLogged(t *testing.T) {
 
 	want := map[string]string{
 		confirmed:               "orders.confirm",
-		refunded.BookingID:      "orders.refund",
 		replaced.BookingID:      "orders.expire",
 		canceled.BookingID:      "orders.cancel",
 		swept.BookingID:         "orders.expire",
@@ -66,11 +65,18 @@ func TestAudit_EveryStateChangeIsLogged(t *testing.T) {
 			t.Errorf("%s rows for %s = %d, want 1", action, id, n)
 		}
 	}
+	// orders.refund here goes through refundTx (hold lost while the IPN was
+	// in flight): resource_type/resource_id key off the payment attempt, not
+	// the booking, so this one is found by the booking_id correlation column.
+	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE booking_id = ? AND action = 'orders.refund' AND resource_type = 'payment'`,
+		refunded.BookingID); n != 1 {
+		t.Errorf("orders.refund rows for %s = %d, want 1", refunded.BookingID, n)
+	}
 	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE action = 'seats.release_expired' AND resource_id = ?`, e.showID); n < 1 {
 		t.Error("sweep seat release not logged")
 	}
 	if n := e.count(`SELECT COUNT(*) FROM bookings b WHERE b.status <> 'pending' AND NOT EXISTS (
-		SELECT 1 FROM audit_logs a WHERE a.resource_id = b.id::text
+		SELECT 1 FROM audit_logs a WHERE a.booking_id = b.id
 		AND a.action IN ('orders.confirm', 'orders.refund', 'orders.expire', 'orders.cancel'))`); n != 0 {
 		t.Errorf("%d bookings left PENDING without an audit row", n)
 	}
