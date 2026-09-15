@@ -23,9 +23,9 @@ func TestRunInChunks_RetryThenSkip(t *testing.T) {
 	err := RunInChunks(context.Background(), opts, items, func(_ context.Context, item int) error {
 		calls[item]++
 		switch {
-		case item == 7 && calls[item] < ItemAttempts: // flaky
+		case item == 7 && calls[item] < ItemAttempts:
 			return errors.New("temporary")
-		case item == 900: // broken
+		case item == 900:
 			return errors.New("permanent")
 		}
 		return nil

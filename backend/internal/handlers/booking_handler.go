@@ -122,7 +122,7 @@ func (h *BookingHandler) Status(c *gin.Context) {
 
 // Cancel godoc
 //
-//	@Summary		Release an unpaid hold now (E-R2)
+//	@Summary		Release an unpaid hold now
 //	@Tags			orders
 //	@Produce		json
 //	@Security		BearerAuth

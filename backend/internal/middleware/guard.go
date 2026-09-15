@@ -48,8 +48,7 @@ func rateLimitBy(lim *ratelimit.Limiter, key func(*gin.Context) string) gin.Hand
 }
 
 const (
-	dbGuardFreshFor = time.Second
-	// dbGuardSlowProbes is how many timed-out probes in a row mean "down".
+	dbGuardFreshFor   = time.Second
 	dbGuardSlowProbes = 3
 )
 

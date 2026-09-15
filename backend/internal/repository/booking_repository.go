@@ -129,7 +129,6 @@ func forUpdate() clause.Locking { return clause.Locking{Strength: "UPDATE"} }
 
 func forShare() clause.Locking { return clause.Locking{Strength: "SHARE"} }
 
-// firstOrNil maps "no row" to (nil, nil).
 func firstOrNil[T any](q *gorm.DB, what string) (*T, error) {
 	var row T
 	if err := q.First(&row).Error; err != nil {
@@ -416,7 +415,6 @@ func (r *bookingRepository) ShowtimeInfos(ctx context.Context, ids []string) (ma
 	return out, nil
 }
 
-// ref is a ticket id or its code; nil means not found.
 func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*TicketGateRow, error) {
 	ref = strings.TrimSpace(ref)
 	where, arg := "t.code = ?", strings.ToUpper(ref)
@@ -444,7 +442,6 @@ func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*Tic
 	return &rows[0], nil
 }
 
-// 0 rows means the ticket was already used.
 func (r *bookingRepository) RedeemTicket(ctx context.Context, tx *gorm.DB, ticketID string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ? AND status = ?`,
 		models.TicketRedeemed, ticketID, models.TicketIssued)

@@ -13,7 +13,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// Malformed ids are the client's fault (400), unknown referenced rows are 404.
 func TestHTTP_BadIdsAnswer400Or404(t *testing.T) {
 	h := newHTTPEnv(t)
 	admin, _ := h.login(models.RoleAdmin)
@@ -94,7 +93,6 @@ func TestHallCreate_AllStandardWithoutSeatTypes(t *testing.T) {
 	}
 }
 
-// Rows past Z (AA, AB) come after Z in seat grids and seat maps.
 func TestHall_RowOrderBeyondZ(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Tall Hall", Rows: 28, SeatsPerRow: 1, Prices: fullPrices()})
@@ -125,7 +123,6 @@ func TestLogin_UnknownEmailCostsLikeWrongPassword(t *testing.T) {
 		best := time.Hour
 		for i := 0; i < 3; i++ {
 			start := time.Now()
-			// A new IP each time keeps the failed-login lockout out of the way.
 			_, err := e.auth.Login(e.ctx, login(email, "wrong-pass", "10.7.0."+string(rune('1'+i))))
 			if !isAppErr(err, apperrors.ErrInvalidCredentials) {
 				t.Fatalf("login %s: err = %v", email, err)

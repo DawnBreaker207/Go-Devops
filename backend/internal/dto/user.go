@@ -47,7 +47,7 @@ type UserListQuery struct {
 }
 
 // CreateUserRequest creates a staff (or admin) account; customers register
-// themselves (F18).
+// themselves
 type CreateUserRequest struct {
 	Email    string `json:"email" binding:"required,email,max=255" example:"staff1@cinema.local"`
 	Password string `json:"password" binding:"required,min=6,max=72"`

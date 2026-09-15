@@ -10,7 +10,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// together starts n calls at the same instant and waits for them.
 func together(n int, fn func(i int)) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -136,7 +135,6 @@ func TestShowtimeUpdate_ScheduleRules(t *testing.T) {
 				WHERE ss.showtime_id = ? AND s.hall_id = ?`, showID, hallID)
 	}
 
-	// No booking yet: the hall can change and the grid follows it.
 	spare := e.newShowtime(8 * time.Hour)
 	var spareRow models.Showtime
 	e.must(e.db.First(&spareRow, "id = ?", spare).Error)
@@ -149,7 +147,6 @@ func TestShowtimeUpdate_ScheduleRules(t *testing.T) {
 		t.Fatalf("seat map after the move: %v", err)
 	}
 
-	// A pending booking: only opening/closing.
 	h := e.mustHold(e.users[0], "A1")
 	for name, r := range map[string]dto.ShowtimeRequest{
 		"start": req(e.movieID, e.hallID, show.StartAt.Add(30*time.Minute), ""),
@@ -168,7 +165,6 @@ func TestShowtimeUpdate_ScheduleRules(t *testing.T) {
 		}
 	}
 
-	// Only an expired booking left: the time can move, the hall still can not.
 	_, err = e.svc.Cancel(e.ctx, e.users[0], h.BookingID)
 	e.must(err)
 	moved := show.StartAt.Add(30 * time.Minute)

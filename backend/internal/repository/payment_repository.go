@@ -117,7 +117,6 @@ func (r *paymentRepository) ReconcilableForBooking(ctx context.Context, bookingI
 	return out, nil
 }
 
-// 0 rows means the orphan attempt is too recent or already taken over.
 func (r *paymentRepository) ClaimOrphanCheckout(ctx context.Context, tx *gorm.DB, id string, after time.Duration) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE payments SET updated_at = NOW()
 		WHERE id = ? AND status = ? AND redirect_url IS NULL AND updated_at < NOW() - make_interval(secs => ?)`,

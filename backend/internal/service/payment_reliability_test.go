@@ -21,7 +21,6 @@ import (
 
 var errGatewayBusy = errors.New("gateway busy")
 
-// refundPendingAfterMismatch overpays a booking; with refunds failing the payment stays REFUND_PENDING.
 func (e *env) refundPendingAfterMismatch(user, seat string) string {
 	e.t.Helper()
 	h := e.mustHold(user, seat)
@@ -51,7 +50,6 @@ func TestSweep_RefundsLateCaptureOfAbandonedAttempt(t *testing.T) {
 		t.Fatalf("first sweep = %+v", res)
 	}
 
-	// The checkout page was still open: the customer pays but no IPN arrives.
 	e.capture(ref)
 	res, err = e.svc.SweepExpired(e.ctx, 500)
 	e.must(err)
@@ -236,7 +234,6 @@ func TestSweep_StuckFinalizeBacksOff(t *testing.T) {
 	ref := e.pay(e.users[0], h.BookingID)
 	p := e.payment(ref)
 	e.must(e.db.Exec(`UPDATE payments SET status = 'paid', paid_amount = amount, paid_at = NOW() WHERE id = ?`, p.ID).Error)
-	// Seat prices no longer add up to the total: finalize fails every time.
 	e.must(e.db.Exec(`UPDATE bookings SET paid_at = NOW() - INTERVAL '2 minutes', payment_id = ?,
 		total_amount = total_amount + 1 WHERE id = ?`, p.ID, h.BookingID).Error)
 

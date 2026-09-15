@@ -88,7 +88,6 @@ func (m *Manager) ParseRefresh(token string) (*Claims, error) {
 	return m.parse(token, m.refreshSecret, RefreshToken)
 }
 
-// sign returns the token with its jti and expiry.
 func (m *Manager) sign(userID, email, role string, tokenType TokenType, secret []byte, ttl time.Duration) (string, string, time.Time, error) {
 	now := time.Now()
 	id := uuid.NewString()

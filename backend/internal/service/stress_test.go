@@ -18,7 +18,6 @@ func deref[T any](p *T) any {
 	return *p
 }
 
-// Random overlapping holds, expiring holds, late payments and a non-stop sweep never double-sell a seat.
 func TestStress_NoSeatSoldTwice(t *testing.T) {
 	labels := []string{"A1", "A2", "A3", "A4", "B1", "B2", "B3", "B4", "B5"}
 	const rounds, attempts = 10, 15

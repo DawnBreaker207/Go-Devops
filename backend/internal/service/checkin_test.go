@@ -15,7 +15,7 @@ import (
 // scanned code.
 func TestRedeem_CheckinWindow(t *testing.T) {
 	e := newEnv(t)
-	id := e.confirmed(e.users[0], "A1") // the show starts in 3 hours
+	id := e.confirmed(e.users[0], "A1")
 	order, err := e.svc.Order(e.ctx, e.users[0], id)
 	e.must(err)
 	ticket := order.Tickets[0]
@@ -53,7 +53,6 @@ func TestRedeem_CheckinWindow(t *testing.T) {
 	e.must(e.db.Exec(`UPDATE showtimes SET status = 'closed' WHERE id = ?`, e.showID).Error)
 	scan(models.RedeemOK)
 	wantTicket(models.TicketRedeemed)
-	// A used ticket reads "used" even once the doors closed.
 	e.moveShowStart(e.showID, -30*time.Minute)
 	scan(models.RedeemUsed)
 

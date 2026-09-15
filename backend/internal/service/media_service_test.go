@@ -13,8 +13,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// Poster upload: the real content type is sniffed, size is capped, the file
-// lands in the store and its URL comes back.
 func TestUploadPoster(t *testing.T) {
 	dir := t.TempDir()
 	svc := service.NewMediaService(storage.NewLocal(dir, "http://api.test"), 1024)
@@ -32,7 +30,6 @@ func TestUploadPoster(t *testing.T) {
 		t.Fatalf("stored file mismatch: %v", err)
 	}
 
-	// A text file renamed .png is still text.
 	if _, err := svc.UploadPoster(context.Background(), "fake.png", strings.NewReader("hello, not an image")); !isAppErr(err, apperrors.ErrUploadInvalid) {
 		t.Fatalf("fake image: err = %v", err)
 	}

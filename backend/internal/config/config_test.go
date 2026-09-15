@@ -81,7 +81,6 @@ func TestValidate_ProductionRejectsDevSecrets(t *testing.T) {
 	}
 }
 
-// Trusted proxies must be IPs or CIDRs.
 func TestValidate_TrustedProxies(t *testing.T) {
 	c := validConfig()
 	c.Server.TrustedProxies = []string{"10.0.0.1", "172.16.0.0/12", "::1"}
@@ -118,7 +117,6 @@ func TestValidate_Bounds(t *testing.T) {
 	}
 }
 
-// Lists split on commas and the removed auto_migrate key is ignored.
 func TestLoad_EnvOnlyProduction(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("JWT_ACCESS_SECRET", realSecretA)

@@ -46,7 +46,6 @@ type Limiters struct {
 	Events *ratelimit.Limiter
 }
 
-// accounts may be nil; when set, every authenticated request rechecks the account.
 func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts middleware.AccountChecker,
 	limits Limiters, payments *payment.Registry, h Handlers) *gin.Engine {
 	if cfg.App.IsProduction() {

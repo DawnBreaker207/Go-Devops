@@ -99,7 +99,6 @@ func nextFrame(t *testing.T, frames <-chan sseFrame, want string, within time.Du
 	}
 }
 
-// End to end: URL token, outlives WriteTimeout, keepalive, debounce, show isolation, hub.Close ends it.
 func TestSSEStream(t *testing.T) {
 	srv, hub, tokens := startSSEServer(t, 300*time.Millisecond)
 	token, _ := tokens.Issue("user-1", "show-a", "hall-1")
@@ -123,9 +122,8 @@ func TestSSEStream(t *testing.T) {
 	}
 	nextFrame(t, frames, "connected", time.Second)
 
-	// Past the 300ms WriteTimeout the stream must still deliver.
 	time.Sleep(500 * time.Millisecond)
-	nextFrame(t, frames, ":", time.Second) // keepalive ping
+	nextFrame(t, frames, ":", time.Second)
 
 	hub.Broadcast("show-b", sse.SeatEvent{ShowtimeID: "show-b", Seats: []sse.SeatUpdate{{ID: "other", Status: "held"}}})
 	hub.Broadcast("show-a", sse.SeatEvent{ShowtimeID: "show-a", Seats: []sse.SeatUpdate{{ID: "s1", Status: "held"}}})
@@ -169,9 +167,8 @@ func TestSSEStream_StalledClientIsDropped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close() // never read: the client stalls
+	defer resp.Body.Close()
 
-	// Distinct seat ids so the debounce does not merge them and the payload fills the socket buffers.
 	seats := make([]sse.SeatUpdate, 4000)
 	for i := range seats {
 		seats[i] = sse.SeatUpdate{ID: fmt.Sprintf("%036d", i), Status: "held"}

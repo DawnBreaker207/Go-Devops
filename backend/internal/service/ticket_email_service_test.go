@@ -38,7 +38,6 @@ func TestTicketEmails(t *testing.T) {
 		}
 	}
 
-	// Already sent: queue redelivery or the cron sends nothing more.
 	if ok, err := e.emails.Send(e.ctx, id); ok || err != nil {
 		t.Fatalf("resend: ok=%v err=%v", ok, err)
 	}

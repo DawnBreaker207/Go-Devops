@@ -140,7 +140,6 @@ func restartBroker(t *testing.T, container, url string) {
 
 // T26: after a broker restart queued messages survive and publisher and consumer reconnect.
 func TestBrokerRestart_NoMessageLost(t *testing.T) {
-	// It restarts the container, so point it at a disposable broker only.
 	container, url := os.Getenv("QUEUE_CHAOS_CONTAINER"), os.Getenv("QUEUE_CHAOS_URL")
 	if container == "" || url == "" {
 		t.Skip("set QUEUE_CHAOS_CONTAINER and QUEUE_CHAOS_URL to run the broker restart drill")

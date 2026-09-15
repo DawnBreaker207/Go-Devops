@@ -14,7 +14,7 @@ import (
 
 func TestShowtime_CleanupBufferBothSides(t *testing.T) {
 	e := newEnv(t)
-	var show models.Showtime // 100 minutes; the buffer is 20
+	var show models.Showtime
 	e.must(e.db.First(&show, "id = ?", e.showID).Error)
 	create := func(start time.Time) error {
 		_, err := e.showtimes.Create(e.ctx, dto.ShowtimeRequest{MovieID: e.movieID, HallID: e.hallID, StartAt: start})
@@ -35,10 +35,8 @@ func TestShowtime_CleanupBufferBothSides(t *testing.T) {
 	}
 }
 
-// A movie no longer showing sells no seat and serves no seat map or realtime token.
 func TestHold_MovieNotOnSale(t *testing.T) {
 	e := newEnv(t)
-	// Outside the API, which refuses to end a movie with showtimes to come.
 	e.must(e.db.Exec(`UPDATE movies SET status = 'ended' WHERE id = ?`, e.movieID).Error)
 	if _, err := e.hold(e.users[0], "A1"); !isAppErr(err, apperrors.ErrShowtimeClosed) {
 		t.Fatalf("hold: err = %v", err)
@@ -92,7 +90,6 @@ func TestMovies_DeleteAndStatusGuardedByUpcomingShowtimes(t *testing.T) {
 		t.Fatalf("edit the other fields: %v", err)
 	}
 
-	// A closed showtime could reopen with a wrong end, so the duration stays locked.
 	e.must(e.db.Exec(`UPDATE showtimes SET status = 'closed' WHERE id = ?`, e.showID).Error)
 	if err := update(models.MovieStatusShowing, 120); !isAppErr(err, apperrors.ErrMovieDurationLocked) {
 		t.Fatalf("change duration with a closed showtime to come: err = %v", err)

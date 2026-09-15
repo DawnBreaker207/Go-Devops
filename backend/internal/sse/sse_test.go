@@ -70,7 +70,7 @@ func TestHub_CloseEndsSubscriptions(t *testing.T) {
 	hub := NewHub()
 	sub := subscribe(t, hub, "show", "u1")
 	sub.Close()
-	sub.Close() // idempotent
+	sub.Close()
 	if hub.Viewers("show") != 0 {
 		t.Fatal("closed subscription still counted")
 	}
@@ -99,7 +99,7 @@ func TestTokenStore(t *testing.T) {
 		t.Fatalf("ttl = %v", ttl)
 	}
 
-	for i := 0; i < 2; i++ { // reconnect with the same URL
+	for i := 0; i < 2; i++ {
 		if hall, user, ok := store.Validate(token, "show-a"); !ok || hall != "hall-1" || user != "user-1" {
 			t.Fatalf("attempt %d: ok=%v hall=%q user=%q", i, ok, hall, user)
 		}
@@ -134,7 +134,7 @@ func TestHub_StreamLimits(t *testing.T) {
 		t.Fatalf("stream over the server limit: err = %v", err)
 	}
 	a1.Close()
-	a1.Close() // releases its slot once
+	a1.Close()
 	if _, err := hub.Subscribe("show", "a"); err != nil {
 		t.Fatalf("stream after closing one: %v", err)
 	}
@@ -146,12 +146,12 @@ func TestTokenStore_PrunesLazily(t *testing.T) {
 	store.Issue("u", "s", "h")
 	store.Issue("u", "s", "h")
 	now = now.Add(31 * time.Second)
-	store.Issue("u", "s", "h") // sweep: the first two expired
+	store.Issue("u", "s", "h")
 	if n := store.size(); n != 1 {
 		t.Fatalf("tokens after sweep = %d, want 1", n)
 	}
 	now = now.Add(31 * time.Second)
-	store.Issue("u", "s", "h") // a TTL later: sweeps again
+	store.Issue("u", "s", "h")
 	if n := store.size(); n != 1 {
 		t.Fatalf("tokens after second sweep = %d, want 1", n)
 	}

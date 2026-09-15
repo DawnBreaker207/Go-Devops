@@ -3,7 +3,7 @@ package dto
 import "time"
 
 // StaffShowtimeResponse is one showtime on the staff board. It carries seat
-// counts only: staff never see money (F17).
+// counts only: staff never see money
 type StaffShowtimeResponse struct {
 	ID         string    `json:"id"`
 	MovieTitle string    `json:"movie_title"`

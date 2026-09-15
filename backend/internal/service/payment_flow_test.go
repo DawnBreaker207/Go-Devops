@@ -12,7 +12,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment/mock"
 )
 
-// Empty uses the default, a disabled provider is refused, the same provider reuses the open checkout.
 func TestPay_ProviderChoice(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]
@@ -39,7 +38,6 @@ func TestPay_ProviderChoice(t *testing.T) {
 	}
 }
 
-// The first settled payment confirms the booking; the other provider's payment is refunded.
 func TestTwoProviders_SwitchAndDoublePayment(t *testing.T) {
 	e := newEnv(t)
 	u := e.users[0]

@@ -262,7 +262,7 @@ func TestHTTP_ReadLatencyP95(t *testing.T) {
 		"/api/v1/movies/" + h.movieID + "/showtimes",
 		"/api/v1/shows/" + h.showID + "/seats",
 	} {
-		h.call(http.MethodGet, path, token, nil) // warm up
+		h.call(http.MethodGet, path, token, nil)
 		latencies := make([]time.Duration, 0, 30)
 		for i := 0; i < 30; i++ {
 			start := time.Now()

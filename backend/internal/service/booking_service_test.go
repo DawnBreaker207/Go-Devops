@@ -622,7 +622,6 @@ func TestSweep_FinalizesStuckPaidBooking(t *testing.T) {
 	h := e.mustHold(e.users[0], "A1")
 	ref := e.pay(e.users[0], h.BookingID)
 	e.capture(ref)
-	// A crash left the payment recorded but the booking never confirmed.
 	e.must(e.db.Exec(`WITH p AS (
 			UPDATE payments SET status = 'paid', paid_amount = amount, paid_at = NOW() - INTERVAL '2 minutes'
 			WHERE txn_ref = ? RETURNING id, booking_id)
@@ -664,7 +663,7 @@ func TestRedeem(t *testing.T) {
 	}
 	check(strings.ToLower(first.Code), e.showID, models.RedeemUsed)
 	check(second.ID, otherShow, models.RedeemWrongShow)
-	check(second.ID, e.showID, models.RedeemOK) // wrong_show did not consume it
+	check(second.ID, e.showID, models.RedeemOK)
 	check("DOES-NOT-EXIST", e.showID, models.RedeemNotFound)
 
 	id2 := e.confirmed(e.users[1], "B1")

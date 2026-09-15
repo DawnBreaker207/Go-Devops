@@ -22,7 +22,7 @@ func IsUniqueViolation(err error) bool {
 }
 
 // IsDeadlock reports a PostgreSQL deadlock error (40P01), retried by the
-// seat-hold flow instead of surfacing to the client (R-HO2).
+// seat-hold flow instead of surfacing to the client
 func IsDeadlock(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -187,7 +187,7 @@ var (
 	ErrShowtimeNotOpen     = NotFound("showtime is not open")
 	ErrShowtimeClosed      = Forbidden("showtime is closed for sales or has already started")
 
-	// Changing a showtime that already sells seats (E-S4).
+	// Changing a showtime that already sells seats
 	ErrShowtimeScheduleLocked = Conflict("showtime with pending or confirmed bookings can only be opened or closed")
 	ErrShowtimeHallLocked     = Conflict("showtime hall can not change once it has bookings")
 	ErrShowtimeChanged        = Conflict("showtime was changed by someone else, reload and retry")
@@ -197,7 +197,7 @@ var (
 	ErrMovieHasShowtimes   = Conflict("movie has open showtimes still to come; close or delete them first")
 	ErrMovieDurationLocked = Conflict("movie duration can not change while it has showtimes still to come")
 
-	// An idempotency key backs a single hold request (E-HO3).
+	// An idempotency key backs a single hold request
 	ErrIdempotencyKeyReused = Conflict("idempotency key was already used for another request")
 
 	ErrBookingNotFound   = NotFound("booking not found")

@@ -22,7 +22,7 @@ func TestBatch_OrphanRunningRowDoesNotBlock(t *testing.T) {
 		VALUES (gen_random_uuid(), 'sweepExpiredHolds', 'cron', 'running')`).Error)
 	manager := batch.NewManager(e.db, repository.NewBatchJobRepository(e.db))
 	sweep := jobs.NewSweepExpiredHolds(e.svc)
-	sweep.Schedule = "" // no cron run may sneak in between Start and the manual run
+	sweep.Schedule = ""
 	manager.Register(sweep)
 	if err := manager.Run(e.ctx, "sweepExpiredHolds", models.TriggerManual); err == nil {
 		t.Fatal("orphan RUNNING row did not block before startup (test setup)")
@@ -137,7 +137,6 @@ func TestHTTP_BodyLimitAndSecurityHeaders(t *testing.T) {
 	}
 }
 
-// Locking an account or changing its role applies to tokens already issued.
 func TestHTTP_LockedAccountTokenRejectedImmediately(t *testing.T) {
 	h := newHTTPEnv(t)
 	admin, _ := h.login(models.RoleAdmin)

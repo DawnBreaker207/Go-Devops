@@ -165,7 +165,7 @@ type env struct {
 	movieID   string
 	hallID    string
 	showID    string
-	seat      map[string]string // label -> showtime_seat id
+	seat      map[string]string
 	users     []string
 	emailOf   map[string]string
 

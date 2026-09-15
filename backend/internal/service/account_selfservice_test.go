@@ -97,7 +97,6 @@ func TestForgotPassword_ResetIsSingleUseAndRevokesSessions(t *testing.T) {
 	}
 	raw := m[1]
 
-	// The email was sent for the lowercased address only: no other mail exists.
 	if n := e.count(`SELECT COUNT(*) FROM password_reset_tokens WHERE user_id = ?`, u.ID); n != 1 {
 		t.Fatalf("reset tokens = %d, want 1", n)
 	}

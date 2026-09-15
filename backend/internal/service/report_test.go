@@ -17,7 +17,7 @@ import (
 func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 	e := newEnv(t)
 	confirmed := e.confirmed(e.users[0], "A1", "B1")
-	e.mustHold(e.users[1], "A2") // pending: not revenue
+	e.mustHold(e.users[1], "A2")
 	refunded := e.mustHold(e.users[2], "A3")
 	ref := e.pay(e.users[2], refunded.BookingID)
 	e.capture(ref, mock.CaptureOptions{AmountDelta: 1000})
@@ -91,7 +91,6 @@ func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 	}
 }
 
-// The closeDay job closes yesterday and today.
 func TestCloseDayJob(t *testing.T) {
 	e := newEnv(t)
 	if processed, _ := e.runJob(jobs.NewCloseDay(e.reports, time.UTC)); processed != 2 {
@@ -102,13 +101,12 @@ func TestCloseDayJob(t *testing.T) {
 	}
 }
 
-// Seat counts per showtime of the day and the gate list.
 func TestStaffBoard(t *testing.T) {
 	e := newEnv(t)
 	id := e.confirmed(e.users[0], "A1", "A2")
 	order, err := e.svc.Order(e.ctx, e.users[0], id)
 	e.must(err)
-	e.moveShowStart(e.showID, 10*time.Minute) // inside the check-in window
+	e.moveShowStart(e.showID, 10*time.Minute)
 	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID); err != nil || res.Status != models.RedeemOK {
 		t.Fatalf("redeem: %+v %v", res, err)
 	}
