@@ -267,14 +267,22 @@ func spanSet(spans []string, rows, seatsPerRow int, gapSet map[string]bool) (spa
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "no room for a second column"})
 		}
 		label := dto.SeatLabel(row, col)
+		neighbor := dto.SeatLabel(row, col+1)
 		if span[label] || consumed[label] {
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "duplicate anchor"})
 		}
 		if gapSet[label] {
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "gap cannot span"})
 		}
+		// The column this anchor would consume must be free too: it can not
+		// already be another anchor, nor already consumed by one (checking
+		// only the new anchor's own label misses this, e.g. spans ["A3","A2"]
+		// processed in that order would otherwise silently drop seat A4).
+		if span[neighbor] || consumed[neighbor] {
+			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "overlapping span"})
+		}
 		span[label] = true
-		consumed[dto.SeatLabel(row, col+1)] = true
+		consumed[neighbor] = true
 	}
 	return span, consumed, nil
 }

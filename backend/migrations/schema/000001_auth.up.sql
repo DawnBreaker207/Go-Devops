@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     phone      VARCHAR(20),
     role       VARCHAR(32)  NOT NULL DEFAULT 'customer',
     active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    -- Version of the terms the account holder last accepted (0 = none yet, ND13).
+    accepted_terms_version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,

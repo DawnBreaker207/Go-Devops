@@ -13,7 +13,8 @@
 
 CREATE TABLE IF NOT EXISTS bookings (
     id              UUID PRIMARY KEY,
-    user_id         UUID        NOT NULL REFERENCES users(id),
+    -- NULL for a counter (walk-in) sale, which has no account.
+    user_id         UUID        REFERENCES users(id),
     showtime_id     UUID        NOT NULL REFERENCES showtimes(id),
     status          VARCHAR(16) NOT NULL DEFAULT 'pending',
     status_reason   VARCHAR(64),
@@ -22,6 +23,11 @@ CREATE TABLE IF NOT EXISTS bookings (
     idempotency_key VARCHAR(128),
     payment_id      UUID,
     paid_at         TIMESTAMPTZ,
+    -- online goes through a payment provider; counter is cash collected at
+    -- the till, confirmed straight away, no user account or ticket email.
+    sold_via        VARCHAR(16) NOT NULL DEFAULT 'online',
+    customer_name   VARCHAR(255),
+    customer_phone  VARCHAR(20),
     -- A paid booking the sweep could not settle is retried with backoff.
     finalize_attempts INTEGER   NOT NULL DEFAULT 0 CHECK (finalize_attempts >= 0),
     next_finalize_at  TIMESTAMPTZ,
@@ -32,7 +38,12 @@ CREATE TABLE IF NOT EXISTS bookings (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT ck_booking_status CHECK (status IN ('pending','confirmed','expired','refunded')),
-    CONSTRAINT ck_booking_paid CHECK ((paid_at IS NULL) = (payment_id IS NULL)),
+    CONSTRAINT ck_booking_sold_via CHECK (sold_via IN ('online','counter')),
+    -- Online: paid_at and payment_id go together. Counter: paid at the till
+    -- (paid_at set) through no payment attempt row (payment_id stays NULL).
+    CONSTRAINT ck_booking_paid CHECK (
+        (paid_at IS NULL) = (payment_id IS NULL)
+        OR (sold_via = 'counter' AND paid_at IS NOT NULL AND payment_id IS NULL)),
     CONSTRAINT ck_booking_settled_paid CHECK (status NOT IN ('confirmed','refunded') OR paid_at IS NOT NULL)
 );
 

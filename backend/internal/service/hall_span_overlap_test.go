@@ -62,6 +62,10 @@ func TestHallLayout_SpanValidation(t *testing.T) {
 		{"out of rows", []string{"C1"}, nil},           // rows = 2
 		{"gap anchor", []string{"A5"}, []string{"A5"}}, // A5 is a gap
 		{"duplicate anchor", []string{"A2"}, []string{"A2"}},
+		// A2's consumed neighbor (A3) is itself already an anchor: naive
+		// order-dependent validation missed this and silently dropped A4.
+		{"overlapping spans, reverse order", []string{"A3", "A2"}, nil},
+		{"overlapping spans, forward order", []string{"A2", "A3"}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

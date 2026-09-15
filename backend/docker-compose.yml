@@ -71,8 +71,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      # Started, not healthy: redis is an optional cache (fail-open), so an
+      # unhealthy redis must not block the backend from starting.
       redis:
-        condition: service_healthy
+        condition: service_started
       migrate:
         condition: service_completed_successfully
     environment:

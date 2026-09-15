@@ -2,6 +2,9 @@
 -- state (F2–F6). Seats are generated from a hall layout; ticket sales only
 -- touch showtime_seats.
 
+-- tstzrange/EXCLUDE below need this for the showtime overlap backstop.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 CREATE TABLE IF NOT EXISTS movies (
     id           UUID PRIMARY KEY,
     title        VARCHAR(255) NOT NULL,
@@ -52,6 +55,9 @@ CREATE TABLE IF NOT EXISTS seats (
     col_number INTEGER     NOT NULL CHECK (col_number > 0),
     seat_type  VARCHAR(16) NOT NULL DEFAULT 'standard',
     is_gap     BOOLEAN     NOT NULL DEFAULT FALSE,
+    -- A "couple" seat spans this column and the next; the neighbor column
+    -- holds no seat of its own.
+    col_span   SMALLINT    NOT NULL DEFAULT 1 CHECK (col_span IN (1, 2)),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_seat_hall_row_col UNIQUE (hall_id, row_label, col_number),
@@ -80,7 +86,14 @@ CREATE TABLE IF NOT EXISTS showtimes (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
     CONSTRAINT ck_showtime_status CHECK (status IN ('open','closed')),
-    CONSTRAINT ck_showtime_range CHECK (end_at > start_at)
+    CONSTRAINT ck_showtime_range CHECK (end_at > start_at),
+    -- The service already serializes showtime creation on the hall's advisory
+    -- lock; this is the database-level backstop for any path that forgets it.
+    -- It checks the raw [start_at, end_at) overlap only, without the
+    -- configurable cleaning buffer the service applies.
+    CONSTRAINT ex_showtime_no_hall_overlap
+        EXCLUDE USING gist (hall_id WITH =, tstzrange(start_at, end_at) WITH &&)
+        WHERE (deleted_at IS NULL)
 );
 
 CREATE INDEX IF NOT EXISTS idx_showtimes_hall_start ON showtimes (hall_id, start_at);

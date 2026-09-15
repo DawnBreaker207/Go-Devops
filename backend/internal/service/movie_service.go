@@ -184,7 +184,7 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 
 // Delete soft-deletes a movie; it is refused while open showtimes are still to come.
 func (s *movieService) Delete(ctx context.Context, id string) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if _, err := s.movieRepo.LockForUpdate(ctx, tx, id); err != nil {
 			return err
 		}
@@ -198,12 +198,17 @@ func (s *movieService) Delete(ctx context.Context, id string) error {
 		if err := s.movieRepo.Delete(ctx, tx, id); err != nil {
 			return err
 		}
-		s.cache.Del(ctx, movieKey(id))
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = id
 			rec.After = map[string]any{"deleted": true}
 			return audit.In(ctx, tx, rec)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	// Only after commit: busting first would let a concurrent reader
+	// repopulate the cache with the pre-delete row before it lands.
+	s.cache.Del(ctx, movieKey(id))
+	return nil
 }
