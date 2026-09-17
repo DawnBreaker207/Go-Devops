@@ -511,8 +511,18 @@ func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.
 		})
 		out.sold = append(out.sold, bs.ShowtimeSeatID)
 	}
+	if s.combos != nil {
+		comboRows, err := s.combos.BookingCombos(ctx, tx, b.ID)
+		if err != nil {
+			return err
+		}
+		for _, c := range comboRows {
+			total += c.Price * int64(c.Quantity)
+		}
+	}
+	total -= b.VoucherDiscountAmount
 	if total != b.TotalAmount {
-		return fmt.Errorf("booking %s: seat prices %d do not add up to total %d", b.ID, total, b.TotalAmount)
+		return fmt.Errorf("booking %s: seats+combos-voucher %d do not add up to total %d", b.ID, total, b.TotalAmount)
 	}
 	if err := s.repo.CreateTickets(ctx, tx, tickets); err != nil {
 		return err
@@ -525,6 +535,19 @@ func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.
 		return fmt.Errorf("confirm booking %s: row changed under lock", b.ID)
 	}
 	out.confirmed = true
+	if s.ledger != nil && b.PaymentID != nil {
+		if err := s.ledger.Write(tx, &models.LedgerEntry{
+			Type: models.LedgerPaymentCaptured, Amount: b.TotalAmount,
+			ReferenceTable: "payments", ReferenceID: *b.PaymentID, UserID: nullableUserID(b.UserID), BookingID: &b.ID,
+		}); err != nil {
+			return err
+		}
+	}
+	if s.loyalty != nil {
+		if err := s.loyalty.EarnForBooking(ctx, tx, b.UserID, b.TotalAmount, len(tickets), b.ID); err != nil {
+			return err
+		}
+	}
 	return s.audit(ctx, tx, "orders.confirm", "booking", b.ID, b.ID, map[string]any{
 		"status": models.BookingConfirmed, "tickets": len(tickets), "total": total,
 		"payment_id": derefString(b.PaymentID), "source": source,
@@ -551,11 +574,27 @@ func (s *bookingService) refundTx(ctx context.Context, tx *gorm.DB, b *models.Bo
 	if n == 0 {
 		return fmt.Errorf("refund booking %s: row changed under lock", b.ID)
 	}
+	if s.vouchers != nil && b.VoucherID != nil {
+		if err := s.vouchers.ReleaseUsage(ctx, tx, b.ID); err != nil {
+			return err
+		}
+	}
+	if err := s.releaseComboStock(ctx, tx, b.ShowtimeID, b.ID); err != nil {
+		return err
+	}
 	if n, err = s.payments.MarkRefundPending(ctx, tx, *b.PaymentID, reason); err != nil {
 		return err
 	}
 	if n == 0 {
 		return fmt.Errorf("refund payment %s: not in paid state", *b.PaymentID)
+	}
+	if s.ledger != nil {
+		if err := s.ledger.Write(tx, &models.LedgerEntry{
+			Type: models.LedgerPaymentRefunded, Amount: b.TotalAmount,
+			ReferenceTable: "payments", ReferenceID: *b.PaymentID, UserID: nullableUserID(b.UserID), BookingID: &b.ID,
+		}); err != nil {
+			return err
+		}
 	}
 	out.refunds = append(out.refunds, *b.PaymentID)
 	// resource_type="payment" here matches the other orders.refund call site
@@ -754,6 +793,18 @@ func (s *bookingService) SweepExpired(ctx context.Context, limit int) (SweepResu
 	for showID, ids := range byShow {
 		s.broadcast(showID, models.SeatStatusAvailable, ids)
 	}
+	if s.waitlist != nil {
+		for _, seat := range released {
+			s.fulfillWaitlist(ctx, seat.ShowtimeID, seat.ID)
+		}
+	}
+	if s.waitlist != nil {
+		if n, err := s.waitlist.ExpireStale(ctx, limit); err != nil {
+			logger.Warn("expire stale waitlist entries failed", logger.Err(err))
+		} else if n > 0 {
+			logger.Info("waitlist entries expired unfulfilled", logger.Int("count", int(n)))
+		}
+	}
 
 	expired, err := s.repo.ExpireOverdueUnpaid(ctx, limit)
 	if err != nil {
@@ -862,4 +913,73 @@ func transactionOf(p *models.Payment) payment.Transaction {
 // newTxnRef: 24 alphanumeric chars, accepted by common Vietnamese gateways' reference rules.
 func newTxnRef() string {
 	return "CP" + time.Now().UTC().Format("060102150405") + randomHex(5)
+}
+
+// fulfillWaitlist gives a just-released seat to the oldest waiting entry of
+// its showtime, if any: it holds the seat on that user's behalf (same
+// showtime_seats mechanism, same TTL, same sweep releases it again if unpaid)
+// and creates the PENDING booking they will see under "my orders" /
+// GET /waitlist/me. Best-effort: a failure here must not fail the sweep.
+func (s *bookingService) fulfillWaitlist(ctx context.Context, showID, seatID string) {
+	err := s.inTx(ctx, func(tx *gorm.DB) error {
+		entry, err := s.waitlist.NextWaiting(tx, showID)
+		if err != nil {
+			return err
+		}
+		if entry == nil {
+			return nil
+		}
+		showtime, err := s.repo.LockShowtime(ctx, tx, showID)
+		if err != nil || showtime == nil {
+			return err
+		}
+		locked, err := s.repo.LockSeats(ctx, tx, showID, []string{seatID})
+		if err != nil {
+			return err
+		}
+		if len(locked) == 0 || locked[0].Status != models.SeatStatusAvailable {
+			return nil // lost the race; the entry stays 'waiting' for the next release
+		}
+		seat := locked[0]
+		phys, err := s.repo.SeatsByIDs(ctx, tx, []string{seat.SeatID})
+		if err != nil {
+			return err
+		}
+		meta := phys[seat.SeatID]
+		prices, err := s.repo.PricesByHall(ctx, tx, showtime.HallID)
+		if err != nil {
+			return err
+		}
+		price, ok := prices[meta.SeatType]
+		if !ok || price <= 0 {
+			return nil
+		}
+		now, err := s.repo.Now(ctx, tx)
+		if err != nil {
+			return err
+		}
+		heldUntil := now.Add(s.holdTTL)
+		version, err := s.repo.HoldSeat(ctx, tx, seatID, entry.UserID, heldUntil)
+		if err != nil {
+			return err
+		}
+		booking := &models.Booking{UserID: entry.UserID, ShowtimeID: showID, Status: models.BookingPending, TotalAmount: price, ExpiresAt: &heldUntil}
+		if err := s.repo.Create(ctx, tx, booking); err != nil {
+			return err
+		}
+		bs := models.BookingSeat{BookingID: booking.ID, ShowtimeSeatID: seatID, SeatType: meta.SeatType, Price: price, HoldVersion: version}
+		if err := s.repo.CreateBookingSeats(ctx, tx, []models.BookingSeat{bs}); err != nil {
+			return err
+		}
+		if err := s.waitlist.MarkNotified(tx, entry.ID, booking.ID, heldUntil); err != nil {
+			return err
+		}
+		return s.audit(ctx, tx, "orders.waitlist_fulfilled", "booking", booking.ID, booking.ID, map[string]any{
+			"waitlist_entry_id": entry.ID, "user_id": entry.UserID,
+			"seat": dto.SeatLabel(meta.RowLabel, meta.ColNumber), "expires_at": heldUntil,
+		})
+	})
+	if err != nil {
+		logger.Warn("waitlist fulfill failed", logger.String("showtime_id", showID), logger.String("seat_id", seatID), logger.Err(err))
+	}
 }

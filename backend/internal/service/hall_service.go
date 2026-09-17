@@ -32,15 +32,16 @@ type HallService interface {
 }
 
 type hallService struct {
-	db       *gorm.DB
-	hallRepo *repository.HallRepository
-	cache    *cache.Cache
+	db         *gorm.DB
+	hallRepo   *repository.HallRepository
+	branchRepo *repository.BranchRepository
+	cache      *cache.Cache
 }
 
 // NewHallService optionally busts the showtime-listing cache on a price
 // change; a nil cache disables it.
-func NewHallService(db *gorm.DB, hallRepo *repository.HallRepository, c *cache.Cache) HallService {
-	return &hallService{db: db, hallRepo: hallRepo, cache: c}
+func NewHallService(db *gorm.DB, hallRepo *repository.HallRepository, branchRepo *repository.BranchRepository, c *cache.Cache) HallService {
+	return &hallService{db: db, hallRepo: hallRepo, branchRepo: branchRepo, cache: c}
 }
 
 func (s *hallService) List(ctx context.Context, query dto.PageQuery) ([]dto.HallResponse, int64, error) {
@@ -195,8 +196,13 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 	if err := validatePrices(req.Prices); err != nil {
 		return nil, err
 	}
+	branchID, err := s.resolveBranchID(ctx, req.BranchID)
+	if err != nil {
+		return nil, err
+	}
 
 	hall := &models.Hall{
+		BranchID:       branchID,
 		Name:           strings.TrimSpace(req.Name),
 		Rows:           req.Rows,
 		SeatsPerRow:    req.SeatsPerRow,
@@ -236,6 +242,22 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 	return &result, nil
 }
 
+// resolveBranchID defaults to the oldest active branch when the request
+// omits one — most installs have exactly one branch and never set this.
+func (s *hallService) resolveBranchID(ctx context.Context, requested string) (string, error) {
+	if requested != "" {
+		return requested, nil
+	}
+	b, err := s.branchRepo.Default(ctx)
+	if err != nil {
+		return "", err
+	}
+	if b == nil {
+		return "", apperrors.Validation("no branch exists yet; create one first or pass branch_id")
+	}
+	return b.ID, nil
+}
+
 // normalizeHallJSON: nil would be stored as JSON null in the not-null jsonb column.
 func normalizeHallJSON(hall *models.Hall) {
 	if hall.AisleAfterCols == nil {
@@ -265,6 +287,7 @@ func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHal
 	}
 
 	clone := &models.Hall{
+		BranchID:       source.BranchID, // a clone stays in the same branch as its source
 		Name:           strings.TrimSpace(req.Name),
 		Rows:           source.Rows,
 		SeatsPerRow:    source.SeatsPerRow,

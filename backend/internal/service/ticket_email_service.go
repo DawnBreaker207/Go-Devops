@@ -15,8 +15,10 @@ import (
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/notify"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
+	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
@@ -27,6 +29,11 @@ type TicketEmailService interface {
 	// nothing to send (not confirmed or already sent).
 	Send(ctx context.Context, bookingID string) (sent bool, err error)
 	PendingIDs(ctx context.Context, limit int) ([]string, error)
+	// Resend is a staff-triggered "send it again" for a confirmed order
+	// that already has email_sent_at set (Send's ClaimEmail refuses that —
+	// it is for the once-per-booking automatic delivery only). Not rate
+	// limited beyond the route's own auth (staff/admin only).
+	Resend(ctx context.Context, bookingID string) error
 }
 
 type ticketEmailService struct {
@@ -188,4 +195,28 @@ func formatVND(amount int64) string {
 		out = append(out, d)
 	}
 	return string(out) + " ₫"
+}
+
+func (s *ticketEmailService) Resend(ctx context.Context, bookingID string) error {
+	b, err := s.repo.FindByID(ctx, bookingID)
+	if err != nil {
+		return err
+	}
+	if b == nil {
+		return apperrors.ErrBookingNotFound
+	}
+	if b.Status != models.BookingConfirmed || b.SoldVia != models.SoldViaOnline {
+		return apperrors.Validation("only a confirmed online booking has a ticket email to resend")
+	}
+	msg, err := s.compose(ctx, bookingID)
+	if err != nil {
+		return err
+	}
+	if err := s.mailer.Send(ctx, msg); err != nil {
+		return apperrors.BadGateway("could not send the ticket email, please retry").Wrap(err)
+	}
+	return audit.In(ctx, s.db, audit.Record{
+		ActorRole: "staff", Action: "staff.resend_ticket_email", ResourceType: "booking",
+		ResourceID: bookingID, BookingID: bookingID, Outcome: audit.OutcomeSuccess,
+	})
 }

@@ -244,4 +244,30 @@ var (
 	ErrUploadInvalid         = Validation("file must be a JPEG, PNG or WebP image")
 	ErrUploadTooLarge        = Validation("file is too large")
 	ErrImageStoreUnavailable = BadGateway("image storage is unavailable, please retry")
+
+	// Owner / admin permission groups (ADVANCED_FEATURES_DISCUSSION.md Phần 9).
+	ErrLastOwner       = Conflict("at least one active owner must remain")
+	ErrPermissionDenied = Forbidden("you do not have the required admin permission")
+
+	// Voucher/Membership/Combo/Article (R2/R3 of ADVANCED_FEATURES_BRIEF.md).
+	// ErrVoucherInvalid is deliberately generic (not "expired"/"used up"/"not
+	// found") so a hold request can not be used to brute-force valid codes.
+	ErrVoucherInvalid          = Validation("voucher code is invalid")
+	ErrVoucherNotFound         = NotFound("voucher not found")
+	ErrVoucherCodeExists       = Conflict("voucher code already exists")
+	ErrVoucherNotEditable      = Conflict("only a pending_approval voucher can be edited")
+	ErrComboNotFound           = NotFound("combo not found")
+	ErrComboInactive           = Validation("one or more combos are not available for sale")
+	ErrMembershipTierNotFound  = NotFound("membership tier not found")
+	ErrMembershipTierInactive  = Validation("membership tier is not available for purchase")
+	ErrMembershipAlreadyActive = Conflict("an active membership already exists; renew instead of purchasing a new one")
+	ErrArticleNotFound         = NotFound("article not found")
+	ErrArticleSlugExists       = Conflict("article slug already exists")
+	ErrVoucherSelfApproval     = Conflict("a voucher can not be activated by the admin who created it")
+
+	// Loyalty (ADVANCED_FEATURES_DISCUSSION.md Phần 2.1).
+	ErrInsufficientPoints = Conflict("not enough points")
+	ErrRewardNotFound     = NotFound("reward not found")
+	ErrRewardInactive     = Validation("reward is not available")
+	ErrRewardOutOfStock   = Conflict("reward is out of stock")
 )

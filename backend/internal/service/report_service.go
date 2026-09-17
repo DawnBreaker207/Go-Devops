@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
+
+	"github.com/xuri/excelize/v2"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
@@ -19,6 +22,9 @@ type ReportService interface {
 	BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error)
 	AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error)
 	StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error)
+	// ExportXLSX renders the same range DailyReport reads as an .xlsx
+	// workbook (Phần 2.4: a second output format over daily_aggregates).
+	ExportXLSX(ctx context.Context, from, to string) (data []byte, filename string, err error)
 }
 
 type reportService struct {
@@ -315,4 +321,40 @@ func newDailyAggregateResponse(a *models.DailyAggregate) *dto.DailyAggregateResp
 		Breakdown:     a.Breakdown,
 		UpdatedAt:     a.UpdatedAt,
 	}
+}
+
+func (s *reportService) ExportXLSX(ctx context.Context, from, to string) ([]byte, string, error) {
+	report, err := s.DailyReport(ctx, from, to)
+	if err != nil {
+		return nil, "", err
+	}
+
+	f := excelize.NewFile()
+	defer f.Close()
+	const sheet = "Revenue"
+	f.SetSheetName("Sheet1", sheet)
+	headers := []string{"Date", "Total Revenue (VND)", "Tickets Sold", "Seats Sold", "Capacity", "Occupancy %"}
+	for col, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
+		f.SetCellStr(sheet, cell, h)
+	}
+	for i, day := range report.Days {
+		row := i + 2
+		values := []any{day.ReportDate, day.TotalRevenue, day.TicketsSold, day.SeatsSold, day.Capacity, day.OccupancyRate}
+		for col, v := range values {
+			cell, _ := excelize.CoordinatesToCellName(col+1, row)
+			f.SetCellValue(sheet, cell, v)
+		}
+	}
+	totalRow := len(report.Days) + 2
+	f.SetCellStr(sheet, fmt.Sprintf("A%d", totalRow), "Total")
+	f.SetCellValue(sheet, fmt.Sprintf("B%d", totalRow), report.TotalRevenue)
+	f.SetCellValue(sheet, fmt.Sprintf("C%d", totalRow), report.TicketsSold)
+
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, "", fmt.Errorf("render xlsx: %w", err)
+	}
+	filename := fmt.Sprintf("revenue_%s_%s.xlsx", report.From, report.To)
+	return buf.Bytes(), filename, nil
 }

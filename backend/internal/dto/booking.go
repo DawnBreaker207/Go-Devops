@@ -2,11 +2,15 @@ package dto
 
 import "time"
 
-// seat_ids are showtime_seat ids from GET /shows/:id/seats.
+// seat_ids are showtime_seat ids from GET /shows/:id/seats. combos and
+// voucher_code are optional; an active membership is looked up automatically
+// (not sent by the client) and its discount is baked into each seat price.
 type HoldRequest struct {
-	ShowID         string   `json:"show_id" binding:"required"`
-	SeatIDs        []string `json:"seat_ids" binding:"required,min=1"`
-	IdempotencyKey string   `json:"idempotency_key" binding:"omitempty,min=1,max=128"`
+	ShowID         string      `json:"show_id" binding:"required"`
+	SeatIDs        []string    `json:"seat_ids" binding:"required,min=1"`
+	IdempotencyKey string      `json:"idempotency_key" binding:"omitempty,min=1,max=128"`
+	Combos         []ComboItem `json:"combos" binding:"omitempty,max=20,dive"`
+	VoucherCode    string      `json:"voucher_code" binding:"omitempty,max=32"`
 }
 
 // CounterSellRequest is a walk-in sale at the till: no account, no payment
@@ -28,12 +32,15 @@ type HeldSeat struct {
 }
 
 type HoldResponse struct {
-	BookingID         string     `json:"booking_id"`
-	ShowtimeID        string     `json:"showtime_id"`
-	TotalAmount       int64      `json:"total_amount"`
-	ExpiresAt         time.Time  `json:"expires_at"`
-	Seats             []HeldSeat `json:"seats"`
-	ReplacedBookingID string     `json:"replaced_booking_id,omitempty"`
+	BookingID             string                  `json:"booking_id"`
+	ShowtimeID            string                  `json:"showtime_id"`
+	TotalAmount           int64                   `json:"total_amount"`
+	ExpiresAt             time.Time               `json:"expires_at"`
+	Seats                 []HeldSeat              `json:"seats"`
+	Combos                []BookingComboResponse  `json:"combos,omitempty"`
+	VoucherCode           string                  `json:"voucher_code,omitempty"`
+	VoucherDiscountAmount int64                   `json:"voucher_discount_amount,omitempty"`
+	ReplacedBookingID     string                  `json:"replaced_booking_id,omitempty"`
 }
 
 // An empty provider uses the configured default (see GET /payments/providers).
@@ -52,16 +59,18 @@ type PayResponse struct {
 }
 
 type OrderStatusResponse struct {
-	ID           string          `json:"id"`
-	ShowtimeID   string          `json:"showtime_id"`
-	Status       string          `json:"status"`
-	StatusReason string          `json:"status_reason,omitempty"`
-	TotalAmount  int64           `json:"total_amount"`
-	CreatedAt    time.Time       `json:"created_at"`
-	ExpiresAt    *time.Time      `json:"expires_at,omitempty"`
-	PaidAt       *time.Time      `json:"paid_at,omitempty"`
-	Payment      *PaymentSummary `json:"payment,omitempty"`
-	Showtime     *OrderShowtime  `json:"showtime,omitempty"`
+	ID                    string                 `json:"id"`
+	ShowtimeID            string                 `json:"showtime_id"`
+	Status                string                 `json:"status"`
+	StatusReason          string                 `json:"status_reason,omitempty"`
+	TotalAmount           int64                  `json:"total_amount"`
+	VoucherDiscountAmount int64                  `json:"voucher_discount_amount,omitempty"`
+	Combos                []BookingComboResponse `json:"combos,omitempty"`
+	CreatedAt             time.Time              `json:"created_at"`
+	ExpiresAt             *time.Time             `json:"expires_at,omitempty"`
+	PaidAt                *time.Time             `json:"paid_at,omitempty"`
+	Payment               *PaymentSummary        `json:"payment,omitempty"`
+	Showtime              *OrderShowtime         `json:"showtime,omitempty"`
 }
 
 type OrderShowtime struct {

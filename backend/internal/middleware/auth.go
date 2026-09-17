@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/jwt"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
@@ -78,16 +79,27 @@ func authenticate(c *gin.Context, jwtManager *jwt.Manager, accounts AccountCheck
 	return true
 }
 
-// RequireRoles must run after Auth.
+// RequireRoles must run after Auth. role=owner always passes when
+// role=admin is in the allow-list: owner is a strict superset of admin
+// (Phần 9.1 of ADVANCED_FEATURES_DISCUSSION.md), so every existing
+// admin-only route stays reachable to an owner without listing it everywhere.
 func RequireRoles(roles ...string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(roles))
+	ownerPasses := false
 	for _, role := range roles {
 		allowed[role] = struct{}{}
+		if role == models.RoleAdmin || role == models.RoleOwner {
+			ownerPasses = true
+		}
 	}
 
 	return func(c *gin.Context) {
 		role := CurrentUserRole(c)
-		if _, ok := allowed[role]; !ok {
+		_, ok := allowed[role]
+		if !ok && ownerPasses && role == models.RoleOwner {
+			ok = true
+		}
+		if !ok {
 			response.Abort(c, apperrors.Forbidden("you do not have permission to access this resource"))
 			return
 		}

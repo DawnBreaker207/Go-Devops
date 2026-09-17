@@ -213,8 +213,8 @@ func (s *userService) Create(ctx context.Context, req dto.CreateUserRequest) (*d
 // Update locks active admins first, in id order, so two admins acting on each other
 // can not both win.
 func (s *userService) Update(ctx context.Context, actorID, userID string, req dto.UpdateUserRequest) (*dto.UserResponse, error) {
-	if req.Active == nil && req.Role == nil {
-		return nil, apperrors.Validation("nothing to update: send active and/or role")
+	if req.Active == nil && req.Role == nil && req.BranchID == nil {
+		return nil, apperrors.Validation("nothing to update: send active, role and/or branch_id")
 	}
 	var user *models.User
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -261,6 +261,12 @@ func (s *userService) Update(ctx context.Context, actorID, userID string, req dt
 			if err := s.userRepo.SetRole(ctx, tx, target.ID, newRole); err != nil {
 				return err
 			}
+		}
+		if req.BranchID != nil {
+			if err := s.userRepo.SetBranch(ctx, tx, target.ID, *req.BranchID); err != nil {
+				return err
+			}
+			target.BranchID = req.BranchID
 		}
 		target.Active, target.Role = newActive, newRole
 		user = target

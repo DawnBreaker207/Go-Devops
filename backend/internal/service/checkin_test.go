@@ -22,7 +22,7 @@ func TestRedeem_CheckinWindow(t *testing.T) {
 
 	scan := func(want string) *dto.RedeemResponse {
 		t.Helper()
-		res, err := e.svc.Redeem(e.ctx, ticket.Code, e.showID)
+		res, err := e.svc.Redeem(e.ctx, ticket.Code, e.showID, "")
 		e.must(err)
 		if res.Status != want {
 			t.Fatalf("redeem = %s, want %s", res.Status, want)
@@ -63,7 +63,7 @@ func TestRedeem_CheckinWindow(t *testing.T) {
 		t.Fatalf("audited refusals = %v", verdicts)
 	}
 
-	if res, err := e.svc.Redeem(e.ctx, "NO-SUCH-CODE", e.showID); err != nil || res.Status != models.RedeemNotFound {
+	if res, err := e.svc.Redeem(e.ctx, "NO-SUCH-CODE", e.showID, ""); err != nil || res.Status != models.RedeemNotFound {
 		t.Fatalf("unknown code: %+v %v", res, err)
 	}
 	if n := e.count(`SELECT COUNT(*) FROM audit_logs WHERE error_message = 'not_found' AND COALESCE(resource_id, '') = ''`); n != 1 {

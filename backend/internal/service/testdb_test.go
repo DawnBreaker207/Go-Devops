@@ -192,11 +192,24 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, ctx: ctx, db: testDB, seat: map[string]string{}, emailOf: map[string]string{}}
 
 	// DELETE, not TRUNCATE: far faster on tiny tables (no new relfilenodes and fsync).
-	e.must(testDB.Exec(`DELETE FROM audit_logs; DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
+	// audit_logs is append-only in production (trg_audit_logs_immutable); the
+	// trigger is toggled off only for this between-tests reset.
+	e.must(testDB.Exec(`ALTER TABLE audit_logs DISABLE TRIGGER trg_audit_logs_immutable;
+		DELETE FROM audit_logs;
+		ALTER TABLE audit_logs ENABLE TRIGGER trg_audit_logs_immutable;
+		DELETE FROM ledger_entries; DELETE FROM point_transactions; DELETE FROM reward_redemptions;
+		DELETE FROM waitlist_entries; DELETE FROM pricing_rules;
+		DELETE FROM voucher_redemptions; DELETE FROM booking_combos;
+		DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
 		DELETE FROM tickets; DELETE FROM booking_seats;
 		DELETE FROM payments; DELETE FROM bookings; DELETE FROM showtime_seats;
 		DELETE FROM showtimes; DELETE FROM hall_prices; DELETE FROM seats; DELETE FROM halls;
-		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM users;`).Error)
+		DELETE FROM movies;
+		DELETE FROM rewards; DELETE FROM combo_branch_stock; DELETE FROM combos; DELETE FROM vouchers;
+		DELETE FROM user_memberships; DELETE FROM membership_tiers; DELETE FROM user_points;
+		DELETE FROM articles; DELETE FROM admin_permissions;
+		DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM users;
+		DELETE FROM branches WHERE name <> 'Chi nhanh chinh';`).Error)
 
 	for i := 0; i < 8; i++ {
 		u := &models.User{Email: fmt.Sprintf("user%d@test.local", i), Password: "x", FullName: fmt.Sprintf("User %d", i), Role: models.RoleCustomer}
@@ -211,7 +224,7 @@ func newEnv(t *testing.T) *env {
 	e.movieID = movie.ID
 
 	hallRepo := repository.NewHallRepository(testDB)
-	e.halls = service.NewHallService(testDB, hallRepo, nil)
+	e.halls = service.NewHallService(testDB, hallRepo, repository.NewBranchRepository(testDB), nil)
 	hall, err := e.halls.Create(ctx, dto.HallRequest{
 		Name: "Hall 1", Rows: 2, SeatsPerRow: 5,
 		SeatTypes: map[string][]string{"vip": {"2"}},
@@ -238,6 +251,14 @@ func newEnv(t *testing.T) *env {
 		DB:            testDB,
 		Repo:          repo,
 		Payments:      repository.NewPaymentRepository(testDB),
+		Vouchers:      repository.NewVoucherRepository(testDB),
+		Memberships:   repository.NewMembershipRepository(testDB),
+		Combos:        repository.NewComboRepository(testDB),
+		Loyalty:       service.NewLoyaltyService(testDB, repository.NewLoyaltyRepository(testDB), repository.NewVoucherRepository(testDB), repository.NewLedgerRepository(testDB)),
+		Ledger:        repository.NewLedgerRepository(testDB),
+		Waitlist:      repository.NewWaitlistRepository(testDB),
+		PricingRules:  repository.NewPricingRuleRepository(testDB),
+		Branches:      repository.NewBranchRepository(testDB),
 		Providers:     e.providers,
 		PublicBaseURL: merchantURL,
 		HoldTTL:       10 * time.Minute,

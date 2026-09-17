@@ -42,3 +42,4 @@ func (s *auditService) List(ctx context.Context, query dto.AuditLogListQuery) ([
 	}
 	return out, total, nil
 }
+

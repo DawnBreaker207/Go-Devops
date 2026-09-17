@@ -74,21 +74,43 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Public: public,
 		Events: ratelimit.New(10000, 1000),
 	}
-	return router.New(cfg, db, h.jwt, accounts, limits, h.providers, router.Handlers{
-		Health:   handlers.NewHealthHandler(db, "test"),
-		Auth:     handlers.NewAuthHandler(h.auth),
-		User:     handlers.NewUserHandler(userService),
-		Movie:    handlers.NewMovieHandler(h.movies),
-		Batch:    handlers.NewBatchHandler(h.batchManager(db, runs), runs, db),
-		Hall:     handlers.NewHallHandler(h.halls),
-		Showtime: handlers.NewShowtimeHandler(h.showtimes),
-		Booking:  handlers.NewBookingHandler(h.svc),
-		SSE:      handlers.NewSSEHandler(h.hub, h.tokens, h.showtimes),
-		Payment:  handlers.NewPaymentHandler(h.providers, h.svc, ""),
-		Staff:    handlers.NewStaffHandler(h.reports, h.svc, userService),
-		Report:   handlers.NewReportHandler(h.reports),
-		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
-		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
+	permRepo := repository.NewAdminPermissionRepository(db)
+	ledgerRepo := repository.NewLedgerRepository(db)
+	voucherService := service.NewVoucherService(db, repository.NewVoucherRepository(db))
+	membershipService := service.NewMembershipService(db, repository.NewMembershipRepository(db), ledgerRepo)
+	comboService := service.NewComboService(db, repository.NewComboRepository(db))
+	articleService := service.NewArticleService(db, repository.NewArticleRepository(db))
+	ownerService := service.NewOwnerService(db, userRepo, permRepo, accounts.Invalidate)
+	loyaltyService := service.NewLoyaltyService(db, repository.NewLoyaltyRepository(db), repository.NewVoucherRepository(db), ledgerRepo)
+	ledgerService := service.NewLedgerService(ledgerRepo)
+	waitlistService := service.NewWaitlistService(db, repository.NewWaitlistRepository(db))
+	pricingRuleService := service.NewPricingRuleService(db, repository.NewPricingRuleRepository(db))
+	branchService := service.NewBranchService(db, repository.NewBranchRepository(db))
+	return router.New(cfg, db, h.jwt, accounts, limits, h.providers, permRepo, router.Handlers{
+		Health:     handlers.NewHealthHandler(db, "test"),
+		Auth:       handlers.NewAuthHandler(h.auth),
+		User:       handlers.NewUserHandler(userService),
+		Movie:      handlers.NewMovieHandler(h.movies),
+		Batch:      handlers.NewBatchHandler(h.batchManager(db, runs), runs, db),
+		Hall:       handlers.NewHallHandler(h.halls),
+		Showtime:   handlers.NewShowtimeHandler(h.showtimes),
+		Booking:    handlers.NewBookingHandler(h.svc),
+		SSE:        handlers.NewSSEHandler(h.hub, h.tokens, h.showtimes),
+		Payment:    handlers.NewPaymentHandler(h.providers, h.svc, ""),
+		Staff:      handlers.NewStaffHandler(h.reports, h.svc, userService, h.emails),
+		Report:     handlers.NewReportHandler(h.reports),
+		Media:      handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
+		Audit:      handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
+		Voucher:    handlers.NewVoucherHandler(voucherService),
+		Membership: handlers.NewMembershipHandler(membershipService),
+		Combo:      handlers.NewComboHandler(comboService),
+		Article:    handlers.NewArticleHandler(articleService),
+		Owner:      handlers.NewOwnerHandler(ownerService),
+		Loyalty:    handlers.NewLoyaltyHandler(loyaltyService),
+		Ledger:     handlers.NewLedgerHandler(ledgerService),
+		Waitlist:   handlers.NewWaitlistHandler(waitlistService),
+		Pricing:    handlers.NewPricingRuleHandler(pricingRuleService),
+		Branch:     handlers.NewBranchHandler(branchService),
 	})
 }
 

@@ -68,3 +68,4 @@ func (r *auditRepository) List(ctx context.Context, query dto.AuditLogListQuery)
 	}
 	return rows, total, nil
 }
+

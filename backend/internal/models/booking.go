@@ -47,6 +47,13 @@ type Booking struct {
 	SoldVia        string     `gorm:"type:varchar(16);not null;default:online" json:"sold_via"`
 	CustomerName   string     `gorm:"type:varchar(255)" json:"customer_name,omitempty"`
 	CustomerPhone  string     `gorm:"type:varchar(20)" json:"customer_phone,omitempty"`
+	// VoucherID/VoucherDiscountAmount: at most one voucher per booking, applied
+	// to the booking total (not split across seat/combo lines). MembershipID
+	// is kept only for traceability — its discount is already baked into each
+	// BookingSeat.Price at hold time.
+	VoucherID             *string    `gorm:"type:uuid" json:"voucher_id,omitempty"`
+	VoucherDiscountAmount int64      `gorm:"not null;default:0" json:"voucher_discount_amount"`
+	MembershipID          *string    `gorm:"type:uuid" json:"membership_id,omitempty"`
 	// PaymentID is the attempt whose collected money this booking carries.
 	PaymentID         *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
 	PaidAt            *time.Time `json:"paid_at,omitempty"`
@@ -96,10 +103,11 @@ const (
 const (
 	RedeemOK        = "ok"
 	RedeemUsed      = "used"
-	RedeemWrongShow = "wrong_show"
-	RedeemNotFound  = "not_found"
-	RedeemTooEarly  = "too_early" // before the check-in window opens
-	RedeemClosed    = "closed"    // after the check-in window closed
+	RedeemWrongShow   = "wrong_show"
+	RedeemWrongBranch = "wrong_branch" // scanned at a branch other than the staff's own (Phần 4)
+	RedeemNotFound    = "not_found"
+	RedeemTooEarly    = "too_early" // before the check-in window opens
+	RedeemClosed      = "closed"    // after the check-in window closed
 )
 
 type Ticket struct {

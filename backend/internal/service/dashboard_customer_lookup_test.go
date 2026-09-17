@@ -67,7 +67,7 @@ func TestReport_StaffOverviewAwaitingCheckin(t *testing.T) {
 	order, err := e.svc.Order(e.ctx, e.users[0], id)
 	e.must(err)
 	e.moveShowStart(e.showID, 10*time.Minute) // inside the check-in window
-	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID); err != nil || res.Status != models.RedeemOK {
+	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID, ""); err != nil || res.Status != models.RedeemOK {
 		t.Fatalf("redeem: %+v %v", res, err)
 	}
 

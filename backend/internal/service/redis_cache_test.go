@@ -123,7 +123,7 @@ func TestShowtimes_CachedUntilWriteInvalidates(t *testing.T) {
 	t.Cleanup(func() { _ = c.Close() })
 
 	hallRepo := repository.NewHallRepository(e.db)
-	halls := service.NewHallService(e.db, hallRepo, c)
+	halls := service.NewHallService(e.db, hallRepo, repository.NewBranchRepository(e.db), c)
 	showtimes := service.NewShowtimeService(e.db, repository.NewShowtimeRepository(e.db), hallRepo,
 		repository.NewMovieRepository(e.db), 20, time.UTC, c, time.Minute)
 
@@ -177,5 +177,73 @@ func TestMovies_ReadsSucceedWhenRedisUnreachable(t *testing.T) {
 		ReleaseDate: time.Now().Format(dto.DateLayout), Status: models.MovieStatusShowing,
 	}); err != nil {
 		t.Fatalf("Create with redis down: %v", err)
+	}
+}
+// TestQueue_GatesHoldUntilAdmitted: Hold is refused for a queue_enabled
+// showtime until the user has joined and been admitted; once admitted, Hold
+// proceeds normally (Phần 2.3).
+func TestQueue_GatesHoldUntilAdmitted(t *testing.T) {
+	e := newEnv(t)
+	c := cache.New(redisAddr(), "", 0)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.Ping(ctx); err != nil {
+		t.Skipf("redis unavailable at %s: %v", redisAddr(), err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	queueSvc := service.NewQueueService(c)
+	repo := repository.NewBookingRepository(e.db)
+	svc := service.NewBookingService(service.BookingOptions{
+		DB: e.db, Repo: repo, Payments: repository.NewPaymentRepository(e.db),
+		Providers: e.providers, PublicBaseURL: merchantURL, HoldTTL: 10 * time.Minute, MaxSeats: 4,
+		Queue: queueSvc,
+	})
+
+	e.must(e.db.Exec(`UPDATE showtimes SET queue_enabled = true WHERE id = ?`, e.showID).Error)
+	t.Cleanup(func() { e.db.Exec(`UPDATE showtimes SET queue_enabled = false WHERE id = ?`, e.showID) })
+
+	_, err := svc.Hold(e.ctx, e.users[0], dto.HoldRequest{ShowID: e.showID, SeatIDs: e.ids("A1")})
+	if err == nil {
+		t.Fatal("want an error: user has not joined/been admitted to the queue")
+	}
+
+	if _, err := queueSvc.Join(e.ctx, e.showID, e.users[0]); err != nil {
+		t.Fatal(err)
+	}
+	status, err := queueSvc.Status(e.ctx, e.showID, e.users[0])
+	e.must(err)
+	if !status.Admitted {
+		t.Fatalf("status = %+v, want admitted (alone in the queue, well under the batch size)", status)
+	}
+
+	h, err := svc.Hold(e.ctx, e.users[0], dto.HoldRequest{ShowID: e.showID, SeatIDs: e.ids("A1")})
+	e.must(err)
+	if len(h.Seats) != 1 {
+		t.Fatalf("hold = %+v", h)
+	}
+}
+
+// TestQueue_FailsOpenWhenRedisUnreachable: a broken queue backend must never
+// block a sale (Phần 2.3 "Bắt buộc fail-open").
+func TestQueue_FailsOpenWhenRedisUnreachable(t *testing.T) {
+	e := newEnv(t)
+	dead := cache.New("127.0.0.1:1", "", 0) // nothing listens here
+	t.Cleanup(func() { _ = dead.Close() })
+
+	repo := repository.NewBookingRepository(e.db)
+	svc := service.NewBookingService(service.BookingOptions{
+		DB: e.db, Repo: repo, Payments: repository.NewPaymentRepository(e.db),
+		Providers: e.providers, PublicBaseURL: merchantURL, HoldTTL: 10 * time.Minute, MaxSeats: 4,
+		Queue: service.NewQueueService(dead),
+	})
+
+	e.must(e.db.Exec(`UPDATE showtimes SET queue_enabled = true WHERE id = ?`, e.showID).Error)
+	t.Cleanup(func() { e.db.Exec(`UPDATE showtimes SET queue_enabled = false WHERE id = ?`, e.showID) })
+
+	h, err := svc.Hold(e.ctx, e.users[0], dto.HoldRequest{ShowID: e.showID, SeatIDs: e.ids("A1")})
+	e.must(err)
+	if len(h.Seats) != 1 {
+		t.Fatalf("hold = %+v, want it to succeed despite the dead queue backend", h)
 	}
 }

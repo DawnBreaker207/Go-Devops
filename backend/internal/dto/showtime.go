@@ -38,6 +38,7 @@ type ShowtimeListItem struct {
 	AgeRating  string    `json:"age_rating"`
 	HallID     string    `json:"hall_id"`
 	HallName   string    `json:"hall_name"`
+	BranchID   string    `json:"branch_id,omitempty"`
 	StartAt    time.Time `json:"start_at"`
 	EndAt      time.Time `json:"end_at"`
 	Status     string    `json:"status"`
@@ -87,4 +88,24 @@ type SeatMapResponse struct {
 	AisleAfterCols []int            `json:"aisle_after_cols"`
 	Prices         map[string]int64 `json:"prices"`
 	Seats          []SeatMapSeat    `json:"seats"`
+}
+
+// SeatSuggestionRequest asks for one contiguous block of `count` seats
+// (optionally restricted to one seat_type) — a UX aid only, not a hold; the
+// caller still goes through the normal hold flow to actually reserve it.
+type SeatSuggestionRequest struct {
+	Count    int    `form:"count" binding:"required,min=1,max=20"`
+	SeatType string `form:"seat_type" binding:"omitempty,oneof=standard vip couple recliner"`
+}
+
+// SeatSuggestionResponse: OrphanWarning is true when taking this exact block
+// would strand a single available seat next to it (occupied/gap/edge on its
+// far side) — a soft warning, not a block (ADVANCED_FEATURES_DISCUSSION.md
+// Phần 2.5 "ghế lẻ mồ côi").
+type SeatSuggestionResponse struct {
+	ShowtimeSeatIDs []string `json:"showtime_seat_ids"`
+	Labels          []string `json:"labels"`
+	SeatType        string   `json:"seat_type"`
+	Price           int64    `json:"price"`
+	OrphanWarning   bool     `json:"orphan_warning"`
 }

@@ -95,3 +95,46 @@ func (c *Cache) Incr(ctx context.Context, key string) (int64, error) {
 	}
 	return c.rdb.Incr(ctx, key).Result()
 }
+// ZAdd appends a member to a sorted set (virtual queue's FIFO order); a nil
+// Cache is a no-op returning ok=false so the caller can fail open.
+func (c *Cache) ZAdd(ctx context.Context, key string, score float64, member string) (bool, error) {
+	if c == nil {
+		return false, nil
+	}
+	if err := c.rdb.ZAdd(ctx, key, redis.Z{Score: score, Member: member}).Err(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ZRank returns a member's 0-based rank (lowest score first) and whether it
+// is present at all.
+func (c *Cache) ZRank(ctx context.Context, key, member string) (int64, bool, error) {
+	if c == nil {
+		return 0, false, nil
+	}
+	rank, err := c.rdb.ZRank(ctx, key, member).Result()
+	if err == redis.Nil {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return rank, true, nil
+}
+
+// ZRem removes a member (leaving the queue, or having been admitted).
+func (c *Cache) ZRem(ctx context.Context, key, member string) error {
+	if c == nil {
+		return nil
+	}
+	return c.rdb.ZRem(ctx, key, member).Err()
+}
+
+// Expire sets a TTL on an existing key so an abandoned queue does not live forever.
+func (c *Cache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	if c == nil {
+		return nil
+	}
+	return c.rdb.Expire(ctx, key, ttl).Err()
+}

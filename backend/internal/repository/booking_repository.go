@@ -35,6 +35,7 @@ type TicketGateRow struct {
 	ShowtimeID    string    `gorm:"column:showtime_id"`
 	StartAt       time.Time `gorm:"column:start_at"`
 	HallName      string    `gorm:"column:hall_name"`
+	BranchID      string    `gorm:"column:branch_id"`
 	MovieTitle    string    `gorm:"column:movie_title"`
 	AgeRating     string    `gorm:"column:age_rating"`
 	RowLabel      string    `gorm:"column:row_label"`
@@ -75,6 +76,8 @@ type BookingRepository interface {
 
 	LockUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) error
 	UserActive(ctx context.Context, tx *gorm.DB, userID string) (bool, error)
+	StaffBranch(ctx context.Context, userID string) (string, error)
+	ShowtimeQueueEnabled(ctx context.Context, showtimeID string) (bool, error)
 	LockBooking(ctx context.Context, tx *gorm.DB, id string) (*models.Booking, error)
 	LockLatestByKey(ctx context.Context, tx *gorm.DB, idempotencyKey string) (*models.Booking, error)
 	LockPendingByUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) (*models.Booking, error)
@@ -198,6 +201,32 @@ func (r *bookingRepository) UserActive(ctx context.Context, tx *gorm.DB, userID 
 		return false, fmt.Errorf("read user active: %w", err)
 	}
 	return len(active) == 1 && active[0], nil
+}
+
+// ShowtimeQueueEnabled is a cheap, unlocked pre-check run before Hold opens
+// its transaction (Phần 2.3: the queue gate sits in front of, not inside,
+// the seat-locking transaction).
+func (r *bookingRepository) ShowtimeQueueEnabled(ctx context.Context, showtimeID string) (bool, error) {
+	var enabled []bool
+	if err := r.db.WithContext(ctx).Raw(`SELECT queue_enabled FROM showtimes WHERE id = ?`, showtimeID).
+		Scan(&enabled).Error; err != nil {
+		return false, fmt.Errorf("read showtime queue flag: %w", err)
+	}
+	return len(enabled) == 1 && enabled[0], nil
+}
+
+// StaffBranch reads a staff account's assigned branch for the check-in gate
+// (Phần 4); "" means unscoped (serves/scans at any branch).
+func (r *bookingRepository) StaffBranch(ctx context.Context, userID string) (string, error) {
+	var branchID []string
+	if err := r.db.WithContext(ctx).Raw(`SELECT branch_id FROM users WHERE id = ? AND branch_id IS NOT NULL`, userID).
+		Scan(&branchID).Error; err != nil {
+		return "", fmt.Errorf("read staff branch: %w", err)
+	}
+	if len(branchID) == 0 {
+		return "", nil
+	}
+	return branchID[0], nil
 }
 
 // Every state change of a booking (pay, IPN, confirm, refund, replace) takes this row lock.
@@ -432,7 +461,7 @@ func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*Tic
 	}
 	var rows []TicketGateRow
 	if err := r.db.WithContext(ctx).Raw(`SELECT t.id, t.code, t.status, b.id AS booking_id, b.status AS booking_status,
-			b.showtime_id, st.start_at, h.name AS hall_name, m.title AS movie_title,
+			b.showtime_id, st.start_at, h.name AS hall_name, h.branch_id, m.title AS movie_title,
 			m.age_rating AS age_rating, s.row_label, s.col_number
 		FROM tickets t
 		JOIN bookings b ON b.id = t.booking_id
@@ -508,7 +537,31 @@ func (r *bookingRepository) ExpireOverdueUnpaid(ctx context.Context, limit int) 
 				LIMIT ?
 				FOR UPDATE SKIP LOCKED
 			  )
-			RETURNING id, showtime_id
+			RETURNING id, showtime_id, voucher_id
+		),
+		-- A booking that expired unpaid never redeemed its voucher for real:
+		-- release the usage slot and the redemption row (Phần 1.1 rollback rule).
+		vouchers_released AS (
+			UPDATE vouchers SET usage_count = GREATEST(usage_count - 1, 0), updated_at = NOW()
+			WHERE id IN (SELECT voucher_id FROM expired WHERE voucher_id IS NOT NULL)
+		),
+		redemptions_deleted AS (
+			DELETE FROM voucher_redemptions WHERE booking_id IN (SELECT id FROM expired)
+		),
+		-- Same rollback for any combo stock reserved at hold time (Phần 2.2):
+		-- a no-op where no combo_branch_stock row exists for that (branch, combo).
+		combo_lines AS (
+			SELECT h.branch_id, bc.combo_id, SUM(bc.quantity) AS qty
+			FROM booking_combos bc
+			JOIN expired e ON e.id = bc.booking_id
+			JOIN showtimes st ON st.id = e.showtime_id
+			JOIN halls h ON h.id = st.hall_id
+			GROUP BY h.branch_id, bc.combo_id
+		),
+		combo_stock_released AS (
+			UPDATE combo_branch_stock cbs SET stock_quantity = cbs.stock_quantity + combo_lines.qty, updated_at = NOW()
+			FROM combo_lines
+			WHERE cbs.branch_id = combo_lines.branch_id AND cbs.combo_id = combo_lines.combo_id
 		)
 		INSERT INTO audit_logs (id, actor_role, action, resource_type, resource_id, booking_id, after_json, outcome, created_at)
 		SELECT gen_random_uuid(), 'system', 'orders.expire', 'booking', id::text, id,

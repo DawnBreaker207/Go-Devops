@@ -13,6 +13,9 @@ import (
 // default to the template's own layout; any of them given explicitly still
 // override it.
 type HallRequest struct {
+	// Omitted defaults to the oldest active branch (Phần 4) — most installs
+	// have exactly one branch and never need to set this.
+	BranchID    string `json:"branch_id" binding:"omitempty"`
 	Name        string `json:"name" binding:"required,min=1,max=255" example:"Phong 2"`
 	Template    string `json:"template" binding:"omitempty,oneof=small medium large" example:"medium"`
 	Rows        int    `json:"rows" binding:"omitempty,min=1,max=50" example:"8"`
@@ -88,6 +91,7 @@ type SeatUpdateRequest struct {
 
 type HallResponse struct {
 	ID             string    `json:"id"`
+	BranchID       string    `json:"branch_id"`
 	Name           string    `json:"name"`
 	Rows           int       `json:"rows"`
 	SeatsPerRow    int       `json:"seats_per_row"`
@@ -101,6 +105,7 @@ type HallResponse struct {
 func NewHallResponse(hall *models.Hall) HallResponse {
 	return HallResponse{
 		ID:             hall.ID,
+		BranchID:       hall.BranchID,
 		Name:           hall.Name,
 		Rows:           hall.Rows,
 		SeatsPerRow:    hall.SeatsPerRow,

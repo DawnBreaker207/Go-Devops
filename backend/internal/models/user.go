@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	RoleOwner    = "owner"
 	RoleAdmin    = "admin"
 	RoleStaff    = "staff"
 	RoleCustomer = "customer"
@@ -24,7 +25,10 @@ type User struct {
 	// with AcceptedTermsVersion < the configured version can not log in.
 	AcceptedTermsVersion int             `gorm:"not null;default:0" json:"accepted_terms_version"`
 	// Active false locks the account: no login, refresh, hold or pay.
-	Active    bool           `gorm:"not null;default:true" json:"active"`
+	Active bool `gorm:"not null;default:true" json:"active"`
+	// BranchID is only meaningful for role=staff (Phần 4): nil means
+	// unscoped (serves/sees every branch).
+	BranchID  *string        `gorm:"type:uuid" json:"branch_id,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

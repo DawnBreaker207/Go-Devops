@@ -104,7 +104,7 @@ SELECT gen_random_uuid(), CAST(@date AS date),
 		) ORDER BY start_at) FROM shows), '[]'::jsonb)),
 	NOW(), NOW()
 FROM totals
-ON CONFLICT (report_date) DO UPDATE SET
+ON CONFLICT (report_date, branch_id) DO UPDATE SET
 	total_revenue = EXCLUDED.total_revenue,
 	tickets_sold = EXCLUDED.tickets_sold,
 	seats_sold = EXCLUDED.seats_sold,

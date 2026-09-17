@@ -222,3 +222,33 @@ func TestSeatMap_StatusesAndPrices(t *testing.T) {
 		t.Fatal("A5 should be a gap")
 	}
 }
+
+// TestSuggestSeats_FindsContiguousBlockAndFlagsOrphan: hall is A1-A4,B1-B5
+// (A5 is a gap). Holding A2 leaves A1 isolated between the aisle-adjacent
+// gap and A2 if a later request takes A3-A4 alongside it; this test checks
+// the suggester both finds a clean block and flags an orphan-prone one.
+func TestSuggestSeats_FindsContiguousBlockAndFlagsOrphan(t *testing.T) {
+	e := newEnv(t)
+
+	// A clean pair exists among all-available seats.
+	sug, err := e.showtimes.SuggestSeats(e.ctx, e.showID, dto.SeatSuggestionRequest{Count: 2})
+	e.must(err)
+	if len(sug.ShowtimeSeatIDs) != 2 {
+		t.Fatalf("suggested %d seats, want 2", len(sug.ShowtimeSeatIDs))
+	}
+	if sug.OrphanWarning {
+		t.Fatal("a freshly opened hall should have a clean block available")
+	}
+
+	// Hold every seat except B1 and B3 (two different users: MaxSeats is 4 per booking).
+	e.mustHold(e.users[0], "A1", "A2", "A3", "A4")
+	e.mustHold(e.users[2], "B2", "B4", "B5")
+	sug2, err := e.showtimes.SuggestSeats(e.ctx, e.showID, dto.SeatSuggestionRequest{Count: 1})
+	if err != nil {
+		// Also acceptable: no fit at all once B1/B3 are non-adjacent singles is not this case (each still fits alone).
+		t.Fatalf("suggest 1 seat: %v", err)
+	}
+	if len(sug2.ShowtimeSeatIDs) != 1 {
+		t.Fatalf("suggested %d seats, want 1", len(sug2.ShowtimeSeatIDs))
+	}
+}

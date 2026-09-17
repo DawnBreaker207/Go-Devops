@@ -114,7 +114,23 @@ func (h *ShowtimeHandler) ListForMovie(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.OK(c, items)
+	response.OK(c, filterByBranch(items, c.Query("branch_id")))
+}
+
+// filterByBranch: the underlying list is cached by (generation, movie, date)
+// only, so branch is filtered here rather than threaded into the cache key
+// (Phần 4 "khách chọn chi nhánh trước").
+func filterByBranch(items []dto.ShowtimeListItem, branchID string) []dto.ShowtimeListItem {
+	if branchID == "" {
+		return items
+	}
+	out := make([]dto.ShowtimeListItem, 0, len(items))
+	for _, it := range items {
+		if it.BranchID == branchID {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // List godoc
@@ -135,7 +151,7 @@ func (h *ShowtimeHandler) List(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.OK(c, items)
+	response.OK(c, filterByBranch(items, c.Query("branch_id")))
 }
 
 // SeatMap godoc
@@ -156,4 +172,58 @@ func (h *ShowtimeHandler) SeatMap(c *gin.Context) {
 		return
 	}
 	response.OK(c, seatMap)
+}
+
+// SuggestSeats godoc
+//
+//	@Summary		Suggest one contiguous block of N available seats
+//	@Description	UX aid only, not a hold. orphan_warning=true means this exact block would strand a single seat next to it.
+//	@Tags			showtimes
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id			path		string	true	"Showtime ID"
+//	@Param			count		query		int		true	"How many adjacent seats"
+//	@Param			seat_type	query		string	false	"standard | vip | couple | recliner"
+//	@Success		200			{object}	response.Body{data=dto.SeatSuggestionResponse}
+//	@Failure		400			{object}	response.Body
+//	@Failure		404			{object}	response.Body
+//	@Failure		409			{object}	response.Body
+//	@Router			/shows/{id}/seats/suggest [get]
+func (h *ShowtimeHandler) SuggestSeats(c *gin.Context) {
+	var req dto.SeatSuggestionRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	suggestion, err := h.showtimeService.SuggestSeats(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, suggestion)
+}
+
+// SetQueueEnabled godoc
+//
+//	@Summary		Toggle the manual virtual-queue gate for a showtime
+//	@Tags			showtimes
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path	string					true	"Showtime ID"
+//	@Param			payload	body	dto.SetQueueEnabledRequest	true	"enabled"
+//	@Success		200		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Router			/admin/showtimes/{id}/queue [put]
+func (h *ShowtimeHandler) SetQueueEnabled(c *gin.Context) {
+	var req dto.SetQueueEnabledRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.showtimeService.SetQueueEnabled(c.Request.Context(), c.Param("id"), req.Enabled); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.NoContentOK(c, "updated")
 }

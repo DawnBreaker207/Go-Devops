@@ -16,6 +16,7 @@ import (
 )
 
 type ShowtimeService interface {
+	SuggestSeats(ctx context.Context, showtimeID string, req dto.SeatSuggestionRequest) (*dto.SeatSuggestionResponse, error)
 	Create(ctx context.Context, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error)
 	Update(ctx context.Context, id string, req dto.ShowtimeRequest) (*dto.ShowtimeResponse, error)
 	Delete(ctx context.Context, id string) error
@@ -23,6 +24,8 @@ type ShowtimeService interface {
 	ListByDate(ctx context.Context, date string) ([]dto.ShowtimeListItem, error)
 	SeatMap(ctx context.Context, showtimeID string) (*dto.SeatMapResponse, error)
 	OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
+	// SetQueueEnabled is the manual virtual-queue activation switch (Phần 2.3/3).
+	SetQueueEnabled(ctx context.Context, id string, enabled bool) error
 }
 
 func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error) {
@@ -439,6 +442,7 @@ func (s *showtimeService) pickDayUncached(ctx context.Context, movieID, date str
 			AgeRating:  row.AgeRating,
 			HallID:     row.HallID,
 			HallName:   row.HallName,
+			BranchID:   row.BranchID,
 			StartAt:    row.StartAt,
 			EndAt:      row.EndAt,
 			Status:     row.Status,
@@ -446,6 +450,79 @@ func (s *showtimeService) pickDayUncached(ctx context.Context, movieID, date str
 		})
 	}
 	return result, nil
+}
+
+// SuggestSeats scans each row for a contiguous block of req.Count seats,
+// all available and (if set) of req.SeatType. Among rows that have a fit, it
+// prefers the first block found with no orphan warning; if none is clean, it
+// returns the first block found regardless — a suggestion, never a hold
+// (ADVANCED_FEATURES_DISCUSSION.md Phần 2.5).
+func (s *showtimeService) SuggestSeats(ctx context.Context, showtimeID string, req dto.SeatSuggestionRequest) (*dto.SeatSuggestionResponse, error) {
+	seatMap, err := s.SeatMap(ctx, showtimeID)
+	if err != nil {
+		return nil, err
+	}
+	byRow := make(map[string][]dto.SeatMapSeat)
+	order := make([]string, 0)
+	for _, seat := range seatMap.Seats {
+		if _, ok := byRow[seat.RowLabel]; !ok {
+			order = append(order, seat.RowLabel)
+		}
+		byRow[seat.RowLabel] = append(byRow[seat.RowLabel], seat)
+	}
+
+	fits := func(seat dto.SeatMapSeat) bool {
+		return !seat.IsGap && seat.Status == models.SeatStatusAvailable && (req.SeatType == "" || seat.SeatType == req.SeatType)
+	}
+
+	var fallback *dto.SeatSuggestionResponse
+	for _, row := range order {
+		seats := byRow[row] // already column-ordered: SeatMap's underlying query orders by row/col.
+		for start := 0; start+req.Count <= len(seats); start++ {
+			window := seats[start : start+req.Count]
+			ok := true
+			for _, seat := range window {
+				if !fits(seat) {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+			// A neighbor becomes a stranded single only if it is itself
+			// available AND has nothing available beyond it either.
+			orphanLeft := start > 0 && fits(seats[start-1]) && (start-2 < 0 || !fits(seats[start-2]))
+			orphanRight := start+req.Count < len(seats) && fits(seats[start+req.Count]) &&
+				(start+req.Count+1 >= len(seats) || !fits(seats[start+req.Count+1]))
+			candidate := buildSeatSuggestion(window, orphanLeft || orphanRight)
+			if !candidate.OrphanWarning {
+				return &candidate, nil
+			}
+			if fallback == nil {
+				fallback = &candidate
+			}
+		}
+	}
+	if fallback != nil {
+		return fallback, nil
+	}
+	return nil, apperrors.Conflict("no matching block of seats is available")
+}
+
+func buildSeatSuggestion(window []dto.SeatMapSeat, orphanWarning bool) dto.SeatSuggestionResponse {
+	res := dto.SeatSuggestionResponse{
+		ShowtimeSeatIDs: make([]string, 0, len(window)),
+		Labels:          make([]string, 0, len(window)),
+		SeatType:        window[0].SeatType,
+		OrphanWarning:   orphanWarning,
+	}
+	for _, seat := range window {
+		res.ShowtimeSeatIDs = append(res.ShowtimeSeatIDs, seat.ShowtimeSeatID)
+		res.Labels = append(res.Labels, seat.Label)
+		res.Price += seat.Price
+	}
+	return res
 }
 
 func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.SeatMapResponse, error) {
@@ -497,4 +574,23 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 		})
 	}
 	return response, nil
+}
+
+func (s *showtimeService) SetQueueEnabled(ctx context.Context, id string, enabled bool) error {
+	row, err := s.showtime.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return apperrors.ErrShowtimeNotFound
+	}
+	if err := s.showtime.SetQueueEnabled(ctx, id, enabled); err != nil {
+		return err
+	}
+	if rec, ok := audit.FromContext(ctx); ok {
+		rec.ResourceID = id
+		rec.After = map[string]any{"queue_enabled": enabled}
+		return audit.In(ctx, s.db, rec)
+	}
+	return nil
 }

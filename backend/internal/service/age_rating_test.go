@@ -55,7 +55,7 @@ func TestAgeRating_ShowsEverywhere(t *testing.T) {
 	}
 
 	e.moveShowStart(showID, 10*time.Minute)
-	res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, showID)
+	res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, showID, "")
 	e.must(err)
 	if res.Status != models.RedeemOK || res.AgeRating != "T13" {
 		t.Fatalf("redeem = %s / %q", res.Status, res.AgeRating)

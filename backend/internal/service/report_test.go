@@ -1,10 +1,13 @@
 package service_test
 
 import (
+	"bytes"
 	"net/http"
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/xuri/excelize/v2"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/jobs"
@@ -141,7 +144,7 @@ func TestStaffBoard(t *testing.T) {
 	order, err := e.svc.Order(e.ctx, e.users[0], id)
 	e.must(err)
 	e.moveShowStart(e.showID, 10*time.Minute)
-	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID); err != nil || res.Status != models.RedeemOK {
+	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID, ""); err != nil || res.Status != models.RedeemOK {
 		t.Fatalf("redeem: %+v %v", res, err)
 	}
 	e.mustHold(e.users[1], "B1")
@@ -181,5 +184,31 @@ func TestStaffBoard(t *testing.T) {
 	}
 	if _, err := e.reports.StaffBoard(e.ctx, "14/09/2026"); httpStatus(err) != http.StatusBadRequest {
 		t.Fatalf("bad date: err = %v", err)
+	}
+}
+
+// TestExportXLSX_ProducesParseableWorkbook checks the export is a real,
+// readable .xlsx (not just non-empty bytes).
+func TestExportXLSX_ProducesParseableWorkbook(t *testing.T) {
+	e := newEnv(t)
+	e.confirmed(e.users[0], "A1")
+	_, err := e.reports.CloseDay(e.ctx, time.Now())
+	e.must(err)
+
+	data, filename, err := e.reports.ExportXLSX(e.ctx, "", "")
+	e.must(err)
+	if len(data) == 0 {
+		t.Fatal("empty xlsx bytes")
+	}
+	if filename == "" {
+		t.Fatal("empty filename")
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	e.must(err)
+	defer f.Close()
+	rows, err := f.GetRows("Revenue")
+	e.must(err)
+	if len(rows) < 2 {
+		t.Fatalf("got %d rows, want at least a header + 1 data row", len(rows))
 	}
 }

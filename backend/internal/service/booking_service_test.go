@@ -649,7 +649,7 @@ func TestRedeem(t *testing.T) {
 
 	check := func(ref, show, want string) *dto.RedeemResponse {
 		t.Helper()
-		res, err := e.svc.Redeem(e.ctx, ref, show)
+		res, err := e.svc.Redeem(e.ctx, ref, show, "")
 		e.must(err)
 		if res.Status != want {
 			t.Fatalf("redeem %s at %s = %s, want %s", ref, show, res.Status, want)
@@ -675,7 +675,7 @@ func TestRedeem(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r, err := e.svc.Redeem(context.Background(), o2.Tickets[0].Code, e.showID)
+			r, err := e.svc.Redeem(context.Background(), o2.Tickets[0].Code, e.showID, "")
 			if err == nil && r.Status == models.RedeemOK {
 				ok.Add(1)
 			}

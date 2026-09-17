@@ -94,6 +94,16 @@ func run() error {
 	showtimeRepo := repository.NewShowtimeRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
+	voucherRepo := repository.NewVoucherRepository(db)
+	membershipRepo := repository.NewMembershipRepository(db)
+	comboRepo := repository.NewComboRepository(db)
+	articleRepo := repository.NewArticleRepository(db)
+	permRepo := repository.NewAdminPermissionRepository(db)
+	loyaltyRepo := repository.NewLoyaltyRepository(db)
+	ledgerRepo := repository.NewLedgerRepository(db)
+	waitlistRepo := repository.NewWaitlistRepository(db)
+	pricingRuleRepo := repository.NewPricingRuleRepository(db)
+	branchRepo := repository.NewBranchRepository(db)
 
 	loginGuard := ratelimit.NewFailureLimiter(cfg.RateLimit.Login.MaxFailures, cfg.RateLimit.Login.Lockout, nil)
 	mailer := notify.NewMockMailer(cfg.Mail.OutboxDir)
@@ -109,8 +119,19 @@ func run() error {
 		defer catalogCache.Close()
 	}
 	movieService := service.NewMovieService(db, movieRepo, catalogCache, cfg.Redis.TTL)
-	hallService := service.NewHallService(db, hallRepo, catalogCache)
+	hallService := service.NewHallService(db, hallRepo, branchRepo, catalogCache)
+	branchService := service.NewBranchService(db, branchRepo)
+	queueService := service.NewQueueService(catalogCache)
 	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location, catalogCache, cfg.Redis.ShowtimesTTL)
+	voucherService := service.NewVoucherService(db, voucherRepo)
+	membershipService := service.NewMembershipService(db, membershipRepo, ledgerRepo)
+	comboService := service.NewComboService(db, comboRepo)
+	articleService := service.NewArticleService(db, articleRepo)
+	ownerService := service.NewOwnerService(db, userRepo, permRepo, accountStatus.Invalidate)
+	loyaltyService := service.NewLoyaltyService(db, loyaltyRepo, voucherRepo, ledgerRepo)
+	ledgerService := service.NewLedgerService(ledgerRepo)
+	waitlistService := service.NewWaitlistService(db, waitlistRepo)
+	pricingRuleService := service.NewPricingRuleService(db, pricingRuleRepo)
 
 	providers, err := buildPaymentProviders(cfg)
 	if err != nil {
@@ -133,6 +154,15 @@ func run() error {
 		DB:            db,
 		Repo:          bookingRepo,
 		Payments:      paymentRepo,
+		Vouchers:      voucherRepo,
+		Memberships:   membershipRepo,
+		Combos:        comboRepo,
+		Loyalty:       loyaltyService,
+		Ledger:        ledgerRepo,
+		Waitlist:      waitlistRepo,
+		PricingRules:  pricingRuleRepo,
+		Branches:      branchRepo,
+		Queue:         queueService,
 		Providers:     providers,
 		PublicBaseURL: cfg.Payment.PublicBaseURL,
 		HoldTTL:       time.Duration(cfg.Booking.HoldTTLMinutes) * time.Minute,
@@ -170,6 +200,7 @@ func run() error {
 	batchManager.Register(jobs.NewSendTicketEmails(emailService))
 	batchManager.Register(jobs.NewCloseDay(reportService, location))
 	batchManager.Register(jobs.NewCleanup(repository.NewMaintenanceRepository(db), cfg.Audit.RetentionDays, location))
+	batchManager.Register(jobs.NewMembershipReminders(membershipRepo, userRepo, mailer, location))
 	if err := batchManager.Start(context.Background()); err != nil {
 		return fmt.Errorf("start batch jobs: %w", err)
 	}
@@ -180,21 +211,32 @@ func run() error {
 		go jobs.ConsumeTicketEmails(workerCtx, queueClient, emailService)
 	}
 
-	engine := router.New(cfg, db, jwtManager, accountStatus, limits, providers, router.Handlers{
-		Health:   handlers.NewHealthHandler(db, cfg.App.Name),
-		Auth:     handlers.NewAuthHandler(authService),
-		User:     handlers.NewUserHandler(userService),
-		Movie:    handlers.NewMovieHandler(movieService),
-		Batch:    handlers.NewBatchHandler(batchManager, batchRepo, db),
-		Hall:     handlers.NewHallHandler(hallService),
-		Showtime: handlers.NewShowtimeHandler(showtimeService),
-		Booking:  handlers.NewBookingHandler(bookingService),
-		SSE:      handlers.NewSSEHandler(hub, tokens, showtimeService),
-		Payment:  handlers.NewPaymentHandler(providers, bookingService, cfg.Payment.ReturnRedirectURL),
-		Staff:    handlers.NewStaffHandler(reportService, bookingService, userService),
-		Report:   handlers.NewReportHandler(reportService),
-		Media:    handlers.NewMediaHandler(mediaService, mediaDir, maxUpload),
-		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
+	engine := router.New(cfg, db, jwtManager, accountStatus, limits, providers, permRepo, router.Handlers{
+		Health:     handlers.NewHealthHandler(db, cfg.App.Name),
+		Auth:       handlers.NewAuthHandler(authService),
+		User:       handlers.NewUserHandler(userService),
+		Movie:      handlers.NewMovieHandler(movieService),
+		Batch:      handlers.NewBatchHandler(batchManager, batchRepo, db),
+		Hall:       handlers.NewHallHandler(hallService),
+		Showtime:   handlers.NewShowtimeHandler(showtimeService),
+		Booking:    handlers.NewBookingHandler(bookingService),
+		SSE:        handlers.NewSSEHandler(hub, tokens, showtimeService),
+		Payment:    handlers.NewPaymentHandler(providers, bookingService, cfg.Payment.ReturnRedirectURL),
+		Staff:      handlers.NewStaffHandler(reportService, bookingService, userService, emailService),
+		Report:     handlers.NewReportHandler(reportService),
+		Media:      handlers.NewMediaHandler(mediaService, mediaDir, maxUpload),
+		Audit:      handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
+		Voucher:    handlers.NewVoucherHandler(voucherService),
+		Membership: handlers.NewMembershipHandler(membershipService),
+		Combo:      handlers.NewComboHandler(comboService),
+		Article:    handlers.NewArticleHandler(articleService),
+		Owner:      handlers.NewOwnerHandler(ownerService),
+		Loyalty:    handlers.NewLoyaltyHandler(loyaltyService),
+		Ledger:     handlers.NewLedgerHandler(ledgerService),
+		Waitlist:   handlers.NewWaitlistHandler(waitlistService),
+		Pricing:    handlers.NewPricingRuleHandler(pricingRuleService),
+		Branch:     handlers.NewBranchHandler(branchService),
+		Queue:      handlers.NewQueueHandler(queueService),
 	})
 
 	server := &http.Server{

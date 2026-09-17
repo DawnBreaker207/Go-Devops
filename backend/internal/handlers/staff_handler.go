@@ -14,10 +14,30 @@ type StaffHandler struct {
 	reports  service.ReportService
 	bookings service.BookingService
 	users    service.UserService
+	emails   service.TicketEmailService
 }
 
-func NewStaffHandler(reports service.ReportService, bookings service.BookingService, users service.UserService) *StaffHandler {
-	return &StaffHandler{reports: reports, bookings: bookings, users: users}
+func NewStaffHandler(reports service.ReportService, bookings service.BookingService, users service.UserService, emails service.TicketEmailService) *StaffHandler {
+	return &StaffHandler{reports: reports, bookings: bookings, users: users, emails: emails}
+}
+
+// ResendTicketEmail godoc
+//
+//	@Summary		Resend the ticket email for a confirmed online order
+//	@Tags			staff
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	string	true	"Booking ID"
+//	@Success		200	{object}	response.Body
+//	@Failure		400	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Router			/staff/orders/{id}/resend-email [post]
+func (h *StaffHandler) ResendTicketEmail(c *gin.Context) {
+	if err := h.emails.Resend(c.Request.Context(), c.Param("id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.NoContentOK(c, "sent")
 }
 
 // Dashboard godoc

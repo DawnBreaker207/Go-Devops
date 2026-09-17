@@ -25,6 +25,7 @@ type ShowtimePickRow struct {
 	AgeRating  string    `gorm:"column:age_rating"`
 	HallID     string    `gorm:"column:hall_id"`
 	HallName   string    `gorm:"column:hall_name"`
+	BranchID   string    `gorm:"column:branch_id"`
 	StartAt    time.Time `gorm:"column:start_at"`
 	EndAt      time.Time `gorm:"column:end_at"`
 	Status     string    `gorm:"column:status"`
@@ -174,7 +175,7 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 		Select(`showtimes.id, showtimes.movie_id, movies.title AS movie_title,
 			movies.age_rating AS age_rating, showtimes.hall_id,
 			showtimes.start_at, showtimes.end_at, showtimes.status, halls.name AS hall_name,
-			MIN(hall_prices.price) AS from_price`).
+			halls.branch_id, MIN(hall_prices.price) AS from_price`).
 		Joins("JOIN movies ON movies.id = showtimes.movie_id AND movies.deleted_at IS NULL AND movies.status = ?", models.MovieStatusShowing).
 		Joins("JOIN halls ON halls.id = showtimes.hall_id AND halls.deleted_at IS NULL").
 		Joins("JOIN hall_prices ON hall_prices.hall_id = showtimes.hall_id")
@@ -188,7 +189,7 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 		Where("showtimes.start_at >= ?", now).
 		Where(`showtimes.hall_id IN (SELECT hall_id FROM hall_prices
 			GROUP BY hall_id HAVING count(DISTINCT seat_type) = ?)`, len(models.AllSeatTypes)).
-		Group("showtimes.id, movies.id, halls.name").
+		Group("showtimes.id, movies.id, halls.name, halls.branch_id").
 		Order("showtimes.start_at").
 		Scan(&rows).Error
 	return rows, err
@@ -215,4 +216,8 @@ func (r *ShowtimeRepository) SeatMap(ctx context.Context, showtimeID string) ([]
 		Order("seats.row_index, seats.col_number").
 		Scan(&rows).Error
 	return rows, err
+}
+
+func (r *ShowtimeRepository) SetQueueEnabled(ctx context.Context, id string, enabled bool) error {
+	return r.db.WithContext(ctx).Exec(`UPDATE showtimes SET queue_enabled = ?, updated_at = NOW() WHERE id = ?`, enabled, id).Error
 }

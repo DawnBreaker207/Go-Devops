@@ -23,8 +23,10 @@ type UserRepository interface {
 	List(ctx context.Context, query dto.UserListQuery) ([]models.User, int64, error)
 	LockByID(ctx context.Context, tx *gorm.DB, id string) (*models.User, error)
 	LockActiveAdmins(ctx context.Context, tx *gorm.DB) ([]string, error)
+	LockActiveOwners(ctx context.Context, tx *gorm.DB) ([]string, error)
 	SetActive(ctx context.Context, tx *gorm.DB, id string, active bool) error
 	SetRole(ctx context.Context, tx *gorm.DB, id, role string) error
+	SetBranch(ctx context.Context, tx *gorm.DB, id, branchID string) error
 	SetPassword(ctx context.Context, tx *gorm.DB, id, hash string) error
 	UpdateProfile(ctx context.Context, tx *gorm.DB, id, fullName, phone string) error
 	SetAcceptedTerms(ctx context.Context, tx *gorm.DB, id string, version int) error
@@ -134,9 +136,27 @@ func (r *userRepository) LockActiveAdmins(ctx context.Context, tx *gorm.DB) ([]s
 	return ids, nil
 }
 
+// Locks active owners in id order so concurrent demotions serialize and can not remove the last owner.
+func (r *userRepository) LockActiveOwners(ctx context.Context, tx *gorm.DB) ([]string, error) {
+	var ids []string
+	if err := tx.WithContext(ctx).Raw(`SELECT id FROM users
+		WHERE role = ? AND active AND deleted_at IS NULL ORDER BY id FOR UPDATE`, models.RoleOwner).
+		Scan(&ids).Error; err != nil {
+		return nil, fmt.Errorf("lock active owners: %w", err)
+	}
+	return ids, nil
+}
+
 func (r *userRepository) SetRole(ctx context.Context, tx *gorm.DB, id, role string) error {
 	if err := tx.WithContext(ctx).Exec(`UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?`, role, id).Error; err != nil {
 		return fmt.Errorf("set user role: %w", err)
+	}
+	return nil
+}
+
+func (r *userRepository) SetBranch(ctx context.Context, tx *gorm.DB, id, branchID string) error {
+	if err := tx.WithContext(ctx).Exec(`UPDATE users SET branch_id = ?, updated_at = NOW() WHERE id = ?`, branchID, id).Error; err != nil {
+		return fmt.Errorf("set user branch: %w", err)
 	}
 	return nil
 }

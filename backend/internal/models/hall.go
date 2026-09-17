@@ -23,6 +23,7 @@ const (
 
 type Hall struct {
 	ID             string         `gorm:"type:uuid;primaryKey" json:"id"`
+	BranchID       string         `gorm:"type:uuid;not null" json:"branch_id"`
 	Name           string         `gorm:"type:varchar(255);not null" json:"name"`
 	Rows           int            `gorm:"not null" json:"rows"`
 	SeatsPerRow    int            `gorm:"not null" json:"seats_per_row"`

@@ -55,3 +55,25 @@ func (h *ReportHandler) Overview(c *gin.Context) {
 	}
 	response.OK(c, res)
 }
+
+// ExportXLSX godoc
+//
+//	@Summary		Download the revenue report as an .xlsx workbook
+//	@Description	Same data and default range as GET /admin/reports/daily.
+//	@Tags			reports
+//	@Produce		application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+//	@Security		BearerAuth
+//	@Param			from	query	string	false	"YYYY-MM-DD"
+//	@Param			to		query	string	false	"YYYY-MM-DD"
+//	@Success		200
+//	@Failure		400	{object}	response.Body
+//	@Router			/admin/reports/export.xlsx [get]
+func (h *ReportHandler) ExportXLSX(c *gin.Context) {
+	data, filename, err := h.reports.ExportXLSX(c.Request.Context(), c.Query("from"), c.Query("to"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+}

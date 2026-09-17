@@ -14,12 +14,13 @@ type UserResponse struct {
 	Phone     string    `json:"phone,omitempty"`
 	Role      string    `json:"role"`
 	Active    bool      `json:"active"`
+	BranchID  string    `json:"branch_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func NewUserResponse(user *models.User) UserResponse {
-	return UserResponse{
+	res := UserResponse{
 		ID:        user.ID,
 		Email:     user.Email,
 		FullName:  user.FullName,
@@ -29,6 +30,10 @@ func NewUserResponse(user *models.User) UserResponse {
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}
+	if user.BranchID != nil {
+		res.BranchID = *user.BranchID
+	}
+	return res
 }
 
 func NewUserResponses(users []models.User) []UserResponse {
@@ -60,6 +65,9 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Active *bool   `json:"active"`
 	Role   *string `json:"role" binding:"omitempty,oneof=customer staff admin" example:"staff"`
+	// BranchID scopes a staff account to one branch (Phần 4); only settable,
+	// not clearable, through this endpoint (send a real id to assign one).
+	BranchID *string `json:"branch_id" binding:"omitempty"`
 }
 
 // UpdateProfileRequest is what a signed-in user may change about themselves.

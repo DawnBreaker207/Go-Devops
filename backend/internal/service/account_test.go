@@ -221,7 +221,7 @@ func TestLockedAccount_BlocksLoginRefreshAndPurchases(t *testing.T) {
 	order, err := e.svc.Order(e.ctx, cust.ID, bought)
 	e.must(err)
 	e.moveShowStart(e.showID, 10*time.Minute)
-	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID); err != nil || res.Status != models.RedeemOK {
+	if res, err := e.svc.Redeem(e.ctx, order.Tickets[0].Code, e.showID, ""); err != nil || res.Status != models.RedeemOK {
 		t.Fatalf("gate for a locked account's ticket: %+v %v", res, err)
 	}
 

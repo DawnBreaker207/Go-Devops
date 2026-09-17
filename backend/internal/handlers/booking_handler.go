@@ -208,7 +208,7 @@ func (h *BookingHandler) Redeem(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	res, err := h.bookingService.Redeem(c.Request.Context(), c.Param("id"), req.ShowtimeID)
+	res, err := h.bookingService.Redeem(c.Request.Context(), c.Param("id"), req.ShowtimeID, middleware.CurrentUserID(c))
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -24,20 +24,31 @@ import (
 )
 
 type Handlers struct {
-	Health   *handlers.HealthHandler
-	Auth     *handlers.AuthHandler
-	User     *handlers.UserHandler
-	Movie    *handlers.MovieHandler
-	Batch    *handlers.BatchHandler
-	Hall     *handlers.HallHandler
-	Showtime *handlers.ShowtimeHandler
-	Booking  *handlers.BookingHandler
-	SSE      *handlers.SSEHandler
-	Payment  *handlers.PaymentHandler
-	Staff    *handlers.StaffHandler
-	Report   *handlers.ReportHandler
-	Media    *handlers.MediaHandler
-	Audit    *handlers.AuditHandler
+	Health     *handlers.HealthHandler
+	Auth       *handlers.AuthHandler
+	User       *handlers.UserHandler
+	Movie      *handlers.MovieHandler
+	Batch      *handlers.BatchHandler
+	Hall       *handlers.HallHandler
+	Showtime   *handlers.ShowtimeHandler
+	Booking    *handlers.BookingHandler
+	SSE        *handlers.SSEHandler
+	Payment    *handlers.PaymentHandler
+	Staff      *handlers.StaffHandler
+	Report     *handlers.ReportHandler
+	Media      *handlers.MediaHandler
+	Audit      *handlers.AuditHandler
+	Voucher    *handlers.VoucherHandler
+	Membership *handlers.MembershipHandler
+	Combo      *handlers.ComboHandler
+	Article    *handlers.ArticleHandler
+	Owner      *handlers.OwnerHandler
+	Loyalty    *handlers.LoyaltyHandler
+	Ledger     *handlers.LedgerHandler
+	Waitlist   *handlers.WaitlistHandler
+	Pricing    *handlers.PricingRuleHandler
+	Branch     *handlers.BranchHandler
+	Queue      *handlers.QueueHandler
 }
 
 type Limiters struct {
@@ -48,7 +59,7 @@ type Limiters struct {
 }
 
 func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts middleware.AccountChecker,
-	limits Limiters, payments *payment.Registry, h Handlers) *gin.Engine {
+	limits Limiters, payments *payment.Registry, perms middleware.PermissionChecker, h Handlers) *gin.Engine {
 	if cfg.App.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -114,6 +125,12 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		public.GET("/movies/:id", h.Movie.Detail)
 		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
 		public.GET("/showtimes", h.Showtime.List)
+		public.GET("/combos", h.Combo.ListPublic)
+		public.GET("/membership-tiers", h.Membership.ListTiers)
+		public.GET("/articles", h.Article.List)
+		public.GET("/articles/:slug", h.Article.Show)
+		public.GET("/rewards", h.Loyalty.ListRewards)
+		public.GET("/branches", h.Branch.List)
 	}
 
 	protected := v1.Group("")
@@ -128,6 +145,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)
 
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
+		protected.GET("/shows/:id/seats/suggest", h.Showtime.SuggestSeats)
 
 		movies := protected.Group("/movies")
 		{
@@ -155,6 +173,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)
 			catalog.PUT("/showtimes/:id", middleware.Audit(db, "admin.update_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Update)
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
+			catalog.PUT("/showtimes/:id/queue", middleware.Audit(db, "admin.set_showtime_queue", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.SetQueueEnabled)
 		}
 
 		orders := protected.Group("/orders")
@@ -179,6 +198,37 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 				middleware.RequireRoles(models.RoleStaff, models.RoleAdmin), h.Booking.Redeem)
 		}
 
+		memberships := protected.Group("/memberships")
+		memberships.Use(middleware.RequireRoles(models.RoleCustomer))
+		{
+			memberships.POST("/purchase", middleware.Audit(db, "orders.purchase_membership", "user_membership"), h.Membership.Purchase)
+			memberships.GET("/me", h.Membership.My)
+		}
+
+		queue := protected.Group("/queue")
+		queue.Use(middleware.RequireRoles(models.RoleCustomer))
+		{
+			queue.POST("/join", h.Queue.Join)
+			queue.GET("/status", h.Queue.Status)
+		}
+
+		waitlist := protected.Group("/waitlist")
+		waitlist.Use(middleware.RequireRoles(models.RoleCustomer))
+		{
+			waitlist.POST("", middleware.Audit(db, "orders.join_waitlist", "waitlist_entry"), h.Waitlist.Join)
+			waitlist.DELETE("/:id", middleware.Audit(db, "orders.cancel_waitlist", "waitlist_entry"), h.Waitlist.Cancel)
+			waitlist.GET("/me", h.Waitlist.My)
+		}
+
+		loyalty := protected.Group("/loyalty")
+		loyalty.Use(middleware.RequireRoles(models.RoleCustomer))
+		{
+			loyalty.GET("/points", h.Loyalty.Balance)
+			loyalty.GET("/points/transactions", h.Loyalty.Transactions)
+		}
+		protected.POST("/rewards/:id/redeem", middleware.Audit(db, "orders.redeem_reward", "reward_redemption"),
+			middleware.RequireRoles(models.RoleCustomer), h.Loyalty.Redeem)
+
 		protected.GET("/events/token", middleware.RateLimitByUser(limits.Events), h.SSE.IssueToken)
 
 		protected.GET("/payments/providers", h.Payment.Providers)
@@ -193,12 +243,14 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			// (orders.counter_sell) — filtering by action must show both outcomes.
 			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
 			staff.GET("/orders/:id", h.Staff.OrderDetail)
+			staff.POST("/orders/:id/resend-email", middleware.Audit(db, "staff.resend_ticket_email", "booking"), h.Staff.ResendTicketEmail)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
 			// Customer support lookup: read-only, scoped to role=customer accounts
 			// only (staff/admin accounts stay visible only via /admin/users).
 			staff.GET("/customers", h.Staff.SearchCustomers)
 			staff.GET("/customers/:id", h.Staff.CustomerProfile)
 			staff.GET("/customers/:id/orders", h.Staff.CustomerOrders)
+			staff.POST("/rewards/:code/deliver", middleware.Audit(db, "staff.deliver_reward", "reward_redemption"), h.Loyalty.MarkDelivered)
 		}
 
 		protected.GET("/admin/users", middleware.RequireRoles(models.RoleAdmin), h.User.List)
@@ -210,6 +262,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
 
 		protected.GET("/admin/reports/daily", middleware.RequireRoles(models.RoleAdmin), h.Report.Daily)
+		protected.GET("/admin/reports/export.xlsx", middleware.Audit(db, "admin.export_report", "report"),
+			middleware.RequireRoles(models.RoleAdmin), h.Report.ExportXLSX)
 		protected.GET("/admin/overview", middleware.RequireRoles(models.RoleAdmin), h.Report.Overview)
 
 		// Aliases required by the API contract; the seat grid is readable by any signed-in user.
@@ -232,6 +286,67 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			admin.GET("/audit-logs", h.Audit.List)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
+
+		// Deny-by-default (Phần 9.2): role=admin alone is not enough below —
+		// pricing/content is also required from admin_permissions, granted only
+		// by an owner. role=owner always passes (middleware.RequirePermission).
+		pricing := protected.Group("/admin")
+		pricing.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleOwner), middleware.RequirePermission(perms, models.PermissionPricing))
+		{
+			pricing.GET("/vouchers", h.Voucher.List)
+			pricing.GET("/vouchers/conflicts", h.Voucher.Conflicts)
+			pricing.GET("/vouchers/:id", h.Voucher.Show)
+			pricing.POST("/vouchers", middleware.Audit(db, "admin.create_voucher", "voucher"), h.Voucher.Create)
+			pricing.PUT("/vouchers/:id", middleware.Audit(db, "admin.update_voucher", "voucher"), h.Voucher.Update)
+			pricing.PUT("/vouchers/:id/status", middleware.Audit(db, "admin.set_voucher_status", "voucher"), h.Voucher.SetStatus)
+
+			pricing.GET("/membership-tiers", h.Membership.ListTiersAdmin)
+			pricing.POST("/membership-tiers", middleware.Audit(db, "admin.create_membership_tier", "membership_tier"), h.Membership.CreateTier)
+			pricing.PUT("/membership-tiers/:id", middleware.Audit(db, "admin.update_membership_tier", "membership_tier"), h.Membership.UpdateTier)
+
+			pricing.GET("/combos", h.Combo.List)
+			pricing.GET("/combos/:id", h.Combo.Show)
+			pricing.POST("/combos", middleware.Audit(db, "admin.create_combo", "combo"), h.Combo.Create)
+			pricing.PUT("/combos/:id", middleware.Audit(db, "admin.update_combo", "combo"), h.Combo.Update)
+			pricing.PUT("/combos/:id/stock", middleware.Audit(db, "admin.set_combo_stock", "combo"), h.Combo.SetStock)
+
+			pricing.GET("/rewards", h.Loyalty.ListRewardsAdmin)
+			pricing.POST("/rewards", middleware.Audit(db, "admin.create_reward", "reward"), h.Loyalty.CreateReward)
+			pricing.PUT("/rewards/:id", middleware.Audit(db, "admin.update_reward", "reward"), h.Loyalty.UpdateReward)
+
+			pricing.GET("/pricing-rules", h.Pricing.List)
+			pricing.POST("/pricing-rules", middleware.Audit(db, "admin.create_pricing_rule", "pricing_rule"), h.Pricing.Create)
+			pricing.PUT("/pricing-rules/:id", middleware.Audit(db, "admin.update_pricing_rule", "pricing_rule"), h.Pricing.Update)
+		}
+
+		finance := protected.Group("/admin")
+		finance.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleOwner), middleware.RequirePermission(perms, models.PermissionFinance))
+		{
+			finance.GET("/ledger/summary", h.Ledger.Summary)
+		}
+
+		content := protected.Group("/admin")
+		content.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleOwner), middleware.RequirePermission(perms, models.PermissionContent))
+		{
+			content.GET("/articles", h.Article.ListAdmin)
+			content.GET("/articles/:id", h.Article.ShowAdmin)
+			content.POST("/articles", middleware.Audit(db, "admin.create_article", "article"), h.Article.Create)
+			content.PUT("/articles/:id", middleware.Audit(db, "admin.update_article", "article"), h.Article.Update)
+			content.DELETE("/articles/:id", middleware.Audit(db, "admin.delete_article", "article"), h.Article.Delete)
+
+			content.GET("/branches", h.Branch.ListAdmin)
+			content.POST("/branches", middleware.Audit(db, "admin.create_branch", "branch"), h.Branch.Create)
+			content.PUT("/branches/:id", middleware.Audit(db, "admin.update_branch", "branch"), h.Branch.Update)
+		}
+
+		owner := protected.Group("/admin/owners")
+		owner.Use(middleware.RequireRoles(models.RoleOwner))
+		{
+			owner.PATCH("/:id", middleware.Audit(db, "owner.set_owner", "user"), h.Owner.SetOwner)
+			owner.GET("/:id/permissions", h.Owner.ListPermissions)
+			owner.POST("/:id/permissions", middleware.Audit(db, "owner.grant_permission", "admin_permission"), h.Owner.GrantPermission)
+			owner.DELETE("/:id/permissions/:key", middleware.Audit(db, "owner.revoke_permission", "admin_permission"), h.Owner.RevokePermission)
+		}
 	}
 
 	// EventSource can not send an Authorization header, so the realtime token in the URL is the credential.

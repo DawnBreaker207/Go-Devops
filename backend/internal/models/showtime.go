@@ -19,6 +19,8 @@ type Showtime struct {
 	StartAt   time.Time      `gorm:"not null" json:"start_at"`
 	EndAt     time.Time      `gorm:"not null" json:"end_at"`
 	Status    string         `gorm:"type:varchar(16);not null;default:open" json:"status"`
+	// QueueEnabled: manual virtual-queue gate for a hot showtime (Phần 2.3/3).
+	QueueEnabled bool        `gorm:"not null;default:false" json:"queue_enabled"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

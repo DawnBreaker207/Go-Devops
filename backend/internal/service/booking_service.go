@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -65,7 +66,9 @@ type BookingService interface {
 	AdminOrder(ctx context.Context, bookingID string) (*dto.OrderDetailResponse, error)
 	Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	List(ctx context.Context, userID string, q dto.PageQuery) ([]dto.OrderStatusResponse, int64, error)
-	Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error)
+	// staffUserID's branch (if any) gates the check-in (Phần 4); an unscoped
+	// staff account checks in at any branch.
+	Redeem(ctx context.Context, ticketRef, showtimeID, staffUserID string) (*dto.RedeemResponse, error)
 	CounterSell(ctx context.Context, req dto.CounterSellRequest) (*dto.OrderDetailResponse, error)
 	SweepExpired(ctx context.Context, limit int) (SweepResult, error)
 }
@@ -75,6 +78,15 @@ type BookingOptions struct {
 	DB            *gorm.DB
 	Repo          repository.BookingRepository
 	Payments      repository.PaymentRepository
+	Vouchers      *repository.VoucherRepository
+	Memberships   *repository.MembershipRepository
+	Combos        *repository.ComboRepository
+	Loyalty       LoyaltyService
+	Ledger        *repository.LedgerRepository
+	Waitlist      *repository.WaitlistRepository
+	PricingRules  *repository.PricingRuleRepository
+	Branches      *repository.BranchRepository
+	Queue         QueueService
 	Providers     *payment.Registry
 	PublicBaseURL string
 	HoldTTL       time.Duration
@@ -94,6 +106,15 @@ type bookingService struct {
 	db                *gorm.DB
 	repo              repository.BookingRepository
 	payments          repository.PaymentRepository
+	vouchers          *repository.VoucherRepository
+	memberships       *repository.MembershipRepository
+	combos            *repository.ComboRepository
+	loyalty           LoyaltyService
+	ledger            *repository.LedgerRepository
+	waitlist          *repository.WaitlistRepository
+	pricingRules      *repository.PricingRuleRepository
+	branches          *repository.BranchRepository
+	queue             QueueService
 	providers         *payment.Registry
 	publicBaseURL     string
 	holdTTL           time.Duration
@@ -116,6 +137,15 @@ func NewBookingService(opts BookingOptions) BookingService {
 		db:                opts.DB,
 		repo:              opts.Repo,
 		payments:          opts.Payments,
+		vouchers:          opts.Vouchers,
+		memberships:       opts.Memberships,
+		combos:            opts.Combos,
+		loyalty:           opts.Loyalty,
+		ledger:            opts.Ledger,
+		waitlist:          opts.Waitlist,
+		pricingRules:      opts.PricingRules,
+		branches:          opts.Branches,
+		queue:             opts.Queue,
 		providers:         opts.Providers,
 		publicBaseURL:     strings.TrimRight(opts.PublicBaseURL, "/"),
 		holdTTL:           opts.HoldTTL,
@@ -152,13 +182,36 @@ func (s *bookingService) Hold(ctx context.Context, userID string, req dto.HoldRe
 	}
 	key := strings.TrimSpace(req.IdempotencyKey)
 
+	// Virtual queue gate (Phần 2.3): sits in FRONT of the hold transaction,
+	// never replaces its Postgres locking. Only consulted when an admin
+	// flagged this showtime queue_enabled; Redis unreachable fails open
+	// (queueService already no-ops on a nil cache).
+	if s.queue != nil {
+		enabled, err := s.repo.ShowtimeQueueEnabled(ctx, req.ShowID)
+		if err != nil {
+			return nil, err
+		}
+		if enabled {
+			admitted, qerr := s.queue.IsAdmitted(ctx, req.ShowID, userID)
+			if qerr != nil {
+				// Fail-open (Phần 2.3): a broken queue must never block a
+				// sale — skip the gate rather than surface the error.
+				logger.Warn("virtual queue check failed; letting the hold through", logger.Err(qerr))
+				admitted = true
+			}
+			if !admitted {
+				return nil, apperrors.Conflict("this showtime has a virtual queue; join it first (POST /queue/join) and wait to be admitted")
+			}
+		}
+	}
+
 	var (
 		result   *dto.HoldResponse
 		released []string
 	)
 	err := s.inTx(ctx, func(tx *gorm.DB) error {
 		var err error
-		result, released, err = s.holdTx(ctx, tx, userID, req.ShowID, seatIDs, key)
+		result, released, err = s.holdTx(ctx, tx, userID, req.ShowID, seatIDs, key, req.Combos, req.VoucherCode)
 		return err
 	})
 	if err != nil {
@@ -174,7 +227,8 @@ func (s *bookingService) Hold(ctx context.Context, userID string, req dto.HoldRe
 	return result, nil
 }
 
-func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID string, seatIDs []string, key string) (*dto.HoldResponse, []string, error) {
+func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID string, seatIDs []string, key string,
+	comboItems []dto.ComboItem, voucherCode string) (*dto.HoldResponse, []string, error) {
 	if err := s.repo.LockUserShow(ctx, tx, userID, showID); err != nil {
 		return nil, nil, err
 	}
@@ -279,6 +333,14 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		if n == 0 {
 			return nil, nil, apperrors.Internal("replaced booking changed under lock")
 		}
+		if s.vouchers != nil && old.VoucherID != nil {
+			if err := s.vouchers.ReleaseUsage(ctx, tx, old.ID); err != nil {
+				return nil, nil, err
+			}
+		}
+		if err := s.releaseComboStock(ctx, tx, old.ShowtimeID, old.ID); err != nil {
+			return nil, nil, err
+		}
 		if err := s.audit(ctx, tx, "orders.expire", "booking", old.ID, old.ID,
 			map[string]any{"status": models.BookingExpired, "reason": reason, "source": "new_hold"}); err != nil {
 			return nil, nil, err
@@ -353,6 +415,36 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		}
 	}
 
+	// An active membership discounts every seat price, baked in at hold time
+	// just like the seat price itself (ADVANCED_FEATURES_DISCUSSION.md Phần 1.2).
+	var membershipID *string
+	var membershipPercent float64
+	var hasMembership bool
+	if s.memberships != nil {
+		membership, tier, err := s.memberships.ActiveForUser(ctx, tx, userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if membership != nil && tier != nil {
+			membershipID = &membership.ID
+			membershipPercent = tier.DiscountPercent
+			hasMembership = true
+		}
+	}
+
+	// Dynamic pricing (day-of-week/time-of-day rules) adjusts the sticker
+	// price before the membership discount is taken off it — the rule
+	// changes what the seat is worth right now, membership is a discount off
+	// that (Product Backlog "giá động theo ngày/khung giờ").
+	var pricingRules []models.PricingRule
+	if s.pricingRules != nil {
+		var err error
+		pricingRules, err = s.pricingRules.ActiveForHold(tx)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	var total int64
 	held := make([]dto.HeldSeat, 0, len(seatIDs))
 	bookingSeats := make([]models.BookingSeat, 0, len(seatIDs))
@@ -363,6 +455,8 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		if !ok || price <= 0 {
 			return nil, nil, apperrors.ErrMissingHallPrice.WithDetails(map[string]string{"seat_type": meta.SeatType})
 		}
+		price = applyPricingRules(pricingRules, price, showtime.StartAt)
+		price = applyMembershipDiscount(price, membershipPercent)
 		version, err := s.repo.HoldSeat(ctx, tx, id, userID, heldUntil)
 		if err != nil {
 			return nil, nil, err
@@ -385,13 +479,55 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 			Price:          price,
 		})
 	}
+	seatTotal := total
+
+	// Combos are priced (member price if an active membership applies) but not
+	// yet inserted: booking_combos needs the booking's id, created below.
+	var comboRows []models.BookingCombo
+	var comboTotal int64
+	if s.combos != nil && len(comboItems) > 0 {
+		var branchID string
+		if s.branches != nil {
+			var err error
+			branchID, err = s.branches.HallBranch(tx, showtime.HallID)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		var err error
+		comboRows, comboTotal, err = s.priceCombos(ctx, tx, comboItems, hasMembership, branchID)
+		if err != nil {
+			return nil, nil, err
+		}
+		total += comboTotal
+	}
+
+	// Voucher is locked and validated now (advisory -> user -> showtime -> seats
+	// -> voucher lock order, Phần 1.1), but usage_count/redemption are only
+	// written after the booking row exists, so voucher validation never blocks
+	// on a booking id that does not exist yet.
+	var voucher *models.Voucher
+	var voucherDiscount int64
+	if s.vouchers != nil && strings.TrimSpace(voucherCode) != "" {
+		var err error
+		voucher, voucherDiscount, err = s.lockAndValidateVoucher(tx, voucherCode, userID, showtime.HallID, now, seatTotal, comboTotal)
+		if err != nil {
+			return nil, nil, err
+		}
+		total -= voucherDiscount
+	}
 
 	booking := &models.Booking{
-		UserID:      userID,
-		ShowtimeID:  showID,
-		Status:      models.BookingPending,
-		TotalAmount: total,
-		ExpiresAt:   &heldUntil,
+		UserID:                userID,
+		ShowtimeID:            showID,
+		Status:                models.BookingPending,
+		TotalAmount:           total,
+		VoucherDiscountAmount: voucherDiscount,
+		MembershipID:          membershipID,
+		ExpiresAt:             &heldUntil,
+	}
+	if voucher != nil {
+		booking.VoucherID = &voucher.ID
 	}
 	if key != "" {
 		booking.IdempotencyKey = &key
@@ -407,23 +543,250 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	if err := s.repo.CreateBookingSeats(ctx, tx, bookingSeats); err != nil {
 		return nil, nil, err
 	}
+	comboResponses := make([]dto.BookingComboResponse, 0, len(comboRows))
+	if len(comboRows) > 0 {
+		for i := range comboRows {
+			comboRows[i].BookingID = booking.ID
+		}
+		if err := s.combos.CreateBookingCombos(tx, comboRows); err != nil {
+			return nil, nil, err
+		}
+		for _, c := range comboRows {
+			comboResponses = append(comboResponses, dto.BookingComboResponse{ComboID: c.ComboID, Quantity: c.Quantity, Price: c.Price})
+		}
+	}
+	if voucher != nil {
+		if n, err := s.vouchers.IncrUsage(tx, voucher.ID); err != nil {
+			return nil, nil, err
+		} else if n == 0 {
+			// Lost the race for the last unit of the campaign cap: fail the whole hold.
+			return nil, nil, apperrors.ErrVoucherInvalid
+		}
+		if err := s.vouchers.CreateRedemption(tx, &models.VoucherRedemption{VoucherID: voucher.ID, UserID: userID, BookingID: booking.ID}); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	after := map[string]any{"showtime_id": showID, "seats": labels, "total": total, "expires_at": heldUntil}
 	if replacedID != "" {
 		after["replaced_booking_id"] = replacedID
 	}
+	if voucher != nil {
+		after["voucher_code"] = voucher.Code
+		after["voucher_discount_amount"] = voucherDiscount
+		if voucher.CreatedByAdminID != nil && *voucher.CreatedByAdminID == userID {
+			// Phần 9.4: the voucher's own creator redeeming it is a
+			// conflict-of-interest signal — logged, never blocked (an owner
+			// reviews GET /admin/vouchers/conflicts).
+			after["conflict_of_interest"] = true
+		}
+	}
 	if err := s.audit(ctx, tx, "orders.hold", "booking", booking.ID, booking.ID, after); err != nil {
 		return nil, nil, err
 	}
 
-	return &dto.HoldResponse{
-		BookingID:         booking.ID,
-		ShowtimeID:        showID,
-		TotalAmount:       total,
-		ExpiresAt:         heldUntil,
-		Seats:             held,
-		ReplacedBookingID: replacedID,
-	}, released, nil
+	resp := &dto.HoldResponse{
+		BookingID:             booking.ID,
+		ShowtimeID:            showID,
+		TotalAmount:           total,
+		ExpiresAt:             heldUntil,
+		Seats:                 held,
+		Combos:                comboResponses,
+		VoucherDiscountAmount: voucherDiscount,
+		ReplacedBookingID:     replacedID,
+	}
+	if voucher != nil {
+		resp.VoucherCode = voucher.Code
+	}
+	return resp, released, nil
+}
+
+// applyPricingRules stacks every matching rule additively off the original
+// hall price `base` (not off a previous rule's result), so rule evaluation
+// order never changes the outcome. `at` is the showtime's own start time
+// (dynamic pricing is about the time slot being sold, not the moment of
+// purchase).
+func applyPricingRules(rules []models.PricingRule, base int64, at time.Time) int64 {
+	price := base
+	dow := int(at.Weekday())
+	clock := at.Format("15:04:05")
+	for _, r := range rules {
+		if r.DayOfWeek != nil && *r.DayOfWeek != dow {
+			continue
+		}
+		if r.StartsAt != nil && r.EndsAt != nil && !(clock >= *r.StartsAt && clock < *r.EndsAt) {
+			continue
+		}
+		switch r.AdjustmentType {
+		case models.PricingAdjustPercent:
+			price += int64(math.Round(float64(base) * r.AdjustmentValue / 100))
+		default:
+			price += int64(r.AdjustmentValue)
+		}
+	}
+	if price < 0 {
+		return 0
+	}
+	return price
+}
+
+// applyMembershipDiscount rounds to the nearest VND, consistent across every
+// seat of the booking.
+func applyMembershipDiscount(price int64, percent float64) int64 {
+	if percent <= 0 {
+		return price
+	}
+	discounted := price - int64(math.Round(float64(price)*percent/100))
+	if discounted < 0 {
+		return 0
+	}
+	return discounted
+}
+
+// priceCombos validates every requested combo is active and prices it (member
+// price when the booking's user has an active membership), without touching
+// booking_combos yet — the caller sets BookingID once the booking exists.
+func (s *bookingService) priceCombos(ctx context.Context, tx *gorm.DB, items []dto.ComboItem, hasMembership bool, branchID string) ([]models.BookingCombo, int64, error) {
+	ids := make([]string, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		if seen[item.ComboID] {
+			return nil, 0, apperrors.Validation("duplicate combo_id in request").WithDetails(map[string]string{"combo_id": item.ComboID})
+		}
+		seen[item.ComboID] = true
+		ids = append(ids, item.ComboID)
+	}
+	combos, err := s.combos.FindByIDs(ctx, tx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows := make([]models.BookingCombo, 0, len(items))
+	var total int64
+	for _, item := range items {
+		combo, ok := combos[item.ComboID]
+		if !ok || !combo.Active {
+			return nil, 0, apperrors.ErrComboInactive.WithDetails(map[string]string{"combo_id": item.ComboID})
+		}
+		unit := combo.Price
+		if hasMembership && combo.MemberPrice != nil {
+			unit = *combo.MemberPrice
+		}
+		if branchID != "" {
+			ok, err := s.combos.ReserveStock(tx, branchID, combo.ID, item.Quantity)
+			if err != nil {
+				return nil, 0, err
+			}
+			if !ok {
+				return nil, 0, apperrors.Conflict("combo is out of stock at this branch").WithDetails(map[string]string{"combo_id": item.ComboID})
+			}
+		}
+		total += unit * int64(item.Quantity)
+		rows = append(rows, models.BookingCombo{ComboID: combo.ID, Quantity: item.Quantity, Price: unit})
+	}
+	return rows, total, nil
+}
+
+// releaseComboStock is the rollback pair to priceCombos' ReserveStock,
+// called whenever a booking that reserved combo stock does not end up
+// CONFIRMED (Phần 2.2, same pattern as voucher usage rollback).
+func (s *bookingService) releaseComboStock(ctx context.Context, tx *gorm.DB, showtimeID, bookingID string) error {
+	if s.combos == nil || s.branches == nil {
+		return nil
+	}
+	showtime, err := s.repo.LockShowtime(ctx, tx, showtimeID)
+	if err != nil || showtime == nil {
+		return err
+	}
+	branchID, err := s.branches.HallBranch(tx, showtime.HallID)
+	if err != nil {
+		return err
+	}
+	if branchID == "" {
+		return nil
+	}
+	return s.combos.ReleaseStockForBooking(ctx, tx, branchID, bookingID)
+}
+
+// voucherBase picks the amount a voucher's discount is computed against.
+func voucherBase(scope string, seatTotal, comboTotal int64) int64 {
+	switch scope {
+	case models.VoucherScopeSeatOnly:
+		return seatTotal
+	case models.VoucherScopeComboOnly:
+		return comboTotal
+	default:
+		return seatTotal + comboTotal
+	}
+}
+
+// lockAndValidateVoucher locks the voucher row (part of the advisory -> user
+// -> showtime -> seats -> voucher lock order) and validates it, returning a
+// generic ErrVoucherInvalid on any failure — not found, expired, exhausted,
+// per-user cap reached or below min order — deliberately indistinguishable,
+// so a hold request can not be used to probe for valid codes
+// (ADVANCED_FEATURES_DISCUSSION.md Phần 1.1 "chống dò mã").
+func (s *bookingService) lockAndValidateVoucher(tx *gorm.DB, code, userID, hallID string, now time.Time, seatTotal, comboTotal int64) (*models.Voucher, int64, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	v, err := s.vouchers.LockByCode(tx, code)
+	if err != nil {
+		return nil, 0, err
+	}
+	if v == nil {
+		return nil, 0, apperrors.ErrVoucherInvalid
+	}
+	if v.Status != models.VoucherActive || now.Before(v.StartsAt) || !now.Before(v.EndsAt) || v.UsageCount >= v.MaxUsage {
+		return nil, 0, apperrors.ErrVoucherInvalid
+	}
+	// A loyalty milestone voucher is locked to the user who earned it.
+	if v.AssignedUserID != nil && *v.AssignedUserID != userID {
+		return nil, 0, apperrors.ErrVoucherInvalid
+	}
+	// A branch-scoped voucher only applies to a booking whose showtime's
+	// hall is in that branch (Phần 1.1).
+	if v.BranchID != nil && s.branches != nil {
+		hallBranch, err := s.branches.HallBranch(tx, hallID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if hallBranch != *v.BranchID {
+			return nil, 0, apperrors.ErrVoucherInvalid
+		}
+	}
+	userCount, err := s.vouchers.CountUserRedemptions(tx, v.ID, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if userCount >= int64(v.MaxUsagePerUser) {
+		return nil, 0, apperrors.ErrVoucherInvalid
+	}
+	base := voucherBase(v.ApplyScope, seatTotal, comboTotal)
+	if base < v.MinOrderAmount || base <= 0 {
+		return nil, 0, apperrors.ErrVoucherInvalid
+	}
+	discount := computeVoucherDiscount(v, base)
+	if discount <= 0 {
+		return nil, 0, apperrors.ErrVoucherInvalid
+	}
+	return v, discount, nil
+}
+
+func computeVoucherDiscount(v *models.Voucher, base int64) int64 {
+	var discount int64
+	if v.DiscountType == models.VoucherDiscountPercentage {
+		discount = int64(math.Round(float64(base) * float64(v.DiscountValue) / 100))
+	} else {
+		discount = v.DiscountValue
+	}
+	if v.MaxDiscount != nil && discount > *v.MaxDiscount {
+		discount = *v.MaxDiscount
+	}
+	if discount > base {
+		discount = base
+	}
+	if discount < 0 {
+		discount = 0
+	}
+	return discount
 }
 
 func holdable(seat models.ShowtimeSeat, userID string, own map[string]int64, now time.Time) bool {
@@ -626,6 +989,14 @@ func (s *bookingService) Cancel(ctx context.Context, userID, bookingID string) (
 		if n == 0 {
 			return apperrors.Internal("booking changed under lock")
 		}
+		if s.vouchers != nil && b.VoucherID != nil {
+			if err := s.vouchers.ReleaseUsage(ctx, tx, b.ID); err != nil {
+				return err
+			}
+		}
+		if err := s.releaseComboStock(ctx, tx, b.ShowtimeID, b.ID); err != nil {
+			return err
+		}
 		return s.audit(ctx, tx, "orders.cancel", "booking", b.ID, b.ID,
 			map[string]any{"status": models.BookingExpired, "reason": models.ReasonCanceled, "released_seats": len(released)})
 	})
@@ -665,10 +1036,17 @@ const (
 // Redeem takes a ticket id or QR code. Only an ISSUED ticket of this showtime inside its
 // check-in window flips to REDEEMED, exactly once; a closed showtime still lets its tickets in.
 // Any other verdict changes nothing and is audited as a failure.
-func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error) {
+func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID, staffUserID string) (*dto.RedeemResponse, error) {
 	row, err := s.repo.TicketForGate(ctx, ticketRef)
 	if err != nil {
 		return nil, err
+	}
+	var staffBranchID string
+	if staffUserID != "" {
+		staffBranchID, err = s.repo.StaffBranch(ctx, staffUserID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if row == nil || row.BookingStatus != models.BookingConfirmed {
 		res := &dto.RedeemResponse{Status: models.RedeemNotFound}
@@ -695,6 +1073,8 @@ func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID strin
 	switch {
 	case row.ShowtimeID != showtimeID:
 		res.Status = models.RedeemWrongShow
+	case staffBranchID != "" && row.BranchID != staffBranchID:
+		res.Status = models.RedeemWrongBranch
 	case row.Status != models.TicketIssued:
 		res.Status = models.RedeemUsed
 	case now.Before(opensAt):
@@ -813,6 +1193,29 @@ func (s *bookingService) auditRejected(ctx context.Context, provider, txnRef, me
 	}
 }
 
+func (s *bookingService) bookingCombos(ctx context.Context, bookingID string) ([]dto.BookingComboResponse, error) {
+	rows, err := s.combos.BookingCombos(ctx, nil, bookingID)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ComboID)
+	}
+	names, err := s.combos.FindByIDs(ctx, nil, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.BookingComboResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, dto.BookingComboResponse{
+			ComboID: r.ComboID, Name: names[r.ComboID].Name, Quantity: r.Quantity,
+			Price: r.Price, Delivered: r.Delivered, DeliveredAt: r.DeliveredAt,
+		})
+	}
+	return out, nil
+}
+
 func (s *bookingService) orderDetail(ctx context.Context, b *models.Booking) (*dto.OrderDetailResponse, error) {
 	rows, err := s.repo.TicketRows(ctx, b.ID)
 	if err != nil {
@@ -829,6 +1232,13 @@ func (s *bookingService) orderDetail(ctx context.Context, b *models.Booking) (*d
 	res := &dto.OrderDetailResponse{
 		OrderStatusResponse: orderStatus(b, pay, show),
 		Tickets:             make([]dto.TicketResponse, 0, len(rows)),
+	}
+	if s.combos != nil {
+		combos, err := s.bookingCombos(ctx, b.ID)
+		if err != nil {
+			return nil, err
+		}
+		res.Combos = combos
 	}
 	for _, t := range rows {
 		res.Tickets = append(res.Tickets, dto.TicketResponse{
@@ -994,6 +1404,23 @@ func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellReq
 		}
 		booking.Status = models.BookingConfirmed
 		showID = showtime.ID
+		if s.ledger != nil {
+			// Cash collected at the till: no payment attempt row, so the
+			// ledger references the booking itself.
+			if err := s.ledger.Write(tx, &models.LedgerEntry{
+				Type: models.LedgerPaymentCaptured, Amount: total,
+				ReferenceTable: "bookings", ReferenceID: booking.ID, UserID: nullableUserID(booking.UserID), BookingID: &booking.ID,
+			}); err != nil {
+				return err
+			}
+		}
+		if s.loyalty != nil {
+			// booking.UserID is empty unless a counter sale is attached to a
+			// known account — EarnForBooking already no-ops on an empty id.
+			if err := s.loyalty.EarnForBooking(ctx, tx, booking.UserID, total, len(tickets), booking.ID); err != nil {
+				return err
+			}
+		}
 		return s.audit(ctx, tx, "orders.counter_sell", "booking", booking.ID, booking.ID, map[string]any{
 			"status": models.BookingConfirmed, "tickets": len(tickets), "total": total, "seats": labels,
 		})
@@ -1048,6 +1475,15 @@ func orderStatus(b *models.Booking, pay *models.Payment, show *repository.Showti
 		}
 	}
 	return res
+}
+
+// nullableUserID: a counter sale has no account (UserID empty); the ledger
+// column is nullable for exactly that case.
+func nullableUserID(id string) *string {
+	if id == "" {
+		return nil
+	}
+	return &id
 }
 
 func derefString(p *string) string {
