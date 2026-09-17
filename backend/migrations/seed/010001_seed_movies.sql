@@ -1,7 +1,3 @@
--- Seed data: sample movies so a fresh DB has content for the UI.
--- NOT tracked by golang-migrate (schema_migrations lives in migrations/schema);
--- apply with `make migrate-seed` (runs every *.sql here via psql in order).
--- Idempotent: fixed IDs + ON CONFLICT DO NOTHING, re-running changes nothing.
 -- poster_url stays NULL; real artwork is uploaded later.
 
 INSERT INTO movies (id, title, genre, duration, director, description, release_date, status)

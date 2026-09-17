@@ -1,13 +1,5 @@
--- Seed data: 3 sample halls (one per size) with a full seat grid and prices,
--- so a fresh DB has somewhere to schedule showtimes without going through
--- the admin API first. NOT tracked by golang-migrate; apply with
--- `make migrate-seed`. Idempotent: fixed IDs + ON CONFLICT DO NOTHING.
---
--- Row B of each hall is VIP; every other row is standard. This mirrors the
--- "small"/"medium"/"large" built-in templates in size only — the fuller
--- templates (VIP block, couple row, aisle) live in the Go API
--- (POST /admin/halls {"template": "medium"}) since replicating col_span
--- placement correctly in plain SQL is not worth the risk for seed data.
+-- Row B is VIP, every other row standard — a simplified stand-in for the
+-- fuller templates served by the Go API (POST /admin/halls).
 
 INSERT INTO halls (id, name, rows, seats_per_row, screen_position)
 VALUES
