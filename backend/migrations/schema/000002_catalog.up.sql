@@ -90,6 +90,8 @@ CREATE TABLE IF NOT EXISTS showtimes (
     start_at   TIMESTAMPTZ NOT NULL,
     end_at     TIMESTAMPTZ NOT NULL,
     status     VARCHAR(16) NOT NULL DEFAULT 'open',
+    -- Manual virtual-queue activation switch, admin-set per showtime.
+    queue_enabled BOOLEAN  NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
