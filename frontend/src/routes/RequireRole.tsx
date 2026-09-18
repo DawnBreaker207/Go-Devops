@@ -41,11 +41,11 @@ export const RequireRole = ({ roles }: RequireRoleProps) => {
         subTitle={t('error.forbiddenSubtitle')}
         extra={
           <Space>
-            {landing ? (
-              <Button type="primary" onClick={() => navigate(landing, { replace: true })}>
-                {t('error.backHome')}
-              </Button>
-            ) : null}
+            {/* landing luon co gia tri: khach khong co muc menu van hanh nao thi
+                ve trang chu khu khach. */}
+            <Button type="primary" onClick={() => navigate(landing, { replace: true })}>
+              {t('error.backHome')}
+            </Button>
             {/* ProtectedRoute se tu day ve /login ngay khi isAuthenticated tat. */}
             <Button onClick={logout}>{t('common.logout')}</Button>
           </Space>

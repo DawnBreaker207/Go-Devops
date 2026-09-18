@@ -4,7 +4,7 @@ import { Alert, Button, Card, Form, Input, Typography } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
-import { PATHS } from '@/routes/paths';
+import { useLandingPath } from '@/routes/navigation';
 import type { ApiError, LoginRequest } from '@/types';
 
 interface LocationState {
@@ -14,6 +14,7 @@ interface LocationState {
 export const LoginPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const landing = useLandingPath();
   const location = useLocation();
   const login = useAuthStore((s) => s.login);
 
@@ -26,7 +27,9 @@ export const LoginPage = () => {
     try {
       await login(values);
       const from = (location.state as LocationState | null)?.from;
-      navigate(from ?? PATHS.dashboard, { replace: true });
+      // Khong co dinh /dashboard: khach khong vao duoc trang van hanh nao va
+      // se roi thang vao man 403. useLandingPath tra ve dung noi role do vao duoc.
+      navigate(from ?? landing, { replace: true });
     } catch (error) {
       setErrorMessage((error as ApiError).message || t('auth.loginFailed'));
     } finally {

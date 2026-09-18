@@ -73,13 +73,16 @@ describe('RequireRole', () => {
     expect(screen.getByText('noi dung bi khoa')).toBeInTheDocument();
   });
 
-  it('role khong vao duoc trang nao thi chi con nut dang xuat', () => {
+  it('khach bi chan khoi man van hanh nhung van co loi ve trang chu cua ho', () => {
+    // Truoc khi co khu khach, khach khong co trang nao de ve nen nut nay bi an.
+    // Gio `useLandingPath` tra ve PATHS.home, va do la ly do LoginPage khong
+    // con dua khach thang vao /dashboard roi ra 403.
     asRole('customer');
     renderGuard(ROLES_OPERATOR);
 
     expect(screen.getByText('403')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Về trang chủ' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Về trang chủ' })).toBeInTheDocument();
   });
 
   it('con vao duoc trang khac thi co loi ve trang chu', () => {

@@ -5,4 +5,5 @@ export * from './movie';
 export * from './report';
 export * from './hall';
 export * from './showtime';
+export * from './seatmap';
 export * from './booking';

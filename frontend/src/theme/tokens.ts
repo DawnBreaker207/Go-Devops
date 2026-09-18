@@ -203,3 +203,15 @@ export const tokens = {
 export const cinemaGradient =
   `radial-gradient(120% 90% at 8% 40%, ${cinemaBackdrop.glow} 0%, ` +
   `${cinemaBackdrop.mid} 35%, ${cinemaBackdrop.base} 75%)`;
+
+/**
+ * Bien the doc, dung cho nua trai cua man dang nhap / dang ky.
+ *
+ * Do tu frame Sign In (`77-626`): cung mot dai mau nhung sang o DAY chu khong
+ * toa tu ben trai - goc tren trai gan nhu den (#020901), giua dam dan
+ * (#051F0E), day sang nhat (#094122). Ba diem dung la cua `cinemaBackdrop`
+ * san co; chi HUONG la DERIVED, khong de ra mau moi.
+ */
+export const cinemaGradientPanel =
+  `linear-gradient(160deg, ${cinemaBackdrop.base} 0%, ` +
+  `${cinemaBackdrop.mid} 70%, ${cinemaBackdrop.glow} 100%)`;

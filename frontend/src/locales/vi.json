@@ -281,5 +281,30 @@
     "title": "Báo cáo",
     "totalRevenue": "Tổng doanh thu",
     "totalSales": "Doanh thu"
+  },
+  "customer": {
+    "back": "Quay lại",
+    "brand": "Cinemas",
+    "footer": "Cinema Project — đặt vé xem phim",
+    "fromPrice": "từ {{price}}",
+    "login": "Đăng nhập",
+    "myTickets": "Vé của tôi",
+    "noMovies": "Hiện chưa có phim nào đang chiếu.",
+    "noSeatPicked": "Chưa chọn ghế nào",
+    "noShowtimes": "Không có suất chiếu nào trong ngày này.",
+    "nowShowing": "Đang chiếu",
+    "operatorCannotBook": "Tài khoản vận hành xem được sơ đồ nhưng không đặt vé được — cả nhánh /orders chỉ dành cho khách hàng. Đăng nhập bằng tài khoản khách để đặt.",
+    "pickDay": "Chọn ngày",
+    "pickShowtime": "Chọn suất chiếu",
+    "proceed": "Tiếp tục thanh toán",
+    "register": "Đăng ký",
+    "screen": "MÀN CHIẾU",
+    "seatCount": "Ghế ({{count}}/{{max}})",
+    "seat_available": "Còn trống",
+    "seat_held": "Người khác đang giữ",
+    "seat_selected": "Đang chọn",
+    "seat_sold": "Đã bán",
+    "seatsNeedLogin": "Cần đăng nhập để xem sơ đồ ghế.",
+    "total": "TỔNG"
   }
 }

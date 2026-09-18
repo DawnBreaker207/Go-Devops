@@ -67,10 +67,14 @@ export const useNavItems = (): NavItem[] => {
 };
 
 /**
- * Trang dau tien role nay vao duoc, dung cho nut "ve trang chu" tren man 403.
- * null nghia la role do khong vao duoc trang van hanh nao - khach hang chang han.
+ * Trang dau tien role nay vao duoc sau khi dang nhap.
+ *
+ * Nguoi van hanh ve muc menu dau tien cua ho; KHACH khong co muc nao nen ve
+ * trang chu cua khu khach. Truoc day ham nay tra null cho khach va LoginPage
+ * lai mac dinh ve /dashboard, nen khach dang nhap xong roi thang vao man 403 -
+ * tuc khong dung duoc app.
  */
-export const useLandingPath = (): string | null => useNavItems()[0]?.path ?? null;
+export const useLandingPath = (): string => useNavItems()[0]?.path ?? PATHS.home;
 
 /** Muc khop voi URL hien tai, theo tien to duong dan. */
 export const findNavItem = (pathname: string): NavItem | undefined =>

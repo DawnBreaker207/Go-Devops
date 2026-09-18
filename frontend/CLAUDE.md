@@ -13,8 +13,9 @@ is for an operator. Built: `movie` (table + form), `showtime` (table + filters +
 filters + detail drawer), `hall` (table + create/edit/clone/price modals + a seat-grid editor at
 `/halls/:id/seats`), `user` (table + filters + inline role/lock controls + create modal),
 `report` (date range + per-movie rollup + per-day table with a per-showtime breakdown), `dashboard`.
-Not built: the whole customer side
-(browse, seat map, checkout, my tickets, register, reset password). Read
+**The customer side has started**: `CustomerLayout` (top nav, no sider, plain CSS, its own visual world),
+`browse` (home poster grid + film detail with a day strip and showtime picker) and the `booking-flow` seat
+picker. Not built yet: hold/checkout/payment, my tickets, register, forgot/reset password. Read
 `../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen.
 
 **The visual language comes from a Figma file**; the information architecture does not — it mirrors the
@@ -42,7 +43,7 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
   `unwrap()` -> `response.data.data`, and the `skipAuthRefresh` config flag.
 - `src/api/<domain>.api.ts` — one `<domain>Api` object literal of arrow methods.
 - `src/features/<domain>/` — singular folder, **plural** page (`movie/MoviesPage.tsx`), plus `components/`,
-  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`, `report`.
+  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`, `report`, `browse`, `booking-flow`.
 - `src/components/` — cross-feature: `Loading`, `PageHeader`, `ErrorBoundary` (the only class component).
 - `src/layouts/` — `MainLayout` and `AuthLayout`. The sidebar and the breadcrumb are both derived from
   `NAV_ITEMS` in `src/routes/navigation.tsx`, filtered by role through `useNavItems()`; `MainLayout` itself
@@ -157,6 +158,12 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 - Never offer a control the backend will refuse. `/admin/users` rejects locking yourself and changing your own
   role with a 409; `UsersPage` disables both controls on the signed-in user's own row instead. The remaining
   guard (the last active admin) cannot be known client-side, so that one is left to the 409.
+- Never treat a seat as bookable because `status` says `available`. `showtime_seat_id` is the ONLY omitempty
+  field on `SeatMapSeat`, it is what `POST /orders/hold` wants, and a seat without it still reports
+  `available` because the SQL is a LEFT JOIN. `is_gap` seats also report `available` and also carry an id —
+  holding one is a 400. Check both before letting a seat be picked.
+- Never read `price: 0` on a seat as free. It means the hall has no `hall_prices` row for that seat type, and
+  holding it is a 409.
 - Never treat a missing day in `GET /admin/reports/daily` as a zero. `days` holds only the days the `closeDay`
   job has closed; a day with no business IS closed and DOES appear, with zeros. A day that is absent has no
   figures at all. `missingDays()` in `src/features/report/reportRollup.ts` names them.

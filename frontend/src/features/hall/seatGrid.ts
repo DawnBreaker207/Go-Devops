@@ -1,6 +1,21 @@
 import type { Hall, Seat } from '@/types';
 
 /**
+ * Hinh dang TOI THIEU cua mot ghe de ve duoc luoi.
+ *
+ * Co hai kieu ghe khac nhau di qua day: `Seat` (luoi vat ly cua phong, man
+ * admin) va `SeatMapSeat` (luoi cua mot suat chieu, man khach - them status,
+ * price, showtime_seat_id va BO hall_id). Ca hai deu thoa hinh dang nay, nen
+ * toan bo phan toan hoc dung chung duoc thay vi viet lai lan thu hai.
+ */
+export interface GridSeat {
+  row_label: string;
+  col_number: number;
+  col_span: number;
+  is_gap: boolean;
+}
+
+/**
  * Toan hoc cua luoi ghe, tach rieng khoi React vi day la cho de sai nhat cua ca
  * man hinh va la cho duy nhat dang viet test.
  *
@@ -19,9 +34,9 @@ export const SEAT_SIZE = 30;
 /** Be rong cua khe loi di chen giua hai cot. */
 export const AISLE_WIDTH = 18;
 
-export interface SeatRow {
+export interface SeatRow<T extends GridSeat = Seat> {
   rowLabel: string;
-  seats: Seat[];
+  seats: T[];
 }
 
 /**
@@ -29,9 +44,9 @@ export interface SeatRow {
  * col_number). Khong tu sap xep lai theo row_label: sap chuoi se sai tu hang AA
  * tro di (AA dung truoc B theo alphabet nhung la hang thu 27).
  */
-export const groupSeatsByRow = (seats: Seat[]): SeatRow[] => {
-  const rows: SeatRow[] = [];
-  const index = new Map<string, SeatRow>();
+export const groupSeatsByRow = <T extends GridSeat>(seats: T[]): SeatRow<T>[] => {
+  const rows: SeatRow<T>[] = [];
+  const index = new Map<string, SeatRow<T>>();
   seats.forEach((seat) => {
     let row = index.get(seat.row_label);
     if (!row) {
@@ -107,7 +122,7 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
  * cot, ghe is_gap khong ban duoc), va moi truy van bao cao ben backend deu dem
  * bang `COUNT(*) FILTER (WHERE NOT is_gap)`. Tinh giong het o day.
  */
-export const sellableCapacity = (seats: Seat[]): number =>
+export const sellableCapacity = (seats: GridSeat[]): number =>
   seats.reduce((total, seat) => (seat.is_gap ? total : total + 1), 0);
 
 /**
@@ -154,10 +169,19 @@ export const chunkLabels = (labels: string[]): string[][][] => {
  * khong bao gio bi cat, va `declaredMismatch` bao cho nguoi truc biet hai ben
  * lech thay vi ve am tham mot so do sai.
  */
-export const renderedSeatsPerRow = (hall: Hall, seats: Seat[]): number => {
-  const widest = seats.reduce((max, s) => Math.max(max, s.col_number + s.col_span - 1), 0);
-  return Math.max(widest, hall.seats_per_row);
-};
+export const widestColumn = (seats: Pick<GridSeat, 'col_number' | 'col_span'>[]): number =>
+  seats.reduce((max, s) => Math.max(max, s.col_number + s.col_span - 1), 0);
+
+/**
+ * Bien the cho man KHACH. `GET /shows/:id/seats` khong tra ve rows /
+ * seats_per_row cua phong - chi co ghe - nen so cot phai suy hoan toan tu du
+ * lieu ghe.
+ */
+export const seatsPerRowFromSeats = (seats: Pick<GridSeat, 'col_number' | 'col_span'>[]): number =>
+  widestColumn(seats);
+
+export const renderedSeatsPerRow = (hall: Hall, seats: Seat[]): number =>
+  Math.max(widestColumn(seats), hall.seats_per_row);
 
 /** Mo ta luoi cho phan tom tat cua man hinh. */
 export interface GridSummary {
@@ -174,10 +198,7 @@ export interface GridSummary {
 
 export const summarizeGrid = (hall: Hall, seats: Seat[]): GridSummary => {
   const actualRows = groupSeatsByRow(seats).length;
-  const actualSeatsPerRow = seats.reduce(
-    (max, s) => Math.max(max, s.col_number + s.col_span - 1),
-    0
-  );
+  const actualSeatsPerRow = widestColumn(seats);
   return {
     gridCells: hall.rows * hall.seats_per_row,
     seatCount: seats.length,

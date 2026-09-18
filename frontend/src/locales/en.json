@@ -281,5 +281,30 @@
     "title": "Reports",
     "totalRevenue": "Total revenue",
     "totalSales": "Total sales"
+  },
+  "customer": {
+    "back": "Back",
+    "brand": "Cinemas",
+    "footer": "Cinema Project — book your seat",
+    "fromPrice": "from {{price}}",
+    "login": "Log in",
+    "myTickets": "My tickets",
+    "noMovies": "No films are showing right now.",
+    "noSeatPicked": "No seats picked yet",
+    "noShowtimes": "No showtimes on this day.",
+    "nowShowing": "Now showing",
+    "operatorCannotBook": "An operator account can see the map but cannot book — the whole /orders tree is customer-only. Sign in as a customer to book.",
+    "pickDay": "Pick a day",
+    "pickShowtime": "Pick a showtime",
+    "proceed": "Proceed to payment",
+    "register": "Sign up",
+    "screen": "SCREEN",
+    "seatCount": "Seats ({{count}}/{{max}})",
+    "seat_available": "Available",
+    "seat_held": "Held by someone else",
+    "seat_selected": "Selected",
+    "seat_sold": "Sold",
+    "seatsNeedLogin": "Sign in to see the seat map.",
+    "total": "TOTAL"
   }
 }

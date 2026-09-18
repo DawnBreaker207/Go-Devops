@@ -1,7 +1,28 @@
 import { apiClient, unwrap } from './client';
-import type { ApiResponse, PagedData, Showtime, ShowtimeListQuery, ShowtimePayload } from '@/types';
+import type {
+  ApiResponse,
+  PagedData,
+  Showtime,
+  ShowtimeListItem,
+  ShowtimeListQuery,
+  ShowtimePayload,
+} from '@/types';
 
 export const showtimeApi = {
+  /**
+   * GET /movies/:id/showtimes - CONG KHAI, tra ve MANG TRAN (khong {items,meta}).
+   *
+   * Day la o chon suat cua khach. Repository chi tra ve suat cua phim dang
+   * `showing`, trang thai `open`, `start_at >= now()`, va phong co DU 4 loai
+   * gia. Tham so `date` (YYYY-MM-DD) gioi han ket qua trong DUNG mot ngay.
+   */
+  forMovie: (movieId: string, date?: string) =>
+    apiClient
+      .get<ApiResponse<ShowtimeListItem[]>>(`/movies/${movieId}/showtimes`, {
+        params: date ? { date } : undefined,
+      })
+      .then(unwrap),
+
   /** GET /admin/showtimes - admin + staff. Giu ca suat da dong, da qua, phim nhap. */
   list: (query: ShowtimeListQuery) =>
     apiClient

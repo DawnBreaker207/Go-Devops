@@ -1,0 +1,131 @@
+/* The poster cua khu khach. Figma frame Home (77-855): luoi 4 poster mot hang,
+ * poster ty le 2:3 bo goc, ten phim can giua ben duoi. */
+
+.cp-poster {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--motion-duration-base) var(--motion-ease-out);
+}
+
+.cp-poster:active {
+  transform: scale(var(--motion-scale-press));
+}
+
+.cp-poster:focus-visible {
+  outline: 2px solid var(--cp-brand);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+.cp-poster__media {
+  position: relative;
+  /* Ty le co dinh 2:3 giu luoi thang hang ke ca khi anh chua tai xong hoac
+     khong co anh - khong bao gio nhay layout. */
+  aspect-ratio: 2 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cp-poster__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--motion-duration-moderate) var(--motion-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cp-poster:hover {
+    transform: translateY(calc(-1 * var(--motion-distance-lift)));
+  }
+
+  .cp-poster:hover .cp-poster__media img {
+    transform: scale(var(--motion-scale-zoom));
+  }
+}
+
+/* Khong co poster thi ve mot o trong co chu cai dau, van dung ty le 2:3. */
+.cp-poster__fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.cp-poster__badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--cp-brand);
+  color: var(--cp-text-on-brand);
+}
+
+.cp-poster__title {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.cp-poster__meta {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Luoi poster: 4 cot tren desktop, thu dan xuong 2 tren dien thoai. */
+.cp-poster-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .cp-poster-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .cp-poster-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+/* Khung xuong cho luc dang tai: cung hop voi the that nen khong nhay layout. */
+.cp-poster__skeleton {
+  aspect-ratio: 2 / 3;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  animation: cp-poster-pulse 1.4s var(--motion-ease-in-out) infinite;
+}
+
+@keyframes cp-poster-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-poster__skeleton {
+    animation: none;
+  }
+}

@@ -1,7 +1,8 @@
 import { lazy } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
+import CustomerLayout from '@/layouts/CustomerLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RequireRole from './RequireRole';
 import { ROLES_ADMIN, ROLES_OPERATOR } from './navigation';
@@ -16,9 +17,22 @@ const HallSeatsPage = lazy(() => import('@/features/hall/HallSeatsPage'));
 const BookingsPage = lazy(() => import('@/features/booking/BookingsPage'));
 const UsersPage = lazy(() => import('@/features/user/UsersPage'));
 const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
+const HomePage = lazy(() => import('@/features/browse/HomePage'));
+const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
+const SelectSeatPage = lazy(() => import('@/features/booking-flow/SelectSeatPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const router = createBrowserRouter([
+  // Khu khach hang. Duyet phim va chon suat la CONG KHAI (nhom `public` +
+  // OptionalAuth ben backend), nen khong boc trong ProtectedRoute.
+  {
+    element: <CustomerLayout />,
+    children: [
+      { path: PATHS.home, element: <HomePage /> },
+      { path: PATHS.film, element: <FilmPage /> },
+      { path: PATHS.selectSeat, element: <SelectSeatPage /> },
+    ],
+  },
   {
     element: <AuthLayout />,
     children: [{ path: PATHS.login, element: <LoginPage /> }],
@@ -29,7 +43,6 @@ export const router = createBrowserRouter([
       {
         element: <MainLayout />,
         children: [
-          { path: '/', element: <Navigate to={PATHS.dashboard} replace /> },
           // Nhom theo dung hang so roles ma navigation.tsx dung cho sider, nen
           // menu va quyen vao route khong the lech nhau.
           {
