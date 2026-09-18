@@ -9,7 +9,7 @@ This file cites symbol + file, not line numbers — line numbers drift, grep the
 
 Cinema booking API: catalog (movies/halls/showtimes), seat holds and booking, payments through a provider
 registry, tickets with QR + check-in, staff box office, admin dashboards, audit log and cron batch jobs.
-Module `github.com/Cinema-Project-Juann/BackEnd-CP`. Working branch `develop`. 143 Go files outside `docs/`.
+Module `github.com/Cinema-Project-Juann/BackEnd-CP`. Working branch `develop`. 144 Go files outside `docs/`.
 `internal/router/router.go` holds 78 registration statements = **79 distinct METHOD+path rows** (`v1.Match` on the
 payment IPN counts twice; `engine.Static` counts once as `GET|HEAD /media/*filepath`).
 

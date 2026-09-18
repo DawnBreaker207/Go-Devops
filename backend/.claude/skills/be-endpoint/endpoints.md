@@ -2,9 +2,10 @@
 
 Generated 2026-09-18. The **Guard column is parsed directly from `internal/router/router.go`** (group nesting +
 per-route middleware), not from prose. Request/response/notes come from the handlers and DTOs.
-Do NOT trust `docs/swagger.json`: 19 of the 74 `/api/v1` operations are missing from it.
+`docs/swagger.json` was regenerated on 2026-09-18 and now covers 72 of the 78 `/api/v1` operations; the 6
+gaps are aliases with no `@Router`. Still treat `router.go` as the only complete list.
 
-**79 distinct METHOD+path rows.** `router.go` holds 78 registration statements; `v1.Match` (GET+POST on the
+**83 distinct METHOD+path rows.** `router.go` holds 82 registration statements; `v1.Match` (GET+POST on the
 payment IPN) yields two rows, and `engine.Static` counts once as `GET|HEAD /media/*filepath`.
 
 ## Re-verify these numbers before trusting them
@@ -13,11 +14,11 @@ Every count in the config is reproducible. Run these from the `BackEnd-CP` root;
 2026-09-18. If one disagrees, this file is stale — fix it before building on it.
 
 ```bash
-grep -cE '\.(GET|POST|PUT|PATCH|DELETE)\(' internal/router/router.go   # 75  \_ 78 statements
-grep -cE '\.(Match|Any|Static)\(' internal/router/router.go            #  3  /  = 79 rows (Match counts twice)
-find . -name '*.go' -not -path './docs/*' | wc -l                      # 143 Go files
+grep -cE '\.(GET|POST|PUT|PATCH|DELETE)\(' internal/router/router.go   # 79  \_ 82 statements
+grep -cE '\.(Match|Any|Static)\(' internal/router/router.go            #  3  /  = 83 rows (Match counts twice)
+find . -name '*.go' -not -path './docs/*' | wc -l                      # 144 Go files
 grep -cE '^\s*Err[A-Za-z0-9]+\s*=\s*(BadRequest|Validation|Unauthorized|TokenExpired|Forbidden|NotFound|Conflict|PayloadTooLarge|PreconditionRequired|TooManyRequests|Internal|BadGateway|ServiceUnavailable)\(' pkg/errors/errors.go   # 52
-python3 -c "import json;d=json.load(open('docs/swagger.json'));print(sum(len([k for k in v if k in ('get','post','put','patch','delete')]) for v in d['paths'].values()))"   # 55 documented vs 74 real -> 19 stale
+python3 -c "import json;d=json.load(open('docs/swagger.json'));print(sum(len([k for k in v if k in ('get','post','put','patch','delete')]) for v in d['paths'].values()))"   # 72 documented vs 78 real -> 6 aliases
 ```
 
 The Guard column is produced by walking the group nesting in `router.go` and unioning each group's `.Use(...)`
@@ -257,7 +258,7 @@ Notes:
 - `GET /api/v1/staff/overview` — One call replacing /staff/dashboard + /staff/boxoffice/day; awaiting_checkin = sum(sold - checked_in).
 - `GET /api/v1/staff/showtimes/:id/tickets` — Plain array, not paginated. status=issued means still waiting at the gate. No ticket code is returned.
 
-## /api/v1/admin  (26)
+## /api/v1/admin  (28)
 
 | Method | Path | Guard | Request | Response `data` | Statuses \| codes |
 |---|---|---|---|---|---|
@@ -277,11 +278,15 @@ Notes:
 | `GET` | `/api/v1/admin/halls/:id/seats` | jwt+admin/staff | - (path param id) | []dto.SeatResponse | 200 404 400 401 403 503 500 \| 40000 40100 40101 40300 40400 50000 50300 |
 | `PATCH` | `/api/v1/admin/halls/:id/seats` | jwt+admin/staff audit:admin.bulk_update_seats | dto.BulkSeatUpdateRequest (json body: changes[1..50], each with one selector) | []dto.SeatResponse (only the touched seats, sorted by row then column) | 200 400 404 409 401 403 413 503 500 \| 40001 40100 40101 40300 40400 40900 41300 50000 50300 |
 | `PUT` | `/api/v1/admin/halls/:id/seats/:seatId` | jwt+admin/staff audit:admin.update_hall_seat | dto.SeatUpdateRequest (json body: seat_type, is_gap; both optional) | dto.SeatResponse | 200 400 404 409 401 403 413 503 500 \| 40001 40100 40101 40300 40400 40900 41300 50000 50300 |
+| `GET` | `/api/v1/admin/orders` | jwt+admin | dto.AdminOrderListQuery (query; embeds PageQuery: page, page_size, search on booking id \| customer email/name/phone \| movie title + status, payment_status, sold_via, showtime_id, movie_id, user_id, date, from, to, sort created_at\|paid_at\|total_amount\|start_at, order) | response.Paged{items=[]dto.AdminOrderListItem} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 50000 50300 |
 | `GET` | `/api/v1/admin/overview` | jwt+admin | - (no input) | dto.AdminOverviewResponse {today, last_7_days, upcoming_showtimes, alerts{stuck_refunds,failed_jobs,given_up_emails}} | 200 401 403 500 503 \| 40100 40101 40300 50000 50300 |
 | `GET` | `/api/v1/admin/reports/daily` | jwt+admin | - (raw c.Query("from"), c.Query("to"), YYYY-MM-DD; no DTO) | dto.DailyReportResponse {from,to,total_revenue,tickets_sold,days[]DailyAggregateResponse} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 50000 50300 |
+| `GET` | `/api/v1/admin/showtimes` | jwt+admin/staff | dto.ShowtimeAdminListQuery (query; embeds PageQuery: page, page_size, search on movie title or hall name + movie_id, hall_id, status, date, from, to, sort start_at\|created_at, order) | response.Paged{items=[]dto.ShowtimeResponse} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 50000 50300 |
+| `GET` | `/api/v1/admin/showtimes/:id` | jwt+admin/staff | - (path param id) | dto.ShowtimeResponse | 200 401 403 404 500 503 \| 40100 40101 40300 40400 50000 50300 |
 | `POST` | `/api/v1/admin/showtimes` | jwt+admin/staff audit:admin.create_showtime | dto.ShowtimeRequest (json body: movie_id uuid, hall_id uuid, start_at RFC3339, status open\|closed optional) | dto.ShowtimeResponse (201 Created) | 201 400 404 409 401 403 413 503 500 \| 40001 40100 40101 40300 40400 40900 41300 50000 50300 |
 | `DELETE` | `/api/v1/admin/showtimes/:id` | jwt+admin/staff audit:admin.delete_showtime | - (path param id) | - (200 with {code:0,message:"deleted"} ) | 200 404 409 400 401 403 503 500 \| 40000 40100 40101 40300 40400 40900 50000 50300 |
 | `PUT` | `/api/v1/admin/showtimes/:id` | jwt+admin/staff audit:admin.update_showtime | dto.ShowtimeRequest (json body, full replace; status omitted keeps current) | dto.ShowtimeResponse | 200 400 404 409 401 403 413 503 500 \| 40001 40100 40101 40300 40400 40900 41300 50000 50300 |
+| `GET` | `/api/v1/admin/stats` | jwt+admin | - (no input) | dto.AdminStatsResponse {movies, showtimes, bookings, users} | 200 401 403 500 503 \| 40100 40101 40300 50000 50300 |
 | `POST` | `/api/v1/admin/uploads/poster` | jwt+admin/staff audit:admin.upload_poster | multipart/form-data field "file" (no DTO; c.Request.FormFile) | dto.UploadResponse {url, content_type, size} | 201 400 401 403 502 503 \| 40000 40001 40100 40101 40300 50200 |
 | `GET` | `/api/v1/admin/users` | jwt+admin | dto.UserListQuery (query: page, page_size max 100, search max 255, role oneof customer\|staff\|admin, active bool) + | response.Paged{items []dto.UserResponse, meta {page, page_size, total, total_pages}} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
 | `POST` | `/api/v1/admin/users` | jwt+admin audit:admin.create_user | dto.CreateUserRequest (json body: email, password 6-72, full_name 2-255, role oneof staff\|admin) | dto.UserResponse | 201 400 401 403 409 413 500 503 \| 40001 40100 40101 40300 40900 41300 50000 |
@@ -293,8 +298,8 @@ Notes:
 - `GET /api/v1/admin/audit-logs` — created_at DESC; page_size default 10 max 100; to is inclusive (created_at < to+1 day); booking_id spans one order's lifecycle.
 - `GET /api/v1/admin/batch/jobs` — search = job_name ILIKE %..%; started_at DESC; statuses running|success|failed|skipped|stopped; swagger declares Paged without items type.
 - `POST /api/v1/admin/batch/jobs/:name/run` — Fire-and-forget: 202 once the RUNNING row exists; poll /admin/batch/jobs. Names: closeDay, sweepExpiredHolds, sendTicketEmails, cleanup.
-- `GET /api/v1/admin/hall-templates` — In-memory only, no DB: sorted small|medium|large with rows, seats_per_row, seat_count, seat_count_by_type
-- `GET /api/v1/admin/halls` — search is name ILIKE %search%, ordered by name; includes inactive halls
+- `GET /api/v1/admin/hall-templates` — In-memory only, no DB. Sorted ALPHABETICALLY (large, medium, small) by `slices.Sort` in `Templates()`, NOT small|medium|large. `seat_count` excludes gaps and already accounts for col_span=2 seats, so medium is 10x12 but 115 seats, large 14x14 but 190. `seat_count_by_type` omits any type whose count is 0, so it is a partial map, never 4 keys.
+- `GET /api/v1/admin/halls` — search is name ILIKE %search% (NOT escaped: a literal % matches everything), ordered by name; includes inactive halls. page_size > 100 is REJECTED 400/40001, not clamped — the `max=100` binding tag fires before Normalize()
 - `POST /api/v1/admin/halls` — prices must hold a positive value for all 4 seat types ; template small|medium|large fills unset layout fields
 - `DELETE /api/v1/admin/halls/:id` — Soft delete; 204 has no response envelope, so do not parse JSON on success
 - `GET /api/v1/admin/halls/:id` — Returns rows, seats_per_row, screen_position, aisle_after_cols, active — no seats or prices
@@ -306,8 +311,12 @@ Notes:
 - `GET /api/v1/admin/halls/:id/seats` — Label is row_label+col_number (dto.SeatLabel); carries is_gap and col_span; same handler as GET /api/v1/halls/:id/seats
 - `PATCH /api/v1/admin/halls/:id/seats` — All-or-nothing transaction; selector is exactly one of labels/rows/cols/range("A1:C4"); a selector matching no seat fails; col_span untouched
 - `PUT /api/v1/admin/halls/:id/seats/:seatId` — Blocked once the hall has any booking; omitted fields keep current value; aliased at PUT /api/v1/halls/:id/seats/:seatId
+- `GET /api/v1/admin/orders` — The operator order list, added 2026-09-18. Not scoped to the caller, unlike `GET /orders`. Counter sales (user_id NULL) appear next to online ones; `customer` carries the account for an online order and the walk-in name/phone for a counter sale. `payment` is the attempt the order already CARRIES (bookings.payment_id), so an unpaid hold with an open checkout has none and `payment_status` never matches it. Deleted movies/halls/showtimes stay joined in on purpose. Does NOT reconcile with the provider — use `GET /staff/orders/:id` for that. `date` wins over `from`/`to`, resolved in the server timezone.
 - `GET /api/v1/admin/overview` — Today computed live, not from closeDay; each alert list capped at 20 (alertListLimit ); stuck refund = 8 attempts.
 - `GET /api/v1/admin/reports/daily` — Reads daily_aggregates written by the closeDay job; defaults to to=today, from=to-6 days. No pagination.
+- `GET /api/v1/admin/stats` — The four dashboard tiles, added 2026-09-18. movies/showtimes/users are plain counts of non-soft-deleted rows (locked `active=false` accounts still count, matching `GET /admin/users`); bookings counts `confirmed` ONLY, because the bookings table is also the hold table. Deliberately separate from `/admin/overview`, which answers "how is today going" rather than "how big is the catalogue".
+- `GET /api/v1/admin/showtimes` — The operator list, added 2026-09-18. Unlike `GET /showtimes` it keeps closed showtimes, draft/ended movies, past dates and halls without a full price set. `date` wins over `from`/`to`; both bounds are resolved in the server timezone. Never cached.
+- `GET /api/v1/admin/showtimes/:id` — Operator read; does NOT require the showtime to be on sale, unlike the booking endpoints.
 - `POST /api/v1/admin/showtimes` — end_at derived from movie duration; overlap check includes cleanup minutes; seat states created for the hall grid; status forced open
 - `DELETE /api/v1/admin/showtimes/:id` — Soft delete; any booking of any status blocks it — close the showtime instead; busts catalog cache
 - `PUT /api/v1/admin/showtimes/:id` — Same movie_id+hall_id+start_at is a status-only change (closing always allowed); moving hall rebuilds seat states and needs zero bookings

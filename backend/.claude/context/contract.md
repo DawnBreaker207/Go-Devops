@@ -2,7 +2,7 @@
 
 The wire-level truth: one envelope, 15 status/code rows, 24 enums, and the formats.
 Verified against source on 2026-09-18. `FrontEnd-CP/src/types` mirrors this by hand, so anything that changes here
-must be reported to the frontend. `docs/swagger.json` is 19 operations stale — this file and the Go code win.
+must be reported to the frontend. `docs/swagger.json` misses 6 alias operations — this file and the Go code win.
 
 Per-route detail (guard, DTO, statuses) is in `../skills/be-endpoint/endpoints.md`.
 
@@ -170,7 +170,10 @@ A wrong HTTP verb answers **404 / 40400**, because `engine.NoMethod` is dead cod
 
 ## Formats
 
-**Time.** All time.Time fields marshal with Go's default encoding/json, i.e. RFC3339 with nanoseconds (e.g. "2026-09-15T19:00:00+07:00"). Columns are TIMESTAMPTZ and the GORM DSN sets TimeZone=Asia/Ho_Chi_Minh (config.yaml:31), so offsets come back as +07:00, not Z. Exceptions: movie `release_date` is a plain "YYYY-MM-DD" STRING in both directions, and the `date` query param on /showtimes and /movies/:id/showtimes is "YYYY-MM-DD".
+**Time.** VERIFIED AT RUNTIME 2026-09-18: the offset is **not** uniform. `GET /showtimes` answers
+`2026-09-18T17:00:00+07:00` while `POST /admin/showtimes` echoes the same instant as `2026-09-18T10:00:00Z`.
+Treat every `time.Time` field as an instant and normalise on the client; never string-compare or slice an offset.
+ All time.Time fields marshal with Go's default encoding/json, i.e. RFC3339 with nanoseconds (e.g. "2026-09-15T19:00:00+07:00"). Columns are TIMESTAMPTZ and the GORM DSN sets TimeZone=Asia/Ho_Chi_Minh (config.yaml:31), so offsets come back as +07:00, not Z. Exceptions: movie `release_date` is a plain "YYYY-MM-DD" STRING in both directions, and the `date` query param on /showtimes and /movies/:id/showtimes is "YYYY-MM-DD".
 
 **Money.** int64 whole Vietnamese dong — NOT minor units, NOT decimal, and there is no currency field anywhere in any DTO. "CreateRequest amounts are integer VND". Fields: total_amount, price, amount, paid_amount, from_price, and the `prices` map values. The FE does all formatting; the backend only formats for emails (formatVND renders 120000 as "120.000 ₫",).
 
