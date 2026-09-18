@@ -20,6 +20,9 @@ const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
 const HomePage = lazy(() => import('@/features/browse/HomePage'));
 const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
 const SelectSeatPage = lazy(() => import('@/features/booking-flow/SelectSeatPage'));
+const CheckoutPage = lazy(() => import('@/features/booking-flow/CheckoutPage'));
+const OrderSuccessPage = lazy(() => import('@/features/booking-flow/OrderSuccessPage'));
+const MyTicketsPage = lazy(() => import('@/features/booking-flow/MyTicketsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const router = createBrowserRouter([
@@ -31,6 +34,12 @@ export const router = createBrowserRouter([
       { path: PATHS.home, element: <HomePage /> },
       { path: PATHS.film, element: <FilmPage /> },
       { path: PATHS.selectSeat, element: <SelectSeatPage /> },
+      // Ba man duoi deu goi /orders/* (RequireRoles(customer) ben backend).
+      // Khong boc them RequireRole o day: khu khach khong dung man 403 cua khu
+      // van hanh, va moi man da tu xu ly loi cua no.
+      { path: PATHS.checkout, element: <CheckoutPage /> },
+      { path: PATHS.orderSuccess, element: <OrderSuccessPage /> },
+      { path: PATHS.myTickets, element: <MyTicketsPage /> },
     ],
   },
   {

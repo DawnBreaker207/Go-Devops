@@ -4,9 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { seatMapApi } from '@/api/seatmap.api';
 import { buildGridLayout, groupSeatsByRow, seatsPerRowFromSeats } from '@/features/hall/seatGrid';
+import { useHoldSeats } from './hooks/useOrders';
 import { useHasRole } from '@/hooks/useHasRole';
 import { useAuthStore } from '@/stores/authStore';
-import { PATHS } from '@/routes/paths';
+import { PATHS, checkoutPath } from '@/routes/paths';
 import type { SeatMapSeat } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { formatDateTime, formatVND } from '@/utils/format';
@@ -54,6 +55,8 @@ export const SelectSeatPage = () => {
   const isCustomer = useHasRole('customer');
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [holdError, setHoldError] = useState<string | null>(null);
+  const hold = useHoldSeats();
 
   const seatMap = useQuery({
     queryKey: ['seatmap', showtimeId],
@@ -76,6 +79,26 @@ export const SelectSeatPage = () => {
     [seats, selected]
   );
   const total = selectedSeats.reduce((sum, s) => sum + s.price, 0);
+
+  const proceed = async () => {
+    if (!showtimeId || selectedSeats.length === 0) return;
+    setHoldError(null);
+    try {
+      const result = await hold.mutateAsync({
+        show_id: showtimeId,
+        // PHAI la showtime_seat_id. Gui seats.id se an 400 "seat does not
+        // belong to this showtime".
+        seat_ids: selectedSeats.map((s) => s.showtime_seat_id as string),
+      });
+      navigate(checkoutPath(result.booking_id));
+    } catch (error) {
+      // Ghe bi nguoi khac giu mat giua chung: 409. Ghe gap hoac loai ghe chua
+      // co gia: 400/409. Cau cua backend cu the hon bat cu cau viet san nao.
+      setHoldError(errorMessage(error, t('common.somethingWrong')));
+      void seatMap.refetch();
+      setSelected(new Set());
+    }
+  };
 
   const toggle = (seat: SeatMapSeat) => {
     const id = seat.showtime_seat_id;
@@ -137,6 +160,12 @@ export const SelectSeatPage = () => {
 
       {!isCustomer ? (
         <div className="cp-notice cp-notice--info">{t('customer.operatorCannotBook')}</div>
+      ) : null}
+
+      {holdError ? (
+        <div className="cp-notice cp-notice--error" role="alert">
+          {holdError}
+        </div>
       ) : null}
 
       <div className="cp-legend">
@@ -223,9 +252,10 @@ export const SelectSeatPage = () => {
           <button
             type="button"
             className="cp-btn cp-btn--primary"
-            disabled={selectedSeats.length === 0 || !isCustomer}
+            disabled={selectedSeats.length === 0 || !isCustomer || hold.isPending}
+            onClick={() => void proceed()}
           >
-            {t('customer.proceed')}
+            {hold.isPending ? t('common.loading') : t('customer.proceed')}
           </button>
         </div>
       </div>
