@@ -37,3 +37,7 @@ pnpm-debug.log*
 
 # test
 coverage/
+
+# claude code (personal, never shared)
+.claude/settings.local.json
+CLAUDE.local.md
