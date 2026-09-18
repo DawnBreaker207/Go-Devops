@@ -9,22 +9,34 @@ argument-hint: <route and purpose, e.g. "/showtimes danh sach suat chieu cho adm
 Build the screen for **$ARGUMENTS**. What the backend really returns: `api-contract.md` in this directory.
 Undecided conventions: `../../context/decisions.md` — read it instead of inventing one.
 
+## 0a. Open the Figma frame for this screen — before writing any markup
+
+`../../context/figma.md` lists every frame, its `node-id`, and the only reliable way to open one (navigate to
+`...?node-id=<id>` as a fresh page load; the canvas ignores zoom shortcuts). If the screen has a frame, open it,
+screenshot it, and follow its layout. If it does **not** have one — the Figma has no Showtimes screen and no
+dashboard tiles — say so, follow the nearest sibling frame's structure, and add what you derived to `figma.md`.
+
+Colour comes only from `src/theme/tokens.ts`; `../../rules/design-tokens.md` is binding and forbids hex literals
+in components.
+
 ## 0. Verify the endpoint exists — this is the step that gets skipped
 
 ```bash
 grep -nE '\.(GET|POST|PUT|PATCH|DELETE|Match)\(' ../BackEnd-CP/internal/router/router.go | grep -i <domain>
 ```
 
-Then read the DTO in `../BackEnd-CP/internal/dto/<domain>.go`. **`docs/swagger.json` is 19 operations stale.**
+Then read the DTO in `../BackEnd-CP/internal/dto/<domain>.go`. `docs/swagger.json` regenerates correctly again
+but still misses 6 alias operations, so `router.go` stays the only complete list.
 
-If the endpoint does not exist, **STOP and tell the user**. `ShowtimesPage` and `BookingsPage` are blocked on
-exactly this — see `../../../../.claude/context/cross-repo-gotchas.md` (the workspace-root one). Do not fake
-data and do not build a shell.
+If the endpoint does not exist, **STOP and tell the user** — see `../../../../.claude/context/cross-repo-gotchas.md`
+(the workspace-root one). Do not fake data and do not build a shell.
 
 Also check the guard: `admin`-only, `staff+admin`, or `customer`-only. Roles have **no hierarchy**, so an admin
 token gets 403 on every `/orders/*` route except `GET /orders`, which has no role gate and simply returns that
 admin's own (empty) order list. Most of `/admin/*` accepts `staff` too — only `/admin/users*`,
-`/admin/reports/daily`, `/admin/overview`, `/admin/batch/jobs*` and `/admin/audit-logs` are admin-only.
+`/admin/reports/daily`, `/admin/overview`, `/admin/stats`, `/admin/orders`, `/admin/batch/jobs*` and
+`/admin/audit-logs` are admin-only. Gate the route with `<RequireRole>` and the control with `useHasRole`, using
+the roles constants in `src/routes/navigation.tsx` so the menu and the router cannot drift apart.
 
 ## 1. Types — `src/types/<domain>.ts`
 

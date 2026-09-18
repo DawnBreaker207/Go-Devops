@@ -34,7 +34,7 @@ export const movieApi = {
 - One file per domain: `src/api/<domain>.api.ts`, one exported object literal `<domain>Api`, arrow methods.
 - Paths are relative to the `/api/v1` base already in `API_BASE_URL` — never repeat the prefix.
 - **Verify the path exists** in `BackEnd-CP/internal/router/router.go` before adding a method. `docs/swagger.json`
-  is 19 operations stale.
+  still misses 6 alias operations.
 - A paged endpoint is `ApiResponse<PagedData<T>>`; a bare-array endpoint is `ApiResponse<T[]>`. Check per
   endpoint — `GET /showtimes`, `GET /movies/:id/showtimes`, `GET /halls/:id/seats`, `GET /admin/halls/:id/seats`,
   `GET /admin/halls/:id/prices`, `GET /admin/hall-templates`, `GET /payments/providers` and

@@ -40,13 +40,27 @@ an `aria-label` of the form `edit-${record.id}`, and delete wrapped in `Popconfi
 
 ## Forms
 
-antd `Form` + `Form.useForm<FormValues>()`, `layout="vertical"`, `rules` for validation. **There is no schema
-validation library** — do not import zod/yup/react-hook-form. Modal props are
-`{ open, entity | null, confirmLoading, onCancel, onSubmit }` with `destroyOnClose` and `preserve={false}`.
+antd `Form` + `Form.useForm<FormValues>()`, `layout="vertical"`, `rules` for validation, every rule carrying an
+explicit i18n `message`. **There is no schema validation library** — do not import zod/yup/react-hook-form.
+Modal props are `{ open, entity | null, confirmLoading, onCancel, onSubmit }` with `destroyOnHidden` and
+`preserve={false}`. antd 5.29 deprecated `destroyOnClose`; using it logs a console error.
+
+**Seed the form with `initialValues`, never with `setFieldsValue` inside a `useEffect`.** Verified at runtime on
+2026-09-18: the effect form silently produces an **empty modal**. `main.tsx` mounts under `StrictMode`, which
+runs mount effects, then cleanups, then mount effects again; antd's `preserve={false}` field cleanup deletes the
+value from the store and lands after the effect's `setFieldsValue`. `destroyOnHidden` gives each open a fresh
+`<Form>`, so `initialValues` are re-applied every time and nothing depends on effect ordering.
+
+`onSubmit` returns a promise and **throws on failure**. The modal catches it, calls
+`applyApiFieldErrors(form, error)` from `src/utils/form.ts` so a 400/40001 `details` map lands on the right
+inputs, and toasts only what is left with `errorMessage(error, fallback)`. A page that try/catches the mutation
+itself breaks this — let the error out.
 
 Before adding a form field, check the backend binding: an over-permissive form produces a 400 with a `details`
 map, and a form that omits a field the backend **overwrites** silently destroys data — `PUT /movies/:id` is a
-full replace, which is exactly how `trailer_url` and `cast` get wiped and `age_rating` is reset to `P` today.
+full replace, which is exactly how `trailer_url` and `cast` used to get wiped and `age_rating` reset to `P`
+(fixed in `MovieFormModal` on 2026-09-18 by carrying all three). A `details` key with no matching `Form.Item`
+is accepted by antd and drawn nowhere, so the form must cover every field its endpoint validates.
 
 ## Routing and i18n
 
@@ -57,11 +71,15 @@ full replace, which is exactly how `trailer_url` and `cast` get wiped and `age_r
 
 ## Permissions
 
-`ProtectedRoute` checks the token only. The backend additionally requires `admin|staff` for movie writes and for
-most of `/admin/*` (hall-templates, halls, showtimes, uploads); only `/admin/users*`, `/admin/reports/daily`,
-`/admin/overview`, `/admin/batch/jobs*` and `/admin/audit-logs` are admin-only — with **no role hierarchy**. Until a role gate exists (see `decisions.md`), a customer
-account can open an admin screen and only discover the 403 on submit — do not treat that as acceptable for a new
-admin screen without saying so.
+`ProtectedRoute` checks the token only; the role gate is `<RequireRole roles={...}/>` on the route and
+`useHasRole(...)` on a control. The roles constants live in `src/routes/navigation.tsx` and are shared by the
+sider and the router, so the menu can never offer a link that 403s.
+
+Mirror the backend exactly, because `RequireRoles` there is a case-sensitive map lookup with **no hierarchy**:
+`admin|staff` for movie writes and most of `/admin/*` (hall-templates, halls, showtimes, uploads); admin-only for
+`/admin/users*`, `/admin/reports/daily`, `/admin/overview`, `/admin/stats`, `/admin/orders`, `/admin/batch/jobs*`
+and `/admin/audit-logs`. An admin-only query on a screen that staff can also open must be
+`enabled: useHasRole('admin')` rather than firing a request that is certain to 403.
 
 ## Styling
 

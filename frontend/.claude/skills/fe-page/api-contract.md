@@ -29,15 +29,16 @@ with guards is `../../../../BackEnd-CP/.claude/skills/be-endpoint/endpoints.md`.
 
 ### Responses that are NOT the envelope
 
-| Endpoint                         | What comes back                                                          | What the FE must do                         |
-| -------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
-| `DELETE /admin/halls/:id`        | **204, empty body**                                                      | do not `unwrap()`, do not `res.json()`      |
-| `DELETE /users/me`               | **204, empty body**                                                      | same                                        |
-| `DELETE /movies/:id`             | 200 `{code,message}`, no `data`                                          | type `ApiResponse<void>`, ignore the result |
-| `DELETE /admin/showtimes/:id`    | 200 `{code,message}`, no `data`                                          | same                                        |
-| `GET /payments/:provider/return` | envelope today, **303 redirect** if `payment.return_redirect_url` is set | do not assume a body                        |
-| `GET                             | POST /payments/:provider/ipn`                                            | provider shape, `code` is a **string**      | gateway-only, never call it |
-| SSE stream                       | `text/event-stream`                                                      | use `EventSource`, not axios                |
+| Endpoint                         | What comes back                                                          | What the FE must do                                                           |
+| -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `DELETE /admin/halls/:id`        | **204, empty body**                                                      | do not `unwrap()`, do not `res.json()`                                        |
+| `DELETE /users/me`               | **204, empty body**                                                      | same                                                                          |
+| `DELETE /movies/:id`             | 200 `{code,message}`, no `data`                                          | type `ApiResponse<void>`, ignore the result                                   |
+| `DELETE /admin/showtimes/:id`    | 200 `{code,message}`, no `data`                                          | same                                                                          |
+| `PUT /movies/:id`                | full replace                                                             | send every field — omitting `trailer_url`, `cast` or `age_rating` erases them |
+| `GET /payments/:provider/return` | envelope today, **303 redirect** if `payment.return_redirect_url` is set | do not assume a body                                                          |
+| `GET                             | POST /payments/:provider/ipn`                                            | provider shape, `code` is a **string**                                        | gateway-only, never call it |
+| SSE stream                       | `text/event-stream`                                                      | use `EventSource`, not axios                                                  |
 
 ## Status codes the UI must branch on
 
@@ -66,6 +67,27 @@ Paged response: `data: { items: T[], meta: { page, page_size, total, total_pages
 `GET /movies/:id/showtimes`, `GET /halls/:id/seats`, `GET /admin/halls/:id/seats`, `GET /admin/halls/:id/prices`,
 `GET /admin/hall-templates`, `GET /payments/providers`, `GET /staff/showtimes/:id/tickets`.
 
+`page_size` over 100 is a **400 / 40001**, not a silent clamp — `useListQuery()` already caps it.
+
+## The three operator endpoints added 2026-09-18
+
+| Endpoint                   | Roles          | Shape                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /admin/showtimes`     | admin + staff  | paged `dto.ShowtimeResponse`. Filters `movie_id`, `hall_id`, `status`, `date`, `from`, `to`, `search` (movie title or hall name), `sort` = `start_at\|created_at`, `order`. Unlike `GET /showtimes` it keeps closed showtimes, draft/ended movies, past dates and halls with no full price set.                                                              |
+| `GET /admin/showtimes/:id` | admin + staff  | one `dto.ShowtimeResponse`; does not require the showtime to be on sale.                                                                                                                                                                                                                                                                                     |
+| `GET /admin/orders`        | **admin only** | paged `dto.AdminOrderListItem` = the customer's own order shape plus `sold_via`, `seats` and `customer`. Filters `status`, `payment_status`, `sold_via`, `showtime_id`, `movie_id`, `user_id`, `date`, `from`, `to`, `sort` = `created_at\|paid_at\|total_amount\|start_at`, `order`; `search` covers booking id, customer email/name/phone and movie title. |
+| `GET /admin/stats`         | **admin only** | `{movies, showtimes, bookings, users}` — plain counts, NOT `/admin/overview`'s daily aggregate.                                                                                                                                                                                                                                                              |
+
+Two traps in `/admin/orders`, both seen at runtime:
+
+- A **counter sale has no account**, so `customer` carries only `full_name` and `phone`, with no `user_id`.
+  Type `customer` as all-optional or a counter row will read as corrupt.
+- `payment` is the attempt the order already **carries**. An unpaid hold with an open checkout has none, and
+  `payment_status` will never match it. For live reconciliation use `GET /staff/orders/:id`.
+
+Staff get **403** on `/admin/orders` and `/admin/stats`. They read one order at a time via
+`GET /staff/orders/:id`, which admin can call too — so a detail link from the admin list can point there.
+
 ## Seats — the id trap that will cost you an afternoon
 
 `SeatMapSeat` carries **two** ids: `id` is the hall seat, `showtime_seat_id` is the row for this showtime.
@@ -80,12 +102,19 @@ Also true of the seat map and the hold:
 - A seat with `is_gap: true` is **not sellable** (`ErrSeatNotSellable`); taken seats answer `ErrSeatTaken`. Both
   list the offending labels in `details.seats`.
 - `col_span` exists for couple seats — a seat can occupy more than one column.
-- `SeatMapResponse` carries `screen_position` and `aisle_after_cols` but **no row/column count**: derive the grid
-  from the seats themselves.
+- `SeatMapResponse` carries `screen_position` and `aisle_after_cols` (an empty array, not null, when there are no
+  aisles) but **no row/column count**: derive the grid from the seats themselves. It also carries `movie_title`,
+  `hall_name`, `age_rating`, `start_at`, `end_at`, `status` and `prices` (a **map** of seat_type -> price), so one
+  request is enough to render the whole booking screen header.
+- Verified shape of one seat: `{id, showtime_seat_id, label, row_label, col_number, seat_type, is_gap, col_span,
+status, price}`.
 
 ## Formats
 
-- **Time**: RFC3339 with a `+07:00` offset (`Asia/Ho_Chi_Minh`), not `Z`. Render through `src/utils/format.ts`.
+- **Time**: RFC3339, but the offset is **not uniform** — verified at runtime 2026-09-18: `GET /showtimes` returns
+  `2026-09-18T17:00:00+07:00` while `POST /admin/showtimes` returns the same instant as `2026-09-18T10:00:00Z`.
+  So parse every timestamp as an instant; never slice or compare the offset string. Render through
+  `src/utils/format.ts`.
   **Trap**: `format.ts` uses plain `dayjs(value)` and the app installs **no** `dayjs/plugin/utc` or
   `/timezone` — so a `19:00+07:00` showtime renders in the _viewer's_ local zone (12:00 on a UTC machine or in
   CI). If a screen must show cinema-local time, that plugin pair has to be added first; say so rather than

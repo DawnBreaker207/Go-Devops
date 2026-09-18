@@ -8,6 +8,10 @@ default, and why.
 Until an entry is marked APPROVED, follow the proposal but say in your report that you did, so it can be
 corrected cheaply. If a task's requirement contradicts a proposal, ask instead of silently diverging.
 
+**Entries 1, 2, 3, 4, 6, 7, 8, 9, 11, 12 and 14 now have code following them** (built 2026-09-18, marked
+`BUILT` below). They are still PROPOSED: the code exists so the proposal can be judged on something real, and
+reversing any of them is a small change, not a rewrite. Nothing has been approved.
+
 ---
 
 ## 1. Where errors are shown
@@ -33,13 +37,18 @@ Both existing usages then become correct instead of one of them being wrong.
 until a third level of nesting actually exists; keep the blanket invalidate.
 **Why** A factory for four hooks is ceremony. Blanket invalidation is correct and cheap at this data size.
 
-## 4. Form validation messages and backend field errors
+## 4. Form validation messages and backend field errors — BUILT
 
 **Today** `LoginPage` supplies i18n messages in its `rules`; `MovieFormModal` relies on antd's default locale text.
 **Proposed** Every `rules` entry carries an explicit i18n `message`. On a `40001`, map `ApiError.details` onto
 the form with `form.setFields([{ name, errors: [msg] }])` — add one shared helper the first time it is needed.
 **Why** antd's default text is not translated consistently and ignores the vi/en switch. `details` keys are
 already the exact field names, so the mapping is one line.
+**Built** `applyApiFieldErrors(form, error)` in `src/utils/form.ts`, on top of `fieldErrorsOf` in
+`src/utils/error.ts` (which only reads `details` when the code really is 40001). `MovieFormModal` calls it:
+`onSubmit` now throws on failure, the modal maps what it can onto the inputs and toasts only the rest — so the
+page must NOT swallow the mutation error. Caveat, deliberate: a `details` key with no matching `Form.Item`
+is accepted by antd and drawn nowhere, so a form must carry every field its endpoint validates.
 
 ## 5. Barrel files
 
@@ -48,21 +57,29 @@ already the exact field names, so the mapping is one line.
 import them; delete them only in a dedicated cleanup commit.
 **Why** They are dead weight, but deleting them is unrelated churn inside a feature task.
 
-## 6. Permission model
+## 6. Permission model — BUILT
 
 **Today** none. `ProtectedRoute` checks the token only; `User.role` is read nowhere.
 **Proposed** Add `<RequireRole roles={['admin']}>` as a layout route wrapper for route-level gating, plus a
 `useHasRole(...)` selector for hiding menu items and disabling buttons. No generic `<Can>`/policy engine.
 **Why** The backend gates by route and by role with **no hierarchy**, so a route-level wrapper mirrors it
 exactly. Today a customer can open an admin screen and only learns of the 403 on submit.
+**Built** `useHasRole` / `useCurrentRole` in `src/hooks/useHasRole.ts`, `<RequireRole roles={...}/>` in
+`src/routes/RequireRole.tsx`, and the `ROLES_OPERATOR` / `ROLES_ADMIN` constants in `src/routes/navigation.tsx`
+that the router groups by. A blocked route renders a real 403 `<Result>` rather than redirecting silently.
+Verified in the browser: a staff account sees three menu entries, no dashboard tiles, and 403 on `/bookings`.
 
-## 7. Paging and filter state
+## 7. Paging and filter state — BUILT
 
 **Today** component `useState` per page; state is lost on reload and links are not shareable.
 **Proposed** Move page / page_size / search into URL search params with `useSearchParams`, via one shared
 `useListQuery()` helper introduced with the second list screen.
 **Why** Admin tables get deep-linked and refreshed constantly. Doing it once in a helper is cheaper than
 retrofitting four screens later.
+**Built** `useListQuery()` in `src/hooks/useListQuery.ts`, already wired into `MoviesPage`. Default values are
+never written to the URL (so `/movies` and `/movies?page=1&page_size=10` are the same page), changing the search
+term resets to page 1, `page_size` is clamped to the backend's 100, and every write uses `replace` so paging
+does not fill the back button.
 
 ## 8. Naming for non-page feature files
 
@@ -72,12 +89,13 @@ retrofitting four screens later.
 and `features/<domain>/utils.ts`.
 **Why** Extends the single existing name instead of inventing a scheme beside it.
 
-## 9. `src/hooks/`
+## 9. `src/hooks/` — BUILT
 
 **Today** an empty, untracked directory. README documents it; git does not contain it.
 **Proposed** Reserve it for hooks used by **two or more** features (`useListQuery`, `useHasRole`). Create it with
 the first real file. Anything feature-specific stays in `features/<domain>/hooks/`.
 **Why** Matches how `src/components/` vs `features/*/components/` already splits.
+**Built** The directory now exists and holds exactly the two hooks the proposal named.
 
 ## 10. `src/assets/` vs `public/`
 
@@ -93,7 +111,7 @@ the first real file. Anything feature-specific stays in `features/<domain>/hooks
 antd `Skeleton`. Full-screen only for route-level Suspense and app bootstrap, which already works that way.
 **Why** Swapping a whole table for a spinner loses the header and the user's scroll position.
 
-## 12. Test scope
+## 12. Test scope — BUILT (a, d)
 
 **Today** one test (`LoginPage`), no network mocking, no shared render helper, and it asserts **Vietnamese** copy.
 It also does `useAuthStore.setState({ login: loginSpy })`, which permanently mutates the real store for any
@@ -105,6 +123,10 @@ boundary with `vi.mock('@/api/<domain>.api')` — do not add MSW yet. (d) Reset 
 Not worth one: pure layout.
 **Why** MSW is a large dependency for a repo with one test; api-module mocking gives the same isolation. The
 store-leak is a real bug waiting to bite the second test file.
+**Built** (a) `src/test/renderWithProviders.tsx` — same provider chain as `App.tsx` minus the router, plus
+`createTestQueryClient()` with retries off. (d) `src/setupTests.ts` snapshots both stores at module load and
+restores them with `setState(initial, true)` in an `afterEach`, which fixes the `LoginPage` spy leak.
+(c) has not been needed yet — no test mocks an api module so far.
 
 ## 13. Commits and branches
 
@@ -115,7 +137,7 @@ only one the sibling repo has ever used, cut off `main`. Scopes worth using here
 `booking`, `api`, `ui`, `i18n`.
 **Why** One sample is not a convention, but the sibling repo's is unambiguous and the two are developed together.
 
-## 14. Dashboard data source
+## 14. Dashboard data source — BUILT, owner picked (a)
 
 **Today** `DashboardPage` abuses `useMovieList({page:1,page_size:1})` to read `meta.total` and hardcodes `0` for
 the other three cards.
@@ -123,13 +145,27 @@ the other three cards.
 to the tiles that have a real source. Pick one with the owner before touching the page.
 **Why** Three tiles currently lie. `GET /admin/overview` exists but returns today's aggregate + upcoming
 showtimes + alerts, not these counts, and is admin-only.
+**Built** Option (a). `GET /admin/stats` shipped on the backend on 2026-09-18 and `DashboardPage` reads it
+through `useAdminStats`. The `useMovieList({page_size:1})` hack is gone. The endpoint is admin-only, so the
+tiles render only for `useHasRole('admin')` and the query is `enabled: false` for anyone else rather than firing
+a request that is certain to 403.
 
-## 15. CSS at scale
+## 15. CSS at scale — DECIDED 2026-09-18
 
 **Today** inline `style={{...}}` + antd tokens; `src/index.css` is a 26-line reset.
 **Proposed** Keep inline styles and tokens. Introduce a spacing scale const in `src/theme.ts` when a third
 screen repeats the same magic numbers. Do not add Tailwind, CSS modules or styled-components without asking.
 **Why** antd already owns the design tokens; a second styling system would fragment theming and dark mode.
+**Decided** The owner asked whether to move to Tailwind and chose to **keep antd, with plain CSS for the
+customer-facing screens**. The split is by strength, not by taste: antd carries the things Tailwind cannot
+(`Form` + `form.setFields`, which the whole `applyApiFieldErrors` pipeline rests on and this repo has no
+form/schema library to replace; `Table` paging; the datetime picker; searchable `Select`; `ConfigProvider
+locale`; `darkAlgorithm`). Tailwind is a styling system, not a component library, so replacing antd would have
+meant adding a headless component library, a form library, a date picker and a table — four dependencies, not
+minus one — and rewriting ~1,750 lines of finished screens. The customer screens (hero, poster grid, seat map,
+ticket cards) get plain CSS with the `src/motion.ts` tokens, the way `MovieCard` already does.
+**If this is ever revisited:** Tailwind CAN coexist with antd, but only with `preflight` disabled — its reset
+otherwise overrides antd's styles and breaks every admin screen.
 
 ## 16. Realtime (SSE) ownership — no precedent at all
 
@@ -148,13 +184,12 @@ optional, and a blanket invalidate per event would hammer the API during a busy 
 
 - `index.html` links a favicon that does not exist -> 404 in dev and in the nginx image.
 - `ErrorBoundary` hardcodes Vietnamese text while `error.boundaryTitle` / `error.reload` already exist in both
-  locale files. `DashboardPage` hardcodes `'Users'`. `MovieFormModal` hardcodes the `(phút)` suffix.
+  locale files. (`DashboardPage`'s `'Users'` title and `MovieFormModal`'s `(phút)` suffix were fixed 2026-09-18.)
 - `appStore.ts` defines `LANG_KEY = 'cp_language'` while `locales/i18n.ts` re-reads the same key as an inline
   literal — two sources of truth. The theme/language keys also bypass `src/utils/storage.ts`, which is supposed
   to own localStorage.
 - `VITE_APP_NAME` is declared in `.env.example` and `vite-env.d.ts` but read nowhere; the title comes from the
   `common.appName` i18n key and a hardcoded `<title>` in `index.html`.
-- `MoviesPage` renders `showTotal: (total) => ${total}` — a bare number with no label in either language.
 - `movieApi.detail(id)` and `authApi.register(...)` are dead code: no caller, and no `/movies/:id` or `/register`
   route exists.
 - `coverage/` is git-ignored but no coverage provider is installed, so `vitest --coverage` fails.

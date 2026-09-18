@@ -1,16 +1,24 @@
 # FrontEnd-CP — Claude context
 
 Auto-loaded when a session opens here, and lazily when a session at `CinemaProject/` reads a file in this repo.
-Keep <200 lines. Deep dives: `.claude/skills/fe-page/api-contract.md` (what the backend really returns) and
-`.claude/context/decisions.md` (the conventions this repo had NOT decided yet — read it before inventing one).
+Keep <200 lines. Deep dives: `.claude/skills/fe-page/api-contract.md` (what the backend really returns),
+`.claude/context/decisions.md` (the conventions this repo had NOT decided yet — read it before inventing one),
+and `.claude/context/figma.md` (the design reference: how to open it, every frame's node-id, per-screen specs).
 This file cites symbol + file, not line numbers — line numbers drift, grep the symbol.
 
 ## Project overview
 
-Admin/staff web UI for `BackEnd-CP` (cinema booking). **One commit old and mostly a scaffold**: the plumbing is
-real and should be reused, but only the `movie` feature is actually built. `ShowtimesPage` and `BookingsPage` are
-15-line `<Empty/>` stubs — and both are **blocked on missing backend endpoints**, see
-`../.claude/context/cross-repo-gotchas.md` before starting either.
+Admin/staff web UI for `BackEnd-CP` (cinema booking). **There is no customer-facing UI yet** — every screen here
+is for an operator. Built: `movie` (table + form), `showtime` (table + filters + form), `booking` (table +
+filters + detail drawer), `hall` (table + create/edit/clone/price modals + a seat-grid editor at
+`/halls/:id/seats`), `user` (table + filters + inline role/lock controls + create modal), `dashboard`.
+Not built: reports, and the whole customer side
+(browse, seat map, checkout, my tickets, register, reset password). Read
+`../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen.
+
+**The visual language comes from a Figma file**; the information architecture does not — it mirrors the
+backend. **Before building a screen, open its Figma frame** and follow it: `.claude/context/figma.md` has every
+frame's node-id, the only reliable way to open one, and the per-screen specs measured so far.
 
 ## Tech stack (versions from package.json + package-lock.json)
 
@@ -33,19 +41,27 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
   `unwrap()` -> `response.data.data`, and the `skipAuthRefresh` config flag.
 - `src/api/<domain>.api.ts` — one `<domain>Api` object literal of arrow methods.
 - `src/features/<domain>/` — singular folder, **plural** page (`movie/MoviesPage.tsx`), plus `components/`,
-  `hooks/`, `__tests__/`.
+  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`.
 - `src/components/` — cross-feature: `Loading`, `PageHeader`, `ErrorBoundary` (the only class component).
-- `src/layouts/` — `MainLayout` and `AuthLayout`. The sidebar is a **hardcoded four-entry `menuItems` array**
-  inside `MainLayout` (dashboard, movies, showtimes, bookings), each with its own icon; both the menu and the
-  breadcrumb read from it, and any path missing from it falls back to the dashboard key. A new top-level page
-  must be added there by hand — it is not derived from `PATHS`.
+- `src/layouts/` — `MainLayout` and `AuthLayout`. The sidebar and the breadcrumb are both derived from
+  `NAV_ITEMS` in `src/routes/navigation.tsx`, filtered by role through `useNavItems()`; `MainLayout` itself
+  holds no menu data.
 - `src/routes/` — `index.tsx` exports `router` from `createBrowserRouter`, `paths.ts` exports `PATHS`,
-  `ProtectedRoute.tsx` is a layout route.
+  `ProtectedRoute.tsx` (token) and `RequireRole.tsx` (role) are layout routes, and `navigation.tsx` is the
+  single source of nav entries + the `ROLES_OPERATOR` / `ROLES_ADMIN` constants the router groups by.
+- `src/hooks/` — hooks shared by two or more features: `useHasRole` (+ `useCurrentRole`) and `useListQuery`.
+  Feature-specific hooks stay in `features/<domain>/hooks/`.
+- `src/test/` — `renderWithProviders` / `createTestQueryClient`, the shared test harness. Never imported by
+  app code.
 - `src/stores/` — `authStore` (user/isAuthenticated/isBootstrapping + login/logout/bootstrap),
   `appStore` (theme/language/siderCollapsed).
 - `src/types/` — hand-written mirrors of the Go DTOs, re-exported from `index.ts`.
-- `src/utils/` — `storage.ts` (`tokenStorage`, all keys prefixed `cp_`), `format.ts` (date/duration helpers).
-- `src/locales/` — `i18n.ts` + `vi.json` + `en.json`. `src/theme.ts` — `buildTheme(mode)` for antd tokens.
+- `src/utils/` — `storage.ts` (`tokenStorage`, all keys prefixed `cp_`), `format.ts` (date/duration/money,
+  zone pinned to `Asia/Ho_Chi_Minh`), `error.ts` (`isApiError`, `errorMessage`, `fieldErrorsOf`),
+  `form.ts` (`applyApiFieldErrors`).
+- `src/locales/` — `i18n.ts` + `vi.json` + `en.json`.
+- `src/theme/` — `tokens.ts` is the single source of every colour; `index.ts` maps them onto antd via
+  `buildTheme(mode)` and re-exports them. Mirrored into `--cp-*` in `src/index.css`, with a parity test.
 
 ## Critical conventions
 
@@ -72,23 +88,52 @@ a named const **and** a default (`routes/index.tsx` lazy-imports the default). T
 
 **Routing.** Data router only — never introduce `<Routes>/<Route>` JSX. Every path is a literal in `PATHS`
 (`src/routes/paths.ts`); no path string is hardcoded elsewhere. Lazy-load each page in `src/routes/index.tsx`;
-the `<Suspense>` boundary already lives in the layouts, so route entries add none. A new top-level route needs a
-matching `menu.<slug>` i18n key or the breadcrumb renders the raw key.
+the `<Suspense>` boundary already lives in the layouts, so route entries add none. A new top-level page is
+**two lines**: one `NAV_ITEMS` entry in `src/routes/navigation.tsx` and one route in `src/routes/index.tsx`
+nested under the `<RequireRole>` group that uses the **same** roles constant — that is what keeps the menu from
+offering a link that 403s. It also needs a `menu.<i18nKey>` key in both locale files.
 
-**Forms.** antd `Form` + `Form.useForm<FormValues>()`, `layout="vertical"`, validation through antd `rules`.
-Modals take `{ open, entity | null, confirmLoading, onCancel, onSubmit }`, use `destroyOnClose` +
-`preserve={false}`, and seed defaults in a `useEffect` keyed on `[open, entity, form]`. For dates, model the form
-value as `dayjs.Dayjs` and submit `.format('YYYY-MM-DD')`.
+**Permissions.** Mirror the backend: `RequireRoles` there is an exact, case-sensitive lookup with **no
+hierarchy**, so `useHasRole('admin')` is false for a staff account and vice versa. Route-level gating is
+`<RequireRole roles={...}/>`; hiding a menu entry or disabling a button is `useHasRole(...)`. Never invent a
+rank or a `<Can>` policy engine.
+
+**List state.** Page / page size / search live in the URL via `useListQuery()`, not in `useState`, so a table
+survives F5 and can be linked. Pass its `query` straight into the API call and the react-query key.
+
+**Forms.** antd `Form` + `Form.useForm<FormValues>()`, `layout="vertical"`, validation through antd `rules`,
+every rule carrying an explicit i18n `message`. Modals take
+`{ open, entity | null, confirmLoading, onCancel, onSubmit }`, use `destroyOnClose` + `preserve={false}`, and
+seed defaults in a `useEffect` keyed on `[open, entity, form]`. For dates, model the form value as `dayjs.Dayjs`
+and submit `.format('YYYY-MM-DD')`. `onSubmit` returns a promise and **throws on failure**: the modal catches it,
+runs `applyApiFieldErrors(form, error)` so a 400/40001 lands on the right input, and only toasts what is left.
+The page must therefore NOT swallow the mutation error.
 
 **i18n.** Every user-facing string goes through `t('<namespace>.<key>')`, and the key must be added to **both**
-`vi.json` and `en.json` (vi is default and fallback). Dynamic key shapes in use: `movie.status<Capitalized>` and
-`menu.<path without slash>`. Some keys already exist unused (`common.search`, `common.edit`, `common.delete`,
-`common.loading`, `error.boundaryTitle`, `error.reload`) — wire those up instead of adding near-duplicates.
+`vi.json` and `en.json` (vi is default and fallback). Dynamic key shapes in use: `movie.status<Capitalized>`,
+`menu.<i18nKey>`, and the snake_case enum shapes `booking.status_<value>` / `booking.payment_<value>` /
+`booking.soldVia_<value>` / `booking.reason_<value>` / `booking.seatType_<value>` / `booking.ticket_<value>`.
+Some keys exist unused (`common.search`, `common.edit`, `common.delete`, `common.loading`) — wire those up
+instead of adding near-duplicates.
+
+antd's own strings (date pickers, pagination, table filters) come from `ConfigProvider locale`, wired in
+`App.tsx`. **`antd/locale/<name>` is a CJS re-export and arrives double-`default`-wrapped through Vite**, so it
+is unwrapped by `unwrapLocale` there — passing the import straight in silently leaves antd in English. The
+DatePicker's month names come from the GLOBAL dayjs locale instead, set in an effect on `language`.
+
+**Backend error messages are English.** A 40900 conflict toast currently shows the server's own sentence inside
+a Vietnamese screen. All showtime conflicts share code 40900, so they cannot be told apart by code alone —
+`TODO: confirm` with the owner whether to add a message-keyed translation table.
 
 **Toasts.** `const { message } = App.useApp()` — **never** the static `message` import.
 
-**Styling.** Inline `style={{...}}` plus antd tokens via `antdTheme.useToken()`. Customise antd only through
-`buildTheme(mode)` in `src/theme.ts`. `src/index.css` is a 26-line reset. No CSS modules, no Tailwind, no
+**Motion.** All animation follows `.claude/rules/motion.md` and the tokens in `src/motion.ts`; use the
+`fe-motion` skill when adding or reviewing it.
+
+**Styling.** Inline `style={{...}}` plus antd tokens via `antdTheme.useToken()`. All colour comes from
+`src/theme/tokens.ts` — see `.claude/rules/design-tokens.md`, which is binding. **Never write a hex literal in a
+component.** Customer-facing screens use plain CSS with `var(--cp-*)` and the motion tokens, the way
+`MovieCard.css` already does; they do not get antd's heavy components. `src/index.css` is a 26-line reset. No CSS modules, no Tailwind, no
 styled-components.
 
 **TypeScript.** `strict` + `noUnusedLocals` + `noUnusedParameters`, so an unused import **fails the build**.
@@ -100,19 +145,32 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 ## Never
 
 - Never build a screen against an endpoint you have not found in `BackEnd-CP/internal/router/router.go`.
-  `docs/swagger.json` is 19 operations stale.
+  `docs/swagger.json` still misses 6 alias operations.
 - Never assume the response is `{items, meta}` — several list endpoints return a bare array.
 - Never send `ApiResponse<...>` through `unwrap()` for `DELETE /admin/halls/:id` or `DELETE /users/me`: both
   answer **204 with an empty body**.
-- Never gate an admin action on `isAuthenticated` alone — the backend also checks the role, and `ProtectedRoute`
-  currently does not.
+- Never render a seat grid by array index. `col_span` is 1 or 2, a 2-column seat swallows the next column, and
+  **no seat row exists for the swallowed column** — so column numbers have holes. Place each seat at its
+  `col_number`. The pure math lives in `src/features/hall/seatGrid.ts` and is unit-tested; reuse it rather than
+  re-deriving it for the customer seat picker.
+- Never offer a control the backend will refuse. `/admin/users` rejects locking yourself and changing your own
+  role with a 409; `UsersPage` disables both controls on the signed-in user's own row instead. The remaining
+  guard (the last active admin) cannot be known client-side, so that one is left to the 409.
+- Never assume `rows * seats_per_row` is capacity. It is the cell count; sellable capacity is
+  `seats.filter(s => !s.is_gap).length`, which is how every backend report query counts it.
+- Never gate an admin action on `isAuthenticated` alone — `ProtectedRoute` only checks the token. Role gating is
+  `<RequireRole>` on the route and `useHasRole(...)` on the control.
 - Never put a secret in a `VITE_*` variable; only `VITE_*` reaches the client. Declare every new one in **both**
   `.env.example` and the `ImportMetaEnv` interface in `src/vite-env.d.ts`.
-- Never add a third error-display pattern. The repo already has two (`message.error` in `MoviesPage`, a local
-  `<Alert>` in `LoginPage`) — pick one from `.claude/context/decisions.md` first.
-- Never copy the three known-bad spots as a pattern: hardcoded Vietnamese in `ErrorBoundary`, the hardcoded
-  `'Users'` card title in `DashboardPage`, the hardcoded `(phút)` suffix in `MovieFormModal`.
-- Never assume `src/hooks/` or `src/assets/` exist — both are empty and therefore untracked by git.
+- Never add a third error-display pattern. There are exactly two: `message.error` for a failed action, an inline
+  `<Alert>` for a failure that blocks the screen (a failed list query, a failed login). Field-level validation
+  goes through `applyApiFieldErrors`, not a toast.
+- Never copy `ErrorBoundary`'s hardcoded Vietnamese as a pattern — `error.boundaryTitle` / `error.reload`
+  already exist in both locale files.
+- Never edit `MainLayout`'s menu by hand; it is derived from `NAV_ITEMS`.
+- Never assume `src/assets/` exists — it is empty and therefore untracked by git.
+- Never write a colour anywhere but `src/theme/tokens.ts`, and never add Tailwind/CSS modules/styled-components
+  — settled in `.claude/context/decisions.md` #15.
 
 ## Build & dev commands (verified 2026-09-18)
 
@@ -122,7 +180,7 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 | Typecheck only   | `npx tsc --noEmit -p tsconfig.app.json`          | **passes today**; fastest correctness gate                                                                                 |
 | Lint             | `npm run lint` / `npm run lint:fix`              | **passes today**                                                                                                           |
 | Format           | `npm run format`                                 | `src/` only. Root config files are still covered by lint-staged, which basename-matches `*.{ts,tsx}` and `*.{css,json,md}` |
-| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **1 file / 3 tests pass today**; no coverage provider installed                                                            |
+| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **8 files / 106 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach              |
 | Production build | `npm run build` (`tsc -b && vite build`)         | typecheck then bundle to `dist/`                                                                                           |
 | Preview build    | `npm run preview`                                | serves `dist/`                                                                                                             |
 
