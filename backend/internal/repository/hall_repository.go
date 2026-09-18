@@ -130,9 +130,31 @@ func (r *HallRepository) HasUnfinishedShowtimes(tx *gorm.DB, hallID string) (boo
 }
 
 // UpdateHall persists name/screen/aisle/active. It must run inside a transaction.
+//
+// The column whitelist deliberately excludes `rows` and `seats_per_row`: this
+// method backs PUT /admin/halls/:id, whose dto.UpdateHallRequest carries no grid
+// fields, and the whitelist is what guarantees that endpoint can never resize a
+// hall out from under its own seats. Layout writes go through UpdateHallLayout.
 func (r *HallRepository) UpdateHall(tx *gorm.DB, hall *models.Hall) error {
 	return tx.Model(hall).
 		Select("name", "screen_position", "aisle_after_cols", "active", "updated_at").
+		Updates(hall).Error
+}
+
+// UpdateHallLayout persists the grid itself - rows/seats_per_row plus the two
+// display fields the layout request also carries - and is the ONLY write path
+// allowed to change a hall's declared size. It must run inside a transaction,
+// after the new seats have been written.
+//
+// It exists because RegenerateLayout used to call UpdateHall, whose whitelist
+// silently dropped the rows/seats_per_row assignment: regenerating a 4x5 hall
+// into 6x8 wrote 48 seats up to column 8 while `halls` kept saying 4x5 forever,
+// and the PUT's own response disagreed with every later GET because it
+// serialises the in-memory struct. `name` and `active` stay out on purpose -
+// regenerating a layout is not a rename and must not flip a hall back on.
+func (r *HallRepository) UpdateHallLayout(tx *gorm.DB, hall *models.Hall) error {
+	return tx.Model(hall).
+		Select("rows", "seats_per_row", "screen_position", "aisle_after_cols", "updated_at").
 		Updates(hall).Error
 }
 

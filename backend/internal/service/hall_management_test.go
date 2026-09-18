@@ -267,3 +267,96 @@ func TestHallDelete_BlockedByUnfinishedShowtime(t *testing.T) {
 		t.Fatalf("deleted hall = %+v, want active=false and deleted_at set", deletedHall)
 	}
 }
+
+// T76b: regenerating a layout must PERSIST the new grid size, not just echo it.
+//
+// This is a regression test for a real bug. RegenerateLayout assigned
+// current.Rows/SeatsPerRow and then saved through HallRepository.UpdateHall,
+// whose column whitelist omits both - so GORM dropped the assignment and the
+// halls row kept its old size forever while `seats` held the new grid. The
+// response looked correct because it serialises the in-memory struct, which is
+// exactly why T76 above (which only inspects the response) never caught it.
+// Everything here therefore re-reads through GetByID.
+func TestHallRegenerateLayout_PersistsNewGridSize(t *testing.T) {
+	e := newEnv(t)
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
+		Name: "Resize Hall", Rows: 4, SeatsPerRow: 5, Prices: fullPrices(),
+	})
+	e.must(err)
+
+	back := "back"
+	regenerated, err := e.halls.RegenerateLayout(e.ctx, hall.ID, dto.HallRequest{
+		Name: hall.Name, Rows: 6, SeatsPerRow: 8,
+		ScreenPosition: back, AisleAfterCols: []int{4}, Prices: fullPrices(),
+	})
+	e.must(err)
+	if regenerated.Rows != 6 || regenerated.SeatsPerRow != 8 {
+		t.Fatalf("regenerate response = %dx%d, want 6x8", regenerated.Rows, regenerated.SeatsPerRow)
+	}
+
+	// The assertion that used to fail: a fresh read, not the write's own echo.
+	reread, err := e.halls.GetByID(e.ctx, hall.ID)
+	e.must(err)
+	if reread.Rows != 6 || reread.SeatsPerRow != 8 {
+		t.Fatalf("hall re-read = %dx%d, want 6x8 - the new size was not persisted",
+			reread.Rows, reread.SeatsPerRow)
+	}
+	if reread.ScreenPosition != back {
+		t.Fatalf("screen_position = %q, want %q", reread.ScreenPosition, back)
+	}
+	if len(reread.AisleAfterCols) != 1 || reread.AisleAfterCols[0] != 4 {
+		t.Fatalf("aisle_after_cols = %v, want [4]", reread.AisleAfterCols)
+	}
+
+	// And the seats really are the wider grid the hall now claims.
+	seats, err := e.halls.SeatsByHall(e.ctx, hall.ID)
+	e.must(err)
+	if len(seats) != 48 {
+		t.Fatalf("seats = %d, want 48 (6x8)", len(seats))
+	}
+	widest := 0
+	for _, s := range seats {
+		if end := s.ColNumber + s.ColSpan - 1; end > widest {
+			widest = end
+		}
+	}
+	if widest != reread.SeatsPerRow {
+		t.Fatalf("widest occupied column = %d but hall says seats_per_row = %d", widest, reread.SeatsPerRow)
+	}
+}
+
+// T76c: the other half of that fix - UpdateHall must still be unable to touch
+// the grid. UpdateHallLayout is the only write path allowed to resize a hall,
+// so PUT /admin/halls/:id changing the display fields must leave rows and
+// seats_per_row exactly as they were.
+func TestHallUpdate_CannotResizeTheGrid(t *testing.T) {
+	e := newEnv(t)
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
+		Name: "Metadata Hall", Rows: 3, SeatsPerRow: 4, Prices: fullPrices(),
+	})
+	e.must(err)
+
+	renamed := "Metadata Hall renamed"
+	back := "back"
+	updated, err := e.halls.UpdateHall(e.ctx, hall.ID, dto.UpdateHallRequest{
+		Name: &renamed, ScreenPosition: &back, AisleAfterCols: []int{2},
+	})
+	e.must(err)
+	if updated.Rows != 3 || updated.SeatsPerRow != 4 {
+		t.Fatalf("update response = %dx%d, want the grid untouched at 3x4", updated.Rows, updated.SeatsPerRow)
+	}
+
+	reread, err := e.halls.GetByID(e.ctx, hall.ID)
+	e.must(err)
+	if reread.Rows != 3 || reread.SeatsPerRow != 4 {
+		t.Fatalf("hall re-read = %dx%d, want the grid untouched at 3x4", reread.Rows, reread.SeatsPerRow)
+	}
+	if reread.Name != renamed || reread.ScreenPosition != back {
+		t.Fatalf("display fields did not save: %+v", reread)
+	}
+	seats, err := e.halls.SeatsByHall(e.ctx, hall.ID)
+	e.must(err)
+	if len(seats) != 12 {
+		t.Fatalf("seats = %d, want 12 - a metadata update must not rebuild the grid", len(seats))
+	}
+}

@@ -690,7 +690,10 @@ func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req d
 		current.Rows, current.SeatsPerRow = req.Rows, req.SeatsPerRow
 		current.ScreenPosition, current.AisleAfterCols = req.ScreenPosition, req.AisleAfterCols
 		normalizeHallJSON(current)
-		if err := s.hallRepo.UpdateHall(tx, current); err != nil {
+		// UpdateHallLayout, not UpdateHall: the latter's column whitelist omits
+		// rows/seats_per_row, so it would drop the two assignments above and
+		// leave `halls` describing a grid that no longer exists.
+		if err := s.hallRepo.UpdateHallLayout(tx, current); err != nil {
 			return err
 		}
 		hall = current
