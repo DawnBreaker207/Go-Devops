@@ -41,8 +41,10 @@ accurate on the generation date and make the snippets checkable. They WILL drift
 
 - Code default in `internal/config/config.go`: `v.SetDefault("cors.allowed_origins", []string{"http://localhost:3000"})`.
 - `config.yaml` widens it to both `http://localhost:3000` and `http://localhost:5173`; `.env.example` lists both too.
-- **TODO: confirm** — a real `.env` exists and `loadDotEnv` + `AutomaticEnv` make it beat `config.yaml`, so
-  the effective allowlist is whatever `CORS_ALLOWED_ORIGINS` says there. Ask the user; do not read `.env`.
+- **`.env` does set `CORS_ALLOWED_ORIGINS`** (key presence verified without reading the value), and
+  `loadDotEnv` + `AutomaticEnv` make `.env` beat `config.yaml` — so the `config.yaml` pair above is overridden
+  and the effective allowlist is that one line. **TODO: confirm** the value with the repo owner; do not read
+  `.env` (use `grep -qE '^KEY='` to test presence without exposing a value).
 - The Vite dev server runs on **:3000** with no proxy, so the browser calls the API cross-origin.
 
 ## The envelope
@@ -134,7 +136,9 @@ Not every list is paged. Bare-array list endpoints: `GET /showtimes`, `GET /movi
 // 429 body (rate limit / login lockout), internal/middleware/guard.go:42-43:
 // {"code":42900,"message":"too many requests, try again later","details":{"retry_after_seconds":"1"}}
 //
-// 428 body (terms gate), internal/service/auth_service.go:116-121:
+// 428 body (terms gate) — UNREACHABLE as wired, see ../../../.claude/context/cross-repo-gotchas.md:
+// account.terms_version has no default and no BindEnv, so v.Unmarshal never decodes it and the
+// gate condition s.termsVersion > 0 is always false. The shape, if it is ever switched on:
 // {"code":42800,"message":"you must accept the current terms before continuing",
 //  "details":{"required_terms_version":"1","accepted_terms_version":"0"}}
 ```
@@ -152,7 +156,7 @@ Not every list is paged. Bare-array list endpoints: `GET /showtimes`, `GET /movi
 | `40400 (CodeNotFound)` | 404 | Resource not found, unknown route, unknown payment provider, showtime not open |
 | `40900 (CodeConflict)` | 409 | State conflict: seats taken, hold expired, booking not payable, idempotency key reused, duplicate email, hall/showtime edit locks |
 | `41300 (CodePayloadTooLarge)` | 413 | 'request body is too large' — JSON body over server.max_body_bytes |
-| `42800 (CodeTermsRequired)` | 428 | 'you must accept the current terms before continuing' — login blocked until POST /auth/terms-accept |
+| `42800 (CodeTermsRequired)` | 428 | 'you must accept the current terms before continuing'. **Unreachable as wired** — `account.terms_version` never reaches the config, so the gate condition `s.termsVersion > 0` is always false. The constant and `POST /auth/terms-accept` exist but cannot trigger |
 | `42900 (CodeTooManyRequests)` | 429 | Token-bucket rate limit, login lockout, or too many open SSE streams. Carries details.retry_after_seconds + a Retry-After header |
 | `50000 (CodeInternal)` | 500 | 'internal server error' — the catch-all for any non-AppError, INCLUDING a malformed JSON body or a non-numeric ?page |
 | `50200 (CodeBadGateway)` | 502 | Upstream failed: payment provider unavailable, image storage unavailable |

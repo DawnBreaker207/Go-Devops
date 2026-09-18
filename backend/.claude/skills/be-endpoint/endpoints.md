@@ -92,7 +92,7 @@ Notes:
 Notes:
 
 - `POST /api/v1/auth/forgot-password` — Enumeration-safe: burns a bcrypt compare for unknown emails. Mail failure only logs; reset link TTL from auth resetTTL.
-- `POST /api/v1/auth/login` — On 428 the client must call /auth/terms-accept. Retry-After header mirrors retry_after_seconds .
+- `POST /api/v1/auth/login` — The listed 428 is **unreachable as wired** (`account.terms_version` never reaches the config), so no client needs an /auth/terms-accept branch today. The 429 Retry-After header mirrors `details.retry_after_seconds`; the lockout is 5 wrong passwords per email+IP for 5m.
 - `POST /api/v1/auth/logout` — Revokes the whole token family; an already-revoked or unknown token still answers 200 .
 - `POST /api/v1/auth/refresh` — Rotating refresh: reuse of a used token revokes the whole family and answers 401 .
 - `POST /api/v1/auth/register` — Always creates role=customer, active=true . Email lowercased/trimmed. 429 sets Retry-After header.
