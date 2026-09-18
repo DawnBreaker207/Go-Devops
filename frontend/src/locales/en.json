@@ -29,6 +29,7 @@
     "dashboard": "Dashboard",
     "halls": "Halls",
     "movies": "Movies",
+    "reports": "Reports",
     "showtimes": "Showtimes",
     "users": "Users"
   },
@@ -253,5 +254,32 @@
     "statusLocked": "Locked",
     "title": "Users",
     "you": "You"
+  },
+  "report": {
+    "axesHint": "Revenue counts the day the customer PAID; occupancy counts the day the SHOWTIME ran. A ticket bought today for tomorrow's screening raises today's revenue and tomorrow's occupancy — the two numbers are not meant to agree.",
+    "byDay": "By day",
+    "byMovie": "By movie",
+    "checkedIn": "Checked in",
+    "closedAt": "Closed at",
+    "date": "Date",
+    "dayCount": "{{count}} days closed",
+    "emptyNoShowtimes": "This range is closed but had no showtimes.",
+    "emptyNotClosed": "No day in this range has been closed yet. The closeDay job runs at 23:59; it can also be triggered manually from the batch jobs screen.",
+    "hall": "Hall",
+    "missingDaysBody": "These days have not been closed, so they have no figures yet: {{days}}. That is NOT zero revenue — the data is missing.",
+    "missingDaysTitle": "{{count}} days not closed",
+    "movie": "Movie",
+    "occupancy": "Occupancy",
+    "rangeTotal": "Range total",
+    "revenue": "Revenue",
+    "seats": "Seats sold / capacity",
+    "showtimeCount": "Showtimes",
+    "startAt": "Starts",
+    "ticketSales": "Tickets sold / capacity",
+    "tickets": "Tickets",
+    "ticketsSold": "Tickets sold",
+    "title": "Reports",
+    "totalRevenue": "Total revenue",
+    "totalSales": "Total sales"
   }
 }

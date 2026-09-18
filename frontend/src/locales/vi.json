@@ -29,6 +29,7 @@
     "dashboard": "Tổng quan",
     "halls": "Phòng chiếu",
     "movies": "Phim",
+    "reports": "Báo cáo",
     "showtimes": "Suất chiếu",
     "users": "Người dùng"
   },
@@ -253,5 +254,32 @@
     "statusLocked": "Đã khoá",
     "title": "Người dùng",
     "you": "Bạn"
+  },
+  "report": {
+    "axesHint": "Doanh thu đếm theo ngày KHÁCH TRẢ TIỀN, còn độ lấp đầy đếm theo ngày SUẤT CHIẾU chạy. Vé mua hôm nay cho suất ngày mai làm tăng doanh thu hôm nay và độ lấp đầy ngày mai — hai con số này không cần khớp nhau.",
+    "byDay": "Theo ngày",
+    "byMovie": "Theo phim",
+    "checkedIn": "Đã soát vé",
+    "closedAt": "Chốt sổ lúc",
+    "date": "Ngày",
+    "dayCount": "{{count}} ngày đã chốt",
+    "emptyNoShowtimes": "Khoảng này đã chốt sổ nhưng không có suất chiếu nào.",
+    "emptyNotClosed": "Chưa có ngày nào trong khoảng này được chốt sổ. Job closeDay chạy lúc 23:59 mỗi ngày; chạy tay được ở mục công việc nền.",
+    "hall": "Phòng chiếu",
+    "missingDaysBody": "Những ngày này chưa được chốt sổ nên chưa có số liệu: {{days}}. Đây KHÔNG phải là 0 đồng — số liệu còn thiếu.",
+    "missingDaysTitle": "{{count}} ngày chưa chốt sổ",
+    "movie": "Phim",
+    "occupancy": "Lấp đầy",
+    "rangeTotal": "Tổng cả khoảng",
+    "revenue": "Doanh thu",
+    "seats": "Ghế bán / sức chứa",
+    "showtimeCount": "Số suất",
+    "startAt": "Giờ chiếu",
+    "ticketSales": "Vé bán / sức chứa",
+    "tickets": "Số vé",
+    "ticketsSold": "Vé đã bán",
+    "title": "Báo cáo",
+    "totalRevenue": "Tổng doanh thu",
+    "totalSales": "Doanh thu"
   }
 }

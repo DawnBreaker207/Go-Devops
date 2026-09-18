@@ -11,8 +11,9 @@ This file cites symbol + file, not line numbers — line numbers drift, grep the
 Admin/staff web UI for `BackEnd-CP` (cinema booking). **There is no customer-facing UI yet** — every screen here
 is for an operator. Built: `movie` (table + form), `showtime` (table + filters + form), `booking` (table +
 filters + detail drawer), `hall` (table + create/edit/clone/price modals + a seat-grid editor at
-`/halls/:id/seats`), `user` (table + filters + inline role/lock controls + create modal), `dashboard`.
-Not built: reports, and the whole customer side
+`/halls/:id/seats`), `user` (table + filters + inline role/lock controls + create modal),
+`report` (date range + per-movie rollup + per-day table with a per-showtime breakdown), `dashboard`.
+Not built: the whole customer side
 (browse, seat map, checkout, my tickets, register, reset password). Read
 `../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen.
 
@@ -41,7 +42,7 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
   `unwrap()` -> `response.data.data`, and the `skipAuthRefresh` config flag.
 - `src/api/<domain>.api.ts` — one `<domain>Api` object literal of arrow methods.
 - `src/features/<domain>/` — singular folder, **plural** page (`movie/MoviesPage.tsx`), plus `components/`,
-  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`.
+  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`, `report`.
 - `src/components/` — cross-feature: `Loading`, `PageHeader`, `ErrorBoundary` (the only class component).
 - `src/layouts/` — `MainLayout` and `AuthLayout`. The sidebar and the breadcrumb are both derived from
   `NAV_ITEMS` in `src/routes/navigation.tsx`, filtered by role through `useNavItems()`; `MainLayout` itself
@@ -156,6 +157,10 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 - Never offer a control the backend will refuse. `/admin/users` rejects locking yourself and changing your own
   role with a 409; `UsersPage` disables both controls on the signed-in user's own row instead. The remaining
   guard (the last active admin) cannot be known client-side, so that one is left to the 409.
+- Never treat a missing day in `GET /admin/reports/daily` as a zero. `days` holds only the days the `closeDay`
+  job has closed; a day with no business IS closed and DOES appear, with zeros. A day that is absent has no
+  figures at all. `missingDays()` in `src/features/report/reportRollup.ts` names them.
+- Never multiply `occupancy_rate` by 100 — the backend already does (`ROUND(100.0 * seats_sold / capacity)`).
 - Never assume `rows * seats_per_row` is capacity. It is the cell count; sellable capacity is
   `seats.filter(s => !s.is_gap).length`, which is how every backend report query counts it.
 - Never gate an admin action on `isAuthenticated` alone — `ProtectedRoute` only checks the token. Role gating is
@@ -180,7 +185,7 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 | Typecheck only   | `npx tsc --noEmit -p tsconfig.app.json`          | **passes today**; fastest correctness gate                                                                                 |
 | Lint             | `npm run lint` / `npm run lint:fix`              | **passes today**                                                                                                           |
 | Format           | `npm run format`                                 | `src/` only. Root config files are still covered by lint-staged, which basename-matches `*.{ts,tsx}` and `*.{css,json,md}` |
-| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **8 files / 106 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach              |
+| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **9 files / 121 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach              |
 | Production build | `npm run build` (`tsc -b && vite build`)         | typecheck then bundle to `dist/`                                                                                           |
 | Preview build    | `npm run preview`                                | serves `dist/`                                                                                                             |
 

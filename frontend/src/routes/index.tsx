@@ -15,6 +15,7 @@ const HallsPage = lazy(() => import('@/features/hall/HallsPage'));
 const HallSeatsPage = lazy(() => import('@/features/hall/HallSeatsPage'));
 const BookingsPage = lazy(() => import('@/features/booking/BookingsPage'));
 const UsersPage = lazy(() => import('@/features/user/UsersPage'));
+const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const router = createBrowserRouter([
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
             children: [
               { path: PATHS.bookings, element: <BookingsPage /> },
               { path: PATHS.users, element: <UsersPage /> },
+              { path: PATHS.reports, element: <ReportsPage /> },
             ],
           },
         ],

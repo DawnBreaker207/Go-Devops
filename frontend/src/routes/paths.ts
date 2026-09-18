@@ -7,6 +7,7 @@ export const PATHS = {
   hallSeats: '/halls/:id/seats',
   bookings: '/bookings',
   users: '/users',
+  reports: '/reports',
   notFound: '*',
 } as const;
 

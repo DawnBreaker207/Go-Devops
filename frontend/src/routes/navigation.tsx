@@ -3,6 +3,7 @@ import {
   CalendarOutlined,
   DashboardOutlined,
   LayoutOutlined,
+  BarChartOutlined,
   ScheduleOutlined,
   TeamOutlined,
   VideoCameraOutlined,
@@ -53,6 +54,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: PATHS.halls, i18nKey: 'halls', icon: <LayoutOutlined />, roles: ROLES_OPERATOR },
   { path: PATHS.bookings, i18nKey: 'bookings', icon: <ScheduleOutlined />, roles: ROLES_ADMIN },
   { path: PATHS.users, i18nKey: 'users', icon: <TeamOutlined />, roles: ROLES_ADMIN },
+  { path: PATHS.reports, i18nKey: 'reports', icon: <BarChartOutlined />, roles: ROLES_ADMIN },
 ];
 
 /** Cac muc role hien tai thuc su vao duoc. Chua dang nhap thi rong. */

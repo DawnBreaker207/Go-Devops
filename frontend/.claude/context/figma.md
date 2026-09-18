@@ -23,20 +23,20 @@ Everything below is on **UI Design**.
 
 ## Frame inventory
 
-| Frame                    | node-id    | Built?                 |
-| ------------------------ | ---------- | ---------------------- |
-| Sign In (customer)       | `77-626`   | no                     |
-| Login (customer)         | —          | no                     |
-| Home                     | `77-855`   | no                     |
-| Home2                    | `108-510`  | no                     |
-| Select Seat              | `108-705`  | no                     |
-| Order detail             | `122-1018` | no                     |
-| Payment Information      | `122-1090` | no                     |
-| Payment Success          | `122-1100` | no                     |
-| My ticket                | `240-380`  | no                     |
-| Admin Movie              | `122-1302` | **yes** — `MoviesPage` |
-| Admin Theater            | `122-1389` | **yes** — `HallsPage`  |
-| Admin Dashboard (Report) | `122-1620` | no                     |
+| Frame                    | node-id    | Built?                  |
+| ------------------------ | ---------- | ----------------------- |
+| Sign In (customer)       | `77-626`   | no                      |
+| Login (customer)         | —          | no                      |
+| Home                     | `77-855`   | no                      |
+| Home2                    | `108-510`  | no                      |
+| Select Seat              | `108-705`  | no                      |
+| Order detail             | `122-1018` | no                      |
+| Payment Information      | `122-1090` | no                      |
+| Payment Success          | `122-1100` | no                      |
+| My ticket                | `240-380`  | no                      |
+| Admin Movie              | `122-1302` | **yes** — `MoviesPage`  |
+| Admin Theater            | `122-1389` | **yes** — `HallsPage`   |
+| Admin Dashboard (Report) | `122-1620` | **yes** — `ReportsPage` |
 
 The Figma has **no Showtimes screen and no dashboard tiles**, but the backend has both and this app ships both.
 It also has Theaters / Users / Report, which this app does not have yet.
@@ -76,7 +76,13 @@ price editor have no counterpart in the design at all.
 ### Admin Dashboard / Report — `122-1620`
 
 Same shell. The content is a single bordered table: `#`, Movie name, Ticket sales, Total sales. Nothing else —
-no tiles, no chart, no date range. Treat it as a starting point, not a finished screen.
+no tiles, no chart, no date range.
+
+`ReportsPage` keeps that table as its first section ("Theo phim"), but the backend forces three additions the
+design has no place for: the endpoint is **range-based**, so a date range is mandatory; it aggregates by **day**
+and not by movie, so the per-movie table has to be rolled up client-side from the `breakdown.showtimes` jsonb;
+and a day the `closeDay` job has not closed is **absent rather than zero**, which the screen has to say out loud
+or every gap reads as "no revenue".
 
 ### Home — `77-855`
 
