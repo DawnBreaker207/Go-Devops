@@ -30,5 +30,11 @@ export default tseslint.config(
     // khong phai component file nen bo qua rule cua react-refresh.
     files: ['src/routes/**/*.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  {
+    // Test va helper cua test khong bao gio vao bundle nen fast refresh khong
+    // lien quan; helper duoc phep export ca ham lan component.
+    files: ['src/test/**/*.{ts,tsx}', 'src/**/__tests__/**/*.{ts,tsx}'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   }
 );

@@ -14,22 +14,20 @@ import {
 } from 'antd';
 import {
   BulbOutlined,
-  CalendarOutlined,
-  DashboardOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoonOutlined,
-  ScheduleOutlined,
   UserOutlined,
-  VideoCameraOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
 import { PATHS } from '@/routes/paths';
+import { useNavItems } from '@/routes/navigation';
 import Loading from '@/components/Loading';
 import type { AppLanguage } from '@/locales/i18n';
+import { brand, textOnBrand } from '@/theme';
 
 const { Header, Sider, Content } = Layout;
 
@@ -49,42 +47,29 @@ export const MainLayout = () => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
+  // Chi nhung muc role hien tai vao duoc; nguon la routes/navigation.tsx, cung
+  // hang so roles ma router dung, nen menu khong the bay ra link 403.
+  const navItems = useNavItems();
+
   const menuItems = useMemo(
-    () => [
-      {
-        key: PATHS.dashboard,
-        icon: <DashboardOutlined />,
-        label: <Link to={PATHS.dashboard}>{t('menu.dashboard')}</Link>,
-      },
-      {
-        key: PATHS.movies,
-        icon: <VideoCameraOutlined />,
-        label: <Link to={PATHS.movies}>{t('menu.movies')}</Link>,
-      },
-      {
-        key: PATHS.showtimes,
-        icon: <CalendarOutlined />,
-        label: <Link to={PATHS.showtimes}>{t('menu.showtimes')}</Link>,
-      },
-      {
-        key: PATHS.bookings,
-        icon: <ScheduleOutlined />,
-        label: <Link to={PATHS.bookings}>{t('menu.bookings')}</Link>,
-      },
-    ],
-    [t]
+    () =>
+      navItems.map((item) => ({
+        key: item.path,
+        icon: item.icon,
+        label: <Link to={item.path}>{t(`menu.${item.i18nKey}`)}</Link>,
+      })),
+    [navItems, t]
   );
 
-  const selectedKey =
-    menuItems.find((item) => location.pathname.startsWith(item.key))?.key ?? PATHS.dashboard;
+  const current = navItems.find((item) => location.pathname.startsWith(item.path));
 
-  const breadcrumbItems = useMemo(() => {
-    const current = menuItems.find((item) => item.key === selectedKey);
-    return [
+  const breadcrumbItems = useMemo(
+    () => [
       { title: t('common.appName') },
-      { title: current ? t(`menu.${selectedKey.replace('/', '') || 'dashboard'}`) : '' },
-    ];
-  }, [menuItems, selectedKey, t]);
+      ...(current ? [{ title: t(`menu.${current.i18nKey}`) }] : []),
+    ],
+    [current, t]
+  );
 
   const handleLogout = () => {
     logout();
@@ -93,7 +78,14 @@ export const MainLayout = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider trigger={null} collapsible collapsed={collapsed} theme="dark" width={230}>
+      {/* Figma de sider mau trang, ngan voi noi dung bang mot duong vien mong. */}
+      <Sider
+        trigger={null}
+        collapsible
+        collapsed={collapsed}
+        width={230}
+        style={{ borderInlineEnd: `1px solid ${token.colorBorderSecondary}` }}
+      >
         <div
           style={{
             height: 56,
@@ -101,7 +93,7 @@ export const MainLayout = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#fff',
+            color: token.colorText,
             fontWeight: 700,
             fontSize: collapsed ? 16 : 18,
             letterSpacing: 0.5,
@@ -111,7 +103,10 @@ export const MainLayout = () => {
         >
           {collapsed ? 'CP' : t('common.appName')}
         </div>
-        <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={menuItems} />
+        {/* Luon de theme="light": darkAlgorithm da tu dao bang mau roi. Menu
+         * theme="dark" cua antd la dien mao navy #001529 cu, dat tren nen
+         * #141414 thi chu muc chua chon gan nhu khong doc duoc. */}
+        <Menu mode="inline" selectedKeys={current ? [current.path] : []} items={menuItems} />
       </Sider>
 
       <Layout>
@@ -165,7 +160,17 @@ export const MainLayout = () => {
               }}
             >
               <Space style={{ cursor: 'pointer' }}>
-                <Avatar size="small" icon={<UserOutlined />} />
+                {/* Figma: tron mau primary mang chu cai dau, khong phai icon xam. */}
+                <Avatar
+                  size="small"
+                  style={{
+                    backgroundColor: brand.base,
+                    color: textOnBrand,
+                    fontWeight: 600,
+                  }}
+                >
+                  {(user?.full_name ?? user?.email ?? 'U').charAt(0).toUpperCase()}
+                </Avatar>
                 <Typography.Text>{user?.full_name ?? user?.email ?? 'User'}</Typography.Text>
               </Space>
             </Dropdown>

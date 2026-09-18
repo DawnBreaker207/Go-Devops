@@ -5,9 +5,12 @@ import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '@/components/PageHeader';
 import MovieFormModal from './components/MovieFormModal';
+import MoviePoster from './components/MoviePoster';
 import { useCreateMovie, useDeleteMovie, useMovieList, useUpdateMovie } from './hooks/useMovies';
-import type { ApiError, Movie, MoviePayload, MovieStatus } from '@/types';
+import type { Movie, MoviePayload, MovieStatus } from '@/types';
 import { formatDate, formatDuration } from '@/utils/format';
+import { errorMessage } from '@/utils/error';
+import { useListQuery } from '@/hooks/useListQuery';
 
 const STATUS_COLOR: Record<MovieStatus, string> = {
   draft: 'default',
@@ -19,13 +22,12 @@ export const MoviesPage = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState('');
+  // page / page_size / search song trong URL: F5 hay gui link deu ra dung trang.
+  const { query, page, pageSize, search, setPage, setSearch } = useListQuery();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Movie | null>(null);
 
-  const { data, isFetching } = useMovieList({ page, page_size: pageSize, search });
+  const { data, isFetching } = useMovieList(query);
   const createMovie = useCreateMovie();
   const updateMovie = useUpdateMovie();
   const deleteMovie = useDeleteMovie();
@@ -40,20 +42,18 @@ export const MoviesPage = () => {
     setModalOpen(true);
   };
 
+  // Khong bat loi o day: MovieFormModal can chinh loi de gan details vao dung o
+  // nhap (400/40001). Nem tiep la cach duy nhat no biet lan luu that bai.
   const handleSubmit = async (payload: MoviePayload) => {
-    try {
-      if (editing) {
-        await updateMovie.mutateAsync({ id: editing.id, payload });
-        message.success(t('common.updateSuccess'));
-      } else {
-        await createMovie.mutateAsync(payload);
-        message.success(t('common.createSuccess'));
-      }
-      setModalOpen(false);
-      setEditing(null);
-    } catch (error) {
-      message.error((error as ApiError).message || t('common.somethingWrong'));
+    if (editing) {
+      await updateMovie.mutateAsync({ id: editing.id, payload });
+      message.success(t('common.updateSuccess'));
+    } else {
+      await createMovie.mutateAsync(payload);
+      message.success(t('common.createSuccess'));
     }
+    setModalOpen(false);
+    setEditing(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -61,11 +61,18 @@ export const MoviesPage = () => {
       await deleteMovie.mutateAsync(id);
       message.success(t('common.deleteSuccess'));
     } catch (error) {
-      message.error((error as ApiError).message || t('common.somethingWrong'));
+      message.error(errorMessage(error, t('common.somethingWrong')));
     }
   };
 
   const columns: ColumnsType<Movie> = [
+    {
+      title: t('movie.cover'),
+      dataIndex: 'poster_url',
+      key: 'poster_url',
+      width: 88,
+      render: (url: string, record) => <MoviePoster url={url} title={record.title} />,
+    },
     { title: t('movie.name'), dataIndex: 'title', key: 'title', ellipsis: true },
     { title: t('movie.genre'), dataIndex: 'genre', key: 'genre', width: 140 },
     {
@@ -133,12 +140,10 @@ export const MoviesPage = () => {
           <Space>
             <Input.Search
               allowClear
+              defaultValue={search}
               placeholder={t('movie.searchPlaceholder')}
               style={{ width: 280 }}
-              onSearch={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
+              onSearch={setSearch}
             />
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               {t('common.create')}
@@ -158,11 +163,8 @@ export const MoviesPage = () => {
           pageSize: data?.meta.page_size ?? pageSize,
           total: data?.meta.total ?? 0,
           showSizeChanger: true,
-          showTotal: (total) => `${total}`,
-          onChange: (nextPage, nextSize) => {
-            setPage(nextPage);
-            setPageSize(nextSize);
-          },
+          showTotal: (total) => t('common.totalItems', { total }),
+          onChange: setPage,
         }}
       />
 

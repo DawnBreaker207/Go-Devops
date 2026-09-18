@@ -1,3 +1,114 @@
+/* ----------------------------------------------------------------------------
+ * DESIGN TOKENS - mirror cua src/theme/tokens.ts.
+ * src/__tests__/design-tokens.test.ts fail neu hai file lech nhau.
+ * CSS khong hardcode ma mau: dung var(--cp-*). TS thi import tu '@/theme'.
+ * -------------------------------------------------------------------------- */
+:root {
+  --cp-brand: #1de782;
+  --cp-brand-hover: #4aec9b;
+  --cp-brand-active: #19c46e;
+  --cp-brand-soft: #bdf0c1;
+  --cp-brand-softer: #e3fcef;
+  --cp-text-on-brand: #052e1b;
+
+  --cp-backdrop-base: #020700;
+  --cp-backdrop-mid: #083d1f;
+  --cp-backdrop-glow: #0c582f;
+
+  --cp-danger: #d22f27;
+  --cp-warning: #d97706;
+  --cp-info: #2563eb;
+
+  --cp-seat-available: #ffffff;
+  --cp-seat-available-text: #020700;
+  --cp-seat-selected: #1de782;
+  --cp-seat-selected-text: #052e1b;
+  --cp-seat-sold: #3a3f3c;
+  --cp-seat-sold-text: #8a8f8b;
+  --cp-seat-held: #d97706;
+  --cp-seat-held-text: #1a1200;
+  --cp-seat-screen: #ffffff;
+
+  /* Loai ghe - chi dung trong trinh sua so do cua admin (nen sang). */
+  --cp-seat-type-standard: #edf0ee;
+  --cp-seat-type-standard-text: #3a3f3c;
+  --cp-seat-type-vip: #bdf0c1;
+  --cp-seat-type-vip-text: #0b3d22;
+  --cp-seat-type-couple: #fde8ce;
+  --cp-seat-type-couple-text: #7a4405;
+  --cp-seat-type-recliner: #dde7fe;
+  --cp-seat-type-recliner-text: #1e3a8a;
+}
+
+/* ----------------------------------------------------------------------------
+ * MOTION TOKENS - mirror cua src/motion.ts.
+ * src/__tests__/motion-tokens.test.ts fail neu hai file lech nhau.
+ * Component khong hardcode so: dung var(--motion-*) trong CSS, motion.ts trong TS.
+ * -------------------------------------------------------------------------- */
+:root {
+  --motion-duration-instant: 100ms;
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-moderate: 300ms;
+  --motion-duration-slow: 450ms;
+  --motion-duration-decorative: 600ms;
+
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-ease-linear: linear;
+
+  --motion-distance-lift: 4px;
+  --motion-distance-shift: 12px;
+  --motion-distance-reveal: 16px;
+
+  --motion-scale-enter: 0.96;
+  --motion-scale-press: 0.98;
+  --motion-scale-zoom: 1.05;
+  --motion-scale-pop: 1.08;
+
+  --motion-stagger-step: 50ms;
+  --motion-stagger-max: 6;
+}
+
+/* Nguoi dung bat reduced motion: bo dich chuyen, zoom, parallax, autoplay.
+ * Chi giu fade <= fast. Motion (JS) duoc xu ly rieng bang MotionConfig
+ * reducedMotion="user" o App. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: 1ms;
+    --motion-duration-fast: 150ms;
+    --motion-duration-base: 150ms;
+    --motion-duration-moderate: 150ms;
+    --motion-duration-slow: 150ms;
+    --motion-duration-decorative: 150ms;
+
+    --motion-distance-lift: 0px;
+    --motion-distance-shift: 0px;
+    --motion-distance-reveal: 0px;
+
+    --motion-scale-enter: 1;
+    --motion-scale-press: 1;
+    --motion-scale-zoom: 1;
+    --motion-scale-pop: 1;
+
+    --motion-stagger-step: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* So tien / dong ho giu ghe: chu so deu be ngang de khong nhay khi dem lui. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
 * {
   box-sizing: border-box;
 }
