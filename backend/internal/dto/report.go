@@ -113,3 +113,15 @@ type StaffOverviewResponse struct {
 	CounterSalesTotal int64                   `json:"counter_sales_total"`
 	AwaitingCheckin   int                     `json:"awaiting_checkin"`
 }
+
+// AdminStatsResponse is the admin dashboard's four headline counts, one per
+// tile. Soft-deleted movies, showtimes and users are excluded; bookings counts
+// CONFIRMED orders only, so a hold nobody paid for never inflates a tile
+// labelled "Bookings". Locked (active=false) users are still counted: a lock is
+// an operational state, not a deletion — and GET /admin/users counts them too.
+type AdminStatsResponse struct {
+	Movies    int64 `json:"movies"`
+	Showtimes int64 `json:"showtimes"`
+	Bookings  int64 `json:"bookings"`
+	Users     int64 `json:"users"`
+}

@@ -23,6 +23,98 @@ type ShowtimeService interface {
 	ListByDate(ctx context.Context, date string) ([]dto.ShowtimeListItem, error)
 	SeatMap(ctx context.Context, showtimeID string) (*dto.SeatMapResponse, error)
 	OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
+
+	// AdminList and Detail are the operator views: unlike the picker they show closed
+	// showtimes, draft or ended movies and past dates, and they are never cached.
+	AdminList(ctx context.Context, query dto.ShowtimeAdminListQuery) ([]dto.ShowtimeResponse, int64, error)
+	Detail(ctx context.Context, id string) (*dto.ShowtimeResponse, error)
+}
+
+func showtimeResponseFromRow(row *repository.ShowtimeRow) dto.ShowtimeResponse {
+	return dto.ShowtimeResponse{
+		ID:         row.ID,
+		MovieID:    row.MovieID,
+		MovieTitle: row.MovieTitle,
+		AgeRating:  row.AgeRating,
+		HallID:     row.HallID,
+		HallName:   row.HallName,
+		StartAt:    row.StartAt,
+		EndAt:      row.EndAt,
+		Status:     row.Status,
+		CreatedAt:  row.CreatedAt,
+		UpdatedAt:  row.UpdatedAt,
+	}
+}
+
+func (s *showtimeService) AdminList(ctx context.Context, query dto.ShowtimeAdminListQuery) ([]dto.ShowtimeResponse, int64, error) {
+	from, to, err := s.listBounds(query)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, total, err := s.showtime.AdminList(ctx, query, from, to)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	items := make([]dto.ShowtimeResponse, 0, len(rows))
+	for i := range rows {
+		items = append(items, showtimeResponseFromRow(&rows[i]))
+	}
+	return items, total, nil
+}
+
+// listBounds turns the date / from / to filters into absolute instants in the server
+// timezone. Date wins over the range. Both bounds are half-open: start <= x < end.
+func (s *showtimeService) listBounds(query dto.ShowtimeAdminListQuery) (time.Time, time.Time, error) {
+	parse := func(value string) (time.Time, error) {
+		parsed, err := time.ParseInLocation(dto.DateLayout, value, s.location)
+		if err != nil {
+			return time.Time{}, apperrors.Validation("date must follow format YYYY-MM-DD")
+		}
+		return parsed, nil
+	}
+
+	if query.Date != "" {
+		day, err := parse(query.Date)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		return day, day.AddDate(0, 0, 1), nil
+	}
+
+	var from, to time.Time
+	if query.From != "" {
+		parsed, err := parse(query.From)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		from = parsed
+	}
+	if query.To != "" {
+		parsed, err := parse(query.To)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		// Inclusive upper bound for the caller, half-open for the query.
+		to = parsed.AddDate(0, 0, 1)
+	}
+	if !from.IsZero() && !to.IsZero() && !to.After(from) {
+		return time.Time{}, time.Time{}, apperrors.Validation("to must not be earlier than from")
+	}
+	return from, to, nil
+}
+
+func (s *showtimeService) Detail(ctx context.Context, id string) (*dto.ShowtimeResponse, error) {
+	row, err := s.showtime.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, apperrors.ErrShowtimeNotFound
+	}
+	result := showtimeResponseFromRow(row)
+	return &result, nil
 }
 
 func (s *showtimeService) OpenShowtime(ctx context.Context, id string) (*dto.ShowtimeResponse, error) {

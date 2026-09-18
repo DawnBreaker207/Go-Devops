@@ -110,3 +110,46 @@ type RedeemResponse struct {
 	CheckinOpensAt  *time.Time `json:"checkin_opens_at,omitempty"`
 	CheckinClosesAt *time.Time `json:"checkin_closes_at,omitempty"`
 }
+
+// AdminOrderListQuery filters the operator order list. Unlike GET /orders it is
+// not scoped to the caller: online and counter sales are listed side by side.
+// date/from/to bound created_at as local calendar days, the same convention as
+// GET /admin/showtimes (ShowtimeAdminListQuery).
+type AdminOrderListQuery struct {
+	PageQuery
+	Status string `form:"status" binding:"omitempty,oneof=pending confirmed expired refunded"`
+	// PaymentStatus matches the attempt whose money the order already carries
+	// (bookings.payment_id); an unpaid hold with an open checkout carries none.
+	PaymentStatus string `form:"payment_status" binding:"omitempty,oneof=pending paid failed refund_pending refunded"`
+	SoldVia       string `form:"sold_via" binding:"omitempty,oneof=online counter"`
+	ShowtimeID    string `form:"showtime_id" binding:"omitempty,uuid"`
+	MovieID       string `form:"movie_id" binding:"omitempty,uuid"`
+	UserID        string `form:"user_id" binding:"omitempty,uuid"`
+	// Date narrows created_at to one calendar day and wins over From/To.
+	Date  string `form:"date" binding:"omitempty,datetime=2006-01-02"`
+	From  string `form:"from" binding:"omitempty,datetime=2006-01-02"`
+	To    string `form:"to" binding:"omitempty,datetime=2006-01-02"`
+	Sort  string `form:"sort" binding:"omitempty,oneof=created_at paid_at total_amount start_at"`
+	Order string `form:"order" binding:"omitempty,oneof=asc desc"`
+}
+
+// OrderCustomer is who an order belongs to. An online order carries the account
+// (user_id/email/full_name/phone); a counter sale has no account, only the
+// walk-in name and phone taken at the till.
+type OrderCustomer struct {
+	UserID   string `json:"user_id,omitempty"`
+	Email    string `json:"email,omitempty"`
+	FullName string `json:"full_name,omitempty"`
+	Phone    string `json:"phone,omitempty"`
+}
+
+// AdminOrderListItem is one row of the operator order list: exactly the order
+// shape the customer already sees, plus who bought it, how it was sold and how
+// many seats it holds. Embedding keeps the existing order shape valid, the same
+// choice as OrderDetailResponse.
+type AdminOrderListItem struct {
+	OrderStatusResponse
+	SoldVia  string         `json:"sold_via"`
+	Seats    int            `json:"seats"`
+	Customer *OrderCustomer `json:"customer,omitempty"`
+}

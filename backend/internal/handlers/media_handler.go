@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
@@ -52,7 +53,11 @@ func (h *MediaHandler) UploadPoster(c *gin.Context) {
 	}
 	defer file.Close()
 
-	res, err := h.media.UploadPoster(c.Request.Context(), header.Filename, file)
+	// Typed explicitly so this file imports internal/dto: swag resolves the `dto.` prefix
+	// in the @Success annotation from the file's own imports, and without the import the
+	// whole `make swag` run aborts with "cannot find type definition: dto.UploadResponse".
+	var res *dto.UploadResponse
+	res, err = h.media.UploadPoster(c.Request.Context(), header.Filename, file)
 	if err != nil {
 		response.Error(c, err)
 		return

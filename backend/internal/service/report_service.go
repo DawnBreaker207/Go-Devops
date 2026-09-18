@@ -19,6 +19,7 @@ type ReportService interface {
 	BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error)
 	AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error)
 	StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error)
+	AdminStats(ctx context.Context) (*dto.AdminStatsResponse, error)
 }
 
 type reportService struct {
@@ -315,4 +316,22 @@ func newDailyAggregateResponse(a *models.DailyAggregate) *dto.DailyAggregateResp
 		Breakdown:     a.Breakdown,
 		UpdatedAt:     a.UpdatedAt,
 	}
+}
+
+// AdminStats is the dashboard's four headline counts. Deliberately separate from
+// AdminOverview: overview answers "how is today going", stats answers "how big is
+// the catalogue" — different cadence, different cost, and the tiles must render
+// even when the overview's alert queries are slow. Read-only: no transaction, no
+// audit row, no bumpCatalog.
+func (s *reportService) AdminStats(ctx context.Context) (*dto.AdminStatsResponse, error) {
+	row, err := s.repo.EntityCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AdminStatsResponse{
+		Movies:    row.Movies,
+		Showtimes: row.Showtimes,
+		Bookings:  row.Bookings,
+		Users:     row.Users,
+	}, nil
 }

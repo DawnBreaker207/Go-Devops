@@ -152,6 +152,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
 			catalog.PUT("/halls/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
 			catalog.PUT("/halls/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
+			catalog.GET("/showtimes", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.AdminList)
+			catalog.GET("/showtimes/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Detail)
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)
 			catalog.PUT("/showtimes/:id", middleware.Audit(db, "admin.update_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Update)
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
@@ -211,6 +213,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 
 		protected.GET("/admin/reports/daily", middleware.RequireRoles(models.RoleAdmin), h.Report.Daily)
 		protected.GET("/admin/overview", middleware.RequireRoles(models.RoleAdmin), h.Report.Overview)
+		protected.GET("/admin/stats", middleware.RequireRoles(models.RoleAdmin), h.Report.Stats)
 
 		// Aliases required by the API contract; the seat grid is readable by any signed-in user.
 		halls := protected.Group("/halls")
@@ -230,6 +233,9 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		{
 			admin.GET("/batch/jobs", h.Batch.List)
 			admin.GET("/audit-logs", h.Audit.List)
+			// Admin-only on purpose: staff read orders one id at a time
+			// (/staff/orders/:id), never every customer's email next to money.
+			admin.GET("/orders", h.Booking.AdminList)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
 	}

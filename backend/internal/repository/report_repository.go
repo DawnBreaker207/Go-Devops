@@ -41,6 +41,7 @@ type ReportRepository interface {
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]ShowtimeTicketRow, error)
 	CounterSalesDay(ctx context.Context, from, to time.Time) (count, total int64, err error)
 	LiveDayAggregate(ctx context.Context, from, to time.Time) (LiveAggregateRow, error)
+	EntityCounts(ctx context.Context) (EntityCountsRow, error)
 }
 
 // LiveAggregateRow is the same shape as a daily_aggregates row, computed on
@@ -52,6 +53,15 @@ type LiveAggregateRow struct {
 	SeatsSold     int     `gorm:"column:seats_sold"`
 	Capacity      int     `gorm:"column:capacity"`
 	OccupancyRate float64 `gorm:"column:occupancy_rate"`
+}
+
+// EntityCountsRow is the four headline counts of the admin dashboard, in one
+// round trip.
+type EntityCountsRow struct {
+	Movies    int64 `gorm:"column:movies"`
+	Showtimes int64 `gorm:"column:showtimes"`
+	Bookings  int64 `gorm:"column:bookings"`
+	Users     int64 `gorm:"column:users"`
 }
 
 type reportRepository struct {
@@ -226,6 +236,26 @@ func (r *reportRepository) LiveDayAggregate(ctx context.Context, from, to time.T
 	if err := r.db.WithContext(ctx).Raw(liveDayAggregateSQL, map[string]any{"from": from, "to": to}).
 		Scan(&row).Error; err != nil {
 		return LiveAggregateRow{}, fmt.Errorf("live day aggregate: %w", err)
+	}
+	return row, nil
+}
+
+// Four scalar subselects rather than four Count() calls: one round trip, and the
+// same projection shape liveDayAggregateSQL already uses. Raw SQL bypasses GORM's
+// soft-delete scope, so every deleted_at predicate is written out by hand —
+// bookings deliberately has none, that table has no such column. 'confirmed' is
+// models.BookingConfirmed, inlined the way the adjacent aggregate SQL does it.
+const entityCountsSQL = `
+SELECT
+	(SELECT COUNT(*) FROM movies    WHERE deleted_at IS NULL)   AS movies,
+	(SELECT COUNT(*) FROM showtimes WHERE deleted_at IS NULL)   AS showtimes,
+	(SELECT COUNT(*) FROM bookings  WHERE status = 'confirmed') AS bookings,
+	(SELECT COUNT(*) FROM users     WHERE deleted_at IS NULL)   AS users`
+
+func (r *reportRepository) EntityCounts(ctx context.Context) (EntityCountsRow, error) {
+	var row EntityCountsRow
+	if err := r.db.WithContext(ctx).Raw(entityCountsSQL).Scan(&row).Error; err != nil {
+		return EntityCountsRow{}, fmt.Errorf("entity counts: %w", err)
 	}
 	return row, nil
 }

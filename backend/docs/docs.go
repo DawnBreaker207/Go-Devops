@@ -15,6 +15,132 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/audit-logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Every audited event, newest first. booking_id ties together the\nwhole lifecycle of one order (hold/pay/webhook/refund/redeem)\neven though they touch different resource_type/resource_id.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin-audit"
+                ],
+                "summary": "List audit log entries (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact action, e.g. orders.pay",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "e.g. booking, payment, ticket, movie, hall",
+                        "name": "resource_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact resource id",
+                        "name": "resource_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Every event of one order's lifecycle",
+                        "name": "booking_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Who did it",
+                        "name": "actor_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "success | failure",
+                        "name": "outcome",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "YYYY-MM-DD, inclusive",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "YYYY-MM-DD, inclusive",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AuditLogResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/batch/jobs": {
             "get": {
                 "produces": [
@@ -50,13 +176,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/response.Paged"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
                                         }
                                     }
                                 }
@@ -66,13 +192,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -104,31 +230,76 @@ const docTemplate = `{
                     "202": {
                         "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/hall-templates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Preview the built-in hall templates",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallTemplateResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -176,7 +347,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -184,7 +355,7 @@ const docTemplate = `{
                                         "data": {
                                             "allOf": [
                                                 {
-                                                    "$ref": "#/definitions/response.Paged"
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
                                                 },
                                                 {
                                                     "type": "object",
@@ -192,7 +363,7 @@ const docTemplate = `{
                                                         "items": {
                                                             "type": "array",
                                                             "items": {
-                                                                "$ref": "#/definitions/dto.HallResponse"
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse"
                                                             }
                                                         }
                                                     }
@@ -207,7 +378,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -235,7 +406,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.HallRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest"
                         }
                     }
                 ],
@@ -245,13 +416,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.HallResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse"
                                         }
                                     }
                                 }
@@ -261,19 +432,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -308,13 +479,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.HallResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse"
                                         }
                                     }
                                 }
@@ -324,13 +495,306 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deactivating is refused (409) while an open showtime is still to come; once inactive the hall takes no new showtimes.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Rename a hall, change its screen/aisle display, or (de)activate it",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Refused (409) while it has a showtime not yet ended.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Delete a hall (soft delete)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/halls/{id}/clone": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Clone a hall's current seat grid under a new name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID to clone",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New hall name",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CloneHallRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/halls/{id}/layout": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Only while the hall has never had a single booking (409 otherwise).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Regenerate a hall's whole seat grid",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New layout (name/prices are ignored here)",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -365,7 +829,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -373,7 +837,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.HallPriceResponse"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse"
                                             }
                                         }
                                     }
@@ -384,13 +848,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -425,7 +889,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.PriceRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest"
                         }
                     }
                 ],
@@ -435,7 +899,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -443,7 +907,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.HallPriceResponse"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse"
                                             }
                                         }
                                     }
@@ -454,19 +918,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -501,7 +965,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -509,7 +973,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.SeatResponse"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
                                             }
                                         }
                                     }
@@ -520,13 +984,95 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Change many seats at once (labels, rows, columns or a range)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Changes, one selector each",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BulkSeatUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -570,7 +1116,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.SeatUpdateRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatUpdateRequest"
                         }
                     }
                 ],
@@ -580,13 +1126,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.SeatResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
                                         }
                                     }
                                 }
@@ -596,25 +1142,226 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/orders": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The operator counterpart of GET /orders: not scoped to the caller. Online and counter sales alike, with the buyer's identity, the showtime and the payment attempt the order carries. It reports what the database holds and does not reconcile with the provider — use GET /staff/orders/{id} for that.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "List every order for operators, paged and filterable",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Booking id, customer email/name/phone, or movie title",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "pending | confirmed | expired | refunded",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "pending | paid | failed | refund_pending | refunded (matches only an order that already carries a payment)",
+                        "name": "payment_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "online | counter",
+                        "name": "sold_via",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Showtime ID",
+                        "name": "showtime_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Movie ID",
+                        "name": "movie_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Customer ID",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Single day of created_at (YYYY-MM-DD), wins over from/to",
+                        "name": "date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "created_at range start (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "created_at range end, inclusive (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "created_at | paid_at | total_amount | start_at",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "asc or desc",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOrderListItem"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Today's revenue/occupancy is computed live, not waiting on the closeDay job. Alerts surface stuck refunds, recent failed batch jobs and confirmed orders whose ticket email exhausted every retry.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "summary": "Admin dashboard: today (live), the last 7 days, upcoming showtimes and operational alerts, in one call",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOverviewResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -655,13 +1402,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.DailyReportResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyReportResponse"
                                         }
                                     }
                                 }
@@ -671,19 +1418,157 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
             }
         },
         "/admin/showtimes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Shows everything the public picker hides: closed showtimes, draft or ended movies, past dates and halls without a full price set.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "showtimes"
+                ],
+                "summary": "List showtimes for operators, paged and filterable",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Match movie title or hall name",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Movie ID",
+                        "name": "movie_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "hall_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "open or closed",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Single day (YYYY-MM-DD), wins over from/to",
+                        "name": "date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Range start (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Range end, inclusive (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "start_at or created_at",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "asc or desc",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -707,7 +1592,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.ShowtimeRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeRequest"
                         }
                     }
                 ],
@@ -717,13 +1602,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.ShowtimeResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse"
                                         }
                                     }
                                 }
@@ -733,31 +1618,93 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
             }
         },
         "/admin/showtimes/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unlike the booking endpoints this does not require the showtime to be on sale.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "showtimes"
+                ],
+                "summary": "Get one showtime for operators",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Showtime ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
             "put": {
                 "security": [
                     {
@@ -788,7 +1735,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.ShowtimeRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeRequest"
                         }
                     }
                 ],
@@ -798,13 +1745,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.ShowtimeResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse"
                                         }
                                     }
                                 }
@@ -814,25 +1761,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -863,25 +1810,74 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Four totals for the dashboard tiles: movies, showtimes, bookings and users. Soft-deleted rows are excluded and bookings counts confirmed orders only, so pending holds and expired bookings never inflate the tile. Locked accounts are still counted. Staff and customers get 403.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "summary": "Admin dashboard headline counts",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminStatsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -920,13 +1916,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.UploadResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UploadResponse"
                                         }
                                     }
                                 }
@@ -936,19 +1932,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1006,7 +2002,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -1014,7 +2010,7 @@ const docTemplate = `{
                                         "data": {
                                             "allOf": [
                                                 {
-                                                    "$ref": "#/definitions/response.Paged"
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
                                                 },
                                                 {
                                                     "type": "object",
@@ -1022,7 +2018,7 @@ const docTemplate = `{
                                                         "items": {
                                                             "type": "array",
                                                             "items": {
-                                                                "$ref": "#/definitions/dto.UserResponse"
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                                                             }
                                                         }
                                                     }
@@ -1037,7 +2033,7 @@ const docTemplate = `{
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1065,7 +2061,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.CreateUserRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest"
                         }
                     }
                 ],
@@ -1075,13 +2071,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.UserResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                                         }
                                     }
                                 }
@@ -1091,19 +2087,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1141,7 +2137,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.UpdateUserRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateUserRequest"
                         }
                     }
                 ],
@@ -1151,13 +2147,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.UserResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                                         }
                                     }
                                 }
@@ -1167,19 +2163,19 @@ const docTemplate = `{
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1205,7 +2201,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.ForgotPasswordRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ForgotPasswordRequest"
                         }
                     }
                 ],
@@ -1213,13 +2209,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1244,7 +2240,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.LoginRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest"
                         }
                     }
                 ],
@@ -1254,13 +2250,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.LoginResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse"
                                         }
                                     }
                                 }
@@ -1270,25 +2266,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "account locked",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "429": {
                         "description": "too many failed attempts",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1313,7 +2309,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.LogoutRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LogoutRequest"
                         }
                     }
                 ],
@@ -1321,19 +2317,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "invalid or expired token",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1358,7 +2354,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.RefreshRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest"
                         }
                     }
                 ],
@@ -1368,13 +2364,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.TokenResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse"
                                         }
                                     }
                                 }
@@ -1384,13 +2380,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1415,7 +2411,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.RegisterRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest"
                         }
                     }
                 ],
@@ -1425,13 +2421,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.UserResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                                         }
                                     }
                                 }
@@ -1441,13 +2437,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1472,7 +2468,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.ResetPasswordRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ResetPasswordRequest"
                         }
                     }
                 ],
@@ -1480,13 +2476,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "400": {
                         "description": "invalid, expired, or already used token",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1512,7 +2508,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.LoginRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest"
                         }
                     }
                 ],
@@ -1522,13 +2518,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.LoginResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse"
                                         }
                                     }
                                 }
@@ -1538,19 +2534,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "428": {
                         "description": "terms not required or already accepted",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1586,7 +2582,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1622,7 +2618,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -1639,13 +2635,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1667,13 +2663,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/handlers.HealthStatus"
+                                            "$ref": "#/definitions/internal_handlers.HealthStatus"
                                         }
                                     }
                                 }
@@ -1683,7 +2679,7 @@ const docTemplate = `{
                     "503": {
                         "description": "Service Unavailable",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1703,13 +2699,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "503": {
                         "description": "Service Unavailable",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1763,7 +2759,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -1771,7 +2767,7 @@ const docTemplate = `{
                                         "data": {
                                             "allOf": [
                                                 {
-                                                    "$ref": "#/definitions/response.Paged"
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
                                                 },
                                                 {
                                                     "type": "object",
@@ -1779,7 +2775,7 @@ const docTemplate = `{
                                                         "items": {
                                                             "type": "array",
                                                             "items": {
-                                                                "$ref": "#/definitions/dto.MovieResponse"
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse"
                                                             }
                                                         }
                                                     }
@@ -1794,13 +2790,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1828,7 +2824,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.MovieRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest"
                         }
                     }
                 ],
@@ -1838,13 +2834,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.MovieResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse"
                                         }
                                     }
                                 }
@@ -1854,13 +2850,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1895,13 +2891,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.MovieResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse"
                                         }
                                     }
                                 }
@@ -1911,13 +2907,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -1952,7 +2948,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.MovieRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest"
                         }
                     }
                 ],
@@ -1962,13 +2958,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.MovieResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse"
                                         }
                                     }
                                 }
@@ -1978,19 +2974,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2021,19 +3017,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2073,7 +3069,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -2081,7 +3077,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.ShowtimeListItem"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem"
                                             }
                                         }
                                     }
@@ -2092,13 +3088,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2140,7 +3136,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -2148,7 +3144,7 @@ const docTemplate = `{
                                         "data": {
                                             "allOf": [
                                                 {
-                                                    "$ref": "#/definitions/response.Paged"
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
                                                 },
                                                 {
                                                     "type": "object",
@@ -2156,7 +3152,7 @@ const docTemplate = `{
                                                         "items": {
                                                             "type": "array",
                                                             "items": {
-                                                                "$ref": "#/definitions/dto.OrderStatusResponse"
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse"
                                                             }
                                                         }
                                                     }
@@ -2171,7 +3167,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2202,7 +3198,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.HoldRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldRequest"
                         }
                     }
                 ],
@@ -2212,13 +3208,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.HoldResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldResponse"
                                         }
                                     }
                                 }
@@ -2228,25 +3224,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2281,13 +3277,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.OrderDetailResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse"
                                         }
                                     }
                                 }
@@ -2297,19 +3293,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2344,13 +3340,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.OrderStatusResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse"
                                         }
                                     }
                                 }
@@ -2360,19 +3356,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2408,13 +3404,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.OrderDetailResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse"
                                         }
                                     }
                                 }
@@ -2424,19 +3420,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2474,7 +3470,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.PayRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayRequest"
                         }
                     }
                 ],
@@ -2484,13 +3480,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.PayResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayResponse"
                                         }
                                     }
                                 }
@@ -2500,25 +3496,25 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2553,13 +3549,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.OrderStatusResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse"
                                         }
                                     }
                                 }
@@ -2569,19 +3565,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2607,7 +3603,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -2615,7 +3611,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.PaymentProviderResponse"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentProviderResponse"
                                             }
                                         }
                                     }
@@ -2626,7 +3622,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2686,13 +3682,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.PaymentReturnResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentReturnResponse"
                                         }
                                     }
                                 }
@@ -2705,13 +3701,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2746,13 +3742,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.SeatMapResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapResponse"
                                         }
                                     }
                                 }
@@ -2762,13 +3758,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2803,7 +3799,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -2811,7 +3807,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.ShowtimeListItem"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem"
                                             }
                                         }
                                     }
@@ -2822,13 +3818,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2862,13 +3858,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.BoxOfficeDayResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BoxOfficeDayResponse"
                                         }
                                     }
                                 }
@@ -2878,7 +3874,227 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/staff/customers": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Only role=customer accounts ever show here; staff/admin accounts stay only in /admin/users.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "Search customer accounts (support lookup)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Email, name or phone",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/staff/customers/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "404 if the id isn't a customer account — this route never confirms a staff/admin account exists.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "A customer's profile (support lookup)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/staff/customers/{id}/orders": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "A customer's booking history (support lookup)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2912,13 +4128,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.StaffBoardResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffBoardResponse"
                                         }
                                     }
                                 }
@@ -2928,13 +4144,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -2965,7 +4181,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.CounterSellRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CounterSellRequest"
                         }
                     }
                 ],
@@ -2975,13 +4191,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.OrderDetailResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse"
                                         }
                                     }
                                 }
@@ -2991,19 +4207,132 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "seat already taken",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/staff/orders/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "Any order's e-ticket detail, by id (support lookup)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Booking ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/staff/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "staff"
+                ],
+                "summary": "Staff dashboard: today's showtime board + counter sales + tickets awaiting check-in, in one call",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Local date YYYY-MM-DD (default today)",
+                        "name": "date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffOverviewResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3044,7 +4373,7 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
@@ -3052,7 +4381,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/dto.StaffTicketResponse"
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffTicketResponse"
                                             }
                                         }
                                     }
@@ -3063,19 +4392,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3113,7 +4442,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.RedeemRequestBody"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemRequestBody"
                         }
                     }
                 ],
@@ -3123,13 +4452,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.RedeemResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemResponse"
                                         }
                                     }
                                 }
@@ -3139,13 +4468,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3171,13 +4500,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.UserResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                                         }
                                     }
                                 }
@@ -3187,13 +4516,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3221,7 +4550,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.UpdateProfileRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateProfileRequest"
                         }
                     }
                 ],
@@ -3231,13 +4560,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.UserResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                                         }
                                     }
                                 }
@@ -3247,13 +4576,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3264,7 +4593,10 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "409 while a confirmed ticket is still to come; then the account is scrubbed and sessions revoked.",
+                "description": "Requires the current password. 401 on a wrong password; 409 while a confirmed ticket is still to come; then the account is scrubbed and sessions revoked.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -3272,17 +4604,34 @@ const docTemplate = `{
                     "users"
                 ],
                 "summary": "Delete own account (right to erasure)",
+                "parameters": [
+                    {
+                        "description": "Current password",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DeleteAccountRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "204": {
                         "description": "No Content",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "409": {
                         "description": "account still holds confirmed tickets",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3313,7 +4662,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.ChangePasswordRequest"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -3323,13 +4672,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Body"
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/dto.TokenResponse"
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse"
                                         }
                                     }
                                 }
@@ -3339,13 +4688,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "401": {
                         "description": "wrong current password",
                         "schema": {
-                            "$ref": "#/definitions/response.Body"
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     }
                 }
@@ -3353,7 +4702,163 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "dto.BoxOfficeDayResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminAlertsResponse": {
+            "type": "object",
+            "properties": {
+                "failed_jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.FailedJobAlert"
+                    }
+                },
+                "given_up_emails": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GivenUpEmailAlert"
+                    }
+                },
+                "stuck_refunds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StuckRefundAlert"
+                    }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOrderListItem": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "customer": {
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderCustomer"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "paid_at": {
+                    "type": "string"
+                },
+                "payment": {
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary"
+                },
+                "seats": {
+                    "type": "integer"
+                },
+                "showtime": {
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime"
+                },
+                "showtime_id": {
+                    "type": "string"
+                },
+                "sold_via": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_reason": {
+                    "type": "string"
+                },
+                "total_amount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOverviewResponse": {
+            "type": "object",
+            "properties": {
+                "alerts": {
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminAlertsResponse"
+                },
+                "last_7_days": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse"
+                    }
+                },
+                "today": {
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse"
+                },
+                "upcoming_showtimes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse"
+                    }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminStatsResponse": {
+            "type": "object",
+            "properties": {
+                "bookings": {
+                    "type": "integer"
+                },
+                "movies": {
+                    "type": "integer"
+                },
+                "showtimes": {
+                    "type": "integer"
+                },
+                "users": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AuditLogResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actor_id": {
+                    "type": "string"
+                },
+                "actor_role": {
+                    "type": "string"
+                },
+                "after_json": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "before_json": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "booking_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "resource_id": {
+                    "type": "string"
+                },
+                "resource_type": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BoxOfficeDayResponse": {
             "type": "object",
             "properties": {
                 "count": {
@@ -3368,7 +4873,23 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ChangePasswordRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BulkSeatUpdateRequest": {
+            "type": "object",
+            "required": [
+                "changes"
+            ],
+            "properties": {
+                "changes": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatChange"
+                    }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ChangePasswordRequest": {
             "type": "object",
             "required": [
                 "current_password",
@@ -3386,7 +4907,24 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.CounterSellRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CloneHallRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "copy_prices": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "Phong 3"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CounterSellRequest": {
             "type": "object",
             "required": [
                 "seat_ids",
@@ -3413,7 +4951,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.CreateUserRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -3447,7 +4985,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.DailyAggregateResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse": {
             "type": "object",
             "properties": {
                 "breakdown": {
@@ -3477,13 +5015,13 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.DailyReportResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyReportResponse": {
             "type": "object",
             "properties": {
                 "days": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.DailyAggregateResponse"
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse"
                     }
                 },
                 "from": {
@@ -3502,7 +5040,36 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ForgotPasswordRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DeleteAccountRequest": {
+            "type": "object",
+            "required": [
+                "password"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "secret123"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.FailedJobAlert": {
+            "type": "object",
+            "properties": {
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "job_name": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ForgotPasswordRequest": {
             "type": "object",
             "required": [
                 "email"
@@ -3515,7 +5082,21 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.HallPriceResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GivenUpEmailAlert": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer"
+                },
+                "booking_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse": {
             "type": "object",
             "properties": {
                 "price": {
@@ -3526,15 +5107,24 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.HallRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest": {
             "type": "object",
             "required": [
                 "name",
-                "prices",
-                "rows",
-                "seats_per_row"
+                "prices"
             ],
             "properties": {
+                "aisle_after_cols": {
+                    "description": "Column numbers after which there is a vertical aisle, display only.",
+                    "type": "array",
+                    "maxItems": 49,
+                    "items": {
+                        "type": "integer"
+                    },
+                    "example": [
+                        4
+                    ]
+                },
                 "gaps": {
                     "type": "array",
                     "maxItems": 200,
@@ -3572,6 +5162,14 @@ const docTemplate = `{
                     "minimum": 1,
                     "example": 8
                 },
+                "screen_position": {
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "back"
+                    ],
+                    "example": "front"
+                },
                 "seat_types": {
                     "description": "Optional: rows not listed are standard.",
                     "type": "object",
@@ -3598,20 +5196,32 @@ const docTemplate = `{
                     "example": [
                         "[\"D3\"]"
                     ]
+                },
+                "template": {
+                    "type": "string",
+                    "enum": [
+                        "small",
+                        "medium",
+                        "large"
+                    ],
+                    "example": "medium"
                 }
             }
         },
-        "dto.HallResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse": {
             "type": "object",
             "properties": {
-                "created_at": {
-                    "type": "string"
+                "active": {
+                    "type": "boolean"
                 },
-                "gaps": {
+                "aisle_after_cols": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "type": "integer"
                     }
+                },
+                "created_at": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -3622,14 +5232,8 @@ const docTemplate = `{
                 "rows": {
                     "type": "integer"
                 },
-                "seat_types": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
+                "screen_position": {
+                    "type": "string"
                 },
                 "seats_per_row": {
                     "type": "integer"
@@ -3639,7 +5243,30 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.HeldSeat": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "integer"
+                },
+                "seat_count": {
+                    "type": "integer"
+                },
+                "seat_count_by_type": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "seats_per_row": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HeldSeat": {
             "type": "object",
             "properties": {
                 "col_number": {
@@ -3662,7 +5289,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.HoldRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldRequest": {
             "type": "object",
             "required": [
                 "seat_ids",
@@ -3686,7 +5313,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.HoldResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldResponse": {
             "type": "object",
             "properties": {
                 "booking_id": {
@@ -3701,7 +5328,7 @@ const docTemplate = `{
                 "seats": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.HeldSeat"
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HeldSeat"
                     }
                 },
                 "showtime_id": {
@@ -3712,7 +5339,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.LoginRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -3730,7 +5357,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.LoginResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -3748,11 +5375,11 @@ const docTemplate = `{
                     "example": "Bearer"
                 },
                 "user": {
-                    "$ref": "#/definitions/dto.UserResponse"
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse"
                 }
             }
         },
-        "dto.LogoutRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LogoutRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -3763,7 +5390,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.MovieRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest": {
             "type": "object",
             "required": [
                 "director",
@@ -3841,7 +5468,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.MovieResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse": {
             "type": "object",
             "properties": {
                 "age_rating": {
@@ -3889,7 +5516,24 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.OrderDetailResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderCustomer": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -3905,10 +5549,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "payment": {
-                    "$ref": "#/definitions/dto.PaymentSummary"
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary"
                 },
                 "showtime": {
-                    "$ref": "#/definitions/dto.OrderShowtime"
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime"
                 },
                 "showtime_id": {
                     "type": "string"
@@ -3922,7 +5566,7 @@ const docTemplate = `{
                 "tickets": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.TicketResponse"
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse"
                     }
                 },
                 "total_amount": {
@@ -3930,7 +5574,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.OrderShowtime": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime": {
             "type": "object",
             "properties": {
                 "age_rating": {
@@ -3962,7 +5606,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.OrderStatusResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -3978,10 +5622,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "payment": {
-                    "$ref": "#/definitions/dto.PaymentSummary"
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary"
                 },
                 "showtime": {
-                    "$ref": "#/definitions/dto.OrderShowtime"
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime"
                 },
                 "showtime_id": {
                     "type": "string"
@@ -3997,7 +5641,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.PayRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayRequest": {
             "type": "object",
             "properties": {
                 "provider": {
@@ -4007,7 +5651,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.PayResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayResponse": {
             "type": "object",
             "properties": {
                 "expires_at": {
@@ -4027,7 +5671,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.PaymentProviderResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentProviderResponse": {
             "type": "object",
             "properties": {
                 "default": {
@@ -4042,7 +5686,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.PaymentReturnResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentReturnResponse": {
             "type": "object",
             "properties": {
                 "booking_id": {
@@ -4062,7 +5706,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.PaymentSummary": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -4094,7 +5738,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.PriceRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest": {
             "type": "object",
             "required": [
                 "prices"
@@ -4113,7 +5757,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.RedeemRequestBody": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemRequestBody": {
             "type": "object",
             "required": [
                 "showtime_id"
@@ -4124,7 +5768,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.RedeemResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemResponse": {
             "type": "object",
             "properties": {
                 "age_rating": {
@@ -4160,7 +5804,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.RefreshRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -4171,7 +5815,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.RegisterRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -4198,7 +5842,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ResetPasswordRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ResetPasswordRequest": {
             "type": "object",
             "required": [
                 "new_password",
@@ -4216,11 +5860,40 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SeatMapResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatChange": {
+            "type": "object",
+            "required": [
+                "selector"
+            ],
+            "properties": {
+                "is_gap": {
+                    "type": "boolean"
+                },
+                "seat_type": {
+                    "type": "string",
+                    "enum": [
+                        "standard",
+                        "vip",
+                        "couple",
+                        "recliner"
+                    ]
+                },
+                "selector": {
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatSelector"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapResponse": {
             "type": "object",
             "properties": {
                 "age_rating": {
                     "type": "string"
+                },
+                "aisle_after_cols": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "end_at": {
                     "type": "string"
@@ -4244,10 +5917,13 @@ const docTemplate = `{
                         "format": "int64"
                     }
                 },
+                "screen_position": {
+                    "type": "string"
+                },
                 "seats": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.SeatMapSeat"
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapSeat"
                     }
                 },
                 "showtime_id": {
@@ -4261,7 +5937,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SeatMapSeat": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapSeat": {
             "type": "object",
             "properties": {
                 "col_number": {
@@ -4296,7 +5972,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SeatResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse": {
             "type": "object",
             "properties": {
                 "col_number": {
@@ -4325,7 +6001,50 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SeatUpdateRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatSelector": {
+            "type": "object",
+            "properties": {
+                "cols": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "integer"
+                    },
+                    "example": [
+                        1
+                    ]
+                },
+                "labels": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"A1\"",
+                        "\"A2\"]"
+                    ]
+                },
+                "range": {
+                    "description": "Inclusive rectangle, e.g. \"A1:C4\".",
+                    "type": "string",
+                    "maxLength": 16,
+                    "example": "A1:C4"
+                },
+                "rows": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"A\"",
+                        "\"B\"]"
+                    ]
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatUpdateRequest": {
             "type": "object",
             "properties": {
                 "is_gap": {
@@ -4343,7 +6062,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ShowtimeListItem": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem": {
             "type": "object",
             "properties": {
                 "age_rating": {
@@ -4378,7 +6097,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ShowtimeRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeRequest": {
             "type": "object",
             "required": [
                 "hall_id",
@@ -4407,7 +6126,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ShowtimeResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse": {
             "type": "object",
             "properties": {
                 "age_rating": {
@@ -4445,7 +6164,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.StaffBoardResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffBoardResponse": {
             "type": "object",
             "properties": {
                 "date": {
@@ -4455,12 +6174,36 @@ const docTemplate = `{
                 "showtimes": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.StaffShowtimeResponse"
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse"
                     }
                 }
             }
         },
-        "dto.StaffShowtimeResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffOverviewResponse": {
+            "type": "object",
+            "properties": {
+                "awaiting_checkin": {
+                    "type": "integer"
+                },
+                "counter_sales_count": {
+                    "type": "integer"
+                },
+                "counter_sales_total": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string",
+                    "example": "2026-09-14"
+                },
+                "showtimes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse"
+                    }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse": {
             "type": "object",
             "properties": {
                 "available": {
@@ -4498,7 +6241,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.StaffTicketResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffTicketResponse": {
             "type": "object",
             "properties": {
                 "booking_id": {
@@ -4521,7 +6264,27 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.TicketResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StuckRefundAlert": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "attempts": {
+                    "type": "integer"
+                },
+                "booking_id": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "payment_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -4547,7 +6310,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.TokenResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -4566,7 +6329,34 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.UpdateProfileRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "aisle_after_cols": {
+                    "type": "array",
+                    "maxItems": 49,
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "screen_position": {
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "back"
+                    ]
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateProfileRequest": {
             "type": "object",
             "required": [
                 "full_name"
@@ -4585,7 +6375,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.UpdateUserRequest": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateUserRequest": {
             "type": "object",
             "properties": {
                 "active": {
@@ -4602,7 +6392,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.UploadResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UploadResponse": {
             "type": "object",
             "properties": {
                 "content_type": {
@@ -4616,7 +6406,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.UserResponse": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse": {
             "type": "object",
             "properties": {
                 "active": {
@@ -4645,24 +6435,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.HealthStatus": {
-            "type": "object",
-            "properties": {
-                "database": {
-                    "type": "string",
-                    "example": "up"
-                },
-                "service": {
-                    "type": "string",
-                    "example": "BackEnd-CP"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "response.Body": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body": {
             "type": "object",
             "properties": {
                 "code": {
@@ -4682,7 +6455,7 @@ const docTemplate = `{
                 }
             }
         },
-        "response.Meta": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta": {
             "type": "object",
             "properties": {
                 "page": {
@@ -4703,12 +6476,29 @@ const docTemplate = `{
                 }
             }
         },
-        "response.Paged": {
+        "github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged": {
             "type": "object",
             "properties": {
                 "items": {},
                 "meta": {
-                    "$ref": "#/definitions/response.Meta"
+                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta"
+                }
+            }
+        },
+        "internal_handlers.HealthStatus": {
+            "type": "object",
+            "properties": {
+                "database": {
+                    "type": "string",
+                    "example": "up"
+                },
+                "service": {
+                    "type": "string",
+                    "example": "BackEnd-CP"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
                 }
             }
         }

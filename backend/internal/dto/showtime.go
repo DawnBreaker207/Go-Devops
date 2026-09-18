@@ -30,6 +30,23 @@ type ShowtimeResponse struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// ShowtimeAdminListQuery filters the operator showtime list. Unlike the public picker at
+// GET /showtimes it hides nothing: closed showtimes, draft or ended movies and past dates
+// all stay visible, because those are exactly the rows an operator has to find and fix.
+// Search matches the movie title or the hall name.
+type ShowtimeAdminListQuery struct {
+	PageQuery
+	MovieID string `form:"movie_id" binding:"omitempty,uuid"`
+	HallID  string `form:"hall_id" binding:"omitempty,uuid"`
+	Status  string `form:"status" binding:"omitempty,oneof=open closed"`
+	// Date narrows to a single calendar day in the server timezone and wins over From/To.
+	Date  string `form:"date" binding:"omitempty,datetime=2006-01-02"`
+	From  string `form:"from" binding:"omitempty,datetime=2006-01-02"`
+	To    string `form:"to" binding:"omitempty,datetime=2006-01-02"`
+	Sort  string `form:"sort" binding:"omitempty,oneof=start_at created_at"`
+	Order string `form:"order" binding:"omitempty,oneof=asc desc"`
+}
+
 // ShowtimeListItem is one showtime in the movie picker.
 type ShowtimeListItem struct {
 	ID         string    `json:"id"`

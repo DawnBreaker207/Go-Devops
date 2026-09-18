@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
@@ -65,6 +66,48 @@ type ShowtimeInfoRow struct {
 	EndAt      time.Time `gorm:"column:end_at"`
 }
 
+// AdminOrderRow is one booking on the operator list: the booking columns the
+// list shows, the account it belongs to (none for a counter sale), the showtime
+// it is for, and the payment attempt whose money it carries (none until it
+// carries one). Nullable text columns are plain strings, as BookingHeader does.
+type AdminOrderRow struct {
+	ID            string     `gorm:"column:id"`
+	UserID        string     `gorm:"column:user_id"`
+	ShowtimeID    string     `gorm:"column:showtime_id"`
+	Status        string     `gorm:"column:status"`
+	StatusReason  string     `gorm:"column:status_reason"`
+	TotalAmount   int64      `gorm:"column:total_amount"`
+	SoldVia       string     `gorm:"column:sold_via"`
+	CustomerName  string     `gorm:"column:customer_name"`
+	CustomerPhone string     `gorm:"column:customer_phone"`
+	ExpiresAt     *time.Time `gorm:"column:expires_at"`
+	PaidAt        *time.Time `gorm:"column:paid_at"`
+	CreatedAt     time.Time  `gorm:"column:created_at"`
+	Seats         int        `gorm:"column:seats"`
+
+	Email    string `gorm:"column:email"`
+	FullName string `gorm:"column:full_name"`
+	Phone    string `gorm:"column:phone"`
+
+	MovieID    string    `gorm:"column:movie_id"`
+	MovieTitle string    `gorm:"column:movie_title"`
+	AgeRating  string    `gorm:"column:age_rating"`
+	HallID     string    `gorm:"column:hall_id"`
+	HallName   string    `gorm:"column:hall_name"`
+	StartAt    time.Time `gorm:"column:start_at"`
+	EndAt      time.Time `gorm:"column:end_at"`
+
+	PaymentID           string     `gorm:"column:payment_id"`
+	PaymentProvider     string     `gorm:"column:payment_provider"`
+	PaymentTxnRef       string     `gorm:"column:payment_txn_ref"`
+	PaymentStatus       string     `gorm:"column:payment_status"`
+	PaymentStatusReason string     `gorm:"column:payment_status_reason"`
+	PaymentAmount       int64      `gorm:"column:payment_amount"`
+	PaymentPaidAmount   *int64     `gorm:"column:payment_paid_amount"`
+	PaymentPaidAt       *time.Time `gorm:"column:payment_paid_at"`
+	PaymentRefundedAt   *time.Time `gorm:"column:payment_refunded_at"`
+}
+
 // Methods taking tx run in the caller's transaction; a nil tx uses the plain connection.
 type BookingRepository interface {
 	Now(ctx context.Context, tx *gorm.DB) (time.Time, error)
@@ -72,6 +115,7 @@ type BookingRepository interface {
 	FindByID(ctx context.Context, id string) (*models.Booking, error)
 	FindByIDAndUser(ctx context.Context, id, userID string) (*models.Booking, error)
 	ListByUser(ctx context.Context, userID string, page, pageSize int) ([]models.Booking, int64, error)
+	AdminOrderList(ctx context.Context, query dto.AdminOrderListQuery, from, to time.Time) ([]AdminOrderRow, int64, error)
 
 	LockUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) error
 	UserActive(ctx context.Context, tx *gorm.DB, userID string) (bool, error)
@@ -655,4 +699,109 @@ func (r *bookingRepository) SellSeatAtCounter(ctx context.Context, tx *gorm.DB, 
 		return 0, fmt.Errorf("sell seat at counter: %w", res.Error)
 	}
 	return res.RowsAffected, nil
+}
+
+// adminOrderSortColumns whitelists the sort keys of the operator order list;
+// anything else falls back to created_at. Values are literals, never user input.
+var adminOrderSortColumns = map[string]string{
+	"created_at":   "bookings.created_at",
+	"paid_at":      "bookings.paid_at",
+	"total_amount": "bookings.total_amount",
+	"start_at":     "showtimes.start_at",
+}
+
+func adminOrderOrder(sort, order string) string {
+	column := adminOrderSortColumns[sort]
+	if column == "" {
+		column = "bookings.created_at"
+	}
+	direction := "DESC"
+	if strings.EqualFold(order, "asc") {
+		direction = "ASC"
+	}
+	return column + " " + direction
+}
+
+// AdminOrderList is the operator counterpart of ListByUser: no user scope, and
+// the account, showtime and carried payment come back in the same query so one
+// page is one round trip. The caller resolves from/to into absolute instants so
+// the timezone stays a service concern; a zero time means that bound is open.
+// Deleted showtimes, movies and halls are joined in on purpose (same reason as
+// ShowtimeInfos): an old order must still show what was bought. users is a LEFT
+// JOIN because a counter sale has no account, and erased accounts are kept
+// because erasure scrubs the row in place rather than removing it.
+func (r *bookingRepository) AdminOrderList(ctx context.Context, query dto.AdminOrderListQuery, from, to time.Time) ([]AdminOrderRow, int64, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&models.Booking{}).
+		Joins("JOIN showtimes ON showtimes.id = bookings.showtime_id").
+		Joins("JOIN movies ON movies.id = showtimes.movie_id").
+		Joins("JOIN halls ON halls.id = showtimes.hall_id").
+		Joins("LEFT JOIN users ON users.id = bookings.user_id").
+		Joins("LEFT JOIN payments ON payments.id = bookings.payment_id")
+
+	if query.Status != "" {
+		tx = tx.Where("bookings.status = ?", query.Status)
+	}
+	if query.PaymentStatus != "" {
+		tx = tx.Where("payments.status = ?", query.PaymentStatus)
+	}
+	if query.SoldVia != "" {
+		tx = tx.Where("bookings.sold_via = ?", query.SoldVia)
+	}
+	if query.ShowtimeID != "" {
+		tx = tx.Where("bookings.showtime_id = ?", query.ShowtimeID)
+	}
+	if query.MovieID != "" {
+		tx = tx.Where("showtimes.movie_id = ?", query.MovieID)
+	}
+	if query.UserID != "" {
+		tx = tx.Where("bookings.user_id = ?", query.UserID)
+	}
+	if !from.IsZero() {
+		tx = tx.Where("bookings.created_at >= ?", from)
+	}
+	if !to.IsZero() {
+		tx = tx.Where("bookings.created_at < ?", to)
+	}
+	if search := strings.TrimSpace(query.Search); search != "" {
+		lowered := strings.ToLower(search)
+		pattern := "%" + lowered + "%"
+		tx = tx.Where(`bookings.id::text = ?
+				OR LOWER(users.email) LIKE ? OR LOWER(users.full_name) LIKE ?
+				OR LOWER(bookings.customer_name) LIKE ? OR bookings.customer_phone LIKE ?
+				OR LOWER(movies.title) LIKE ?`,
+			lowered, pattern, pattern, pattern, "%"+search+"%", pattern)
+	}
+
+	// Count before Select: the Select below carries a correlated seats subquery
+	// that must not end up inside count(...). Same ordering as movieRepository.List.
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count admin orders: %w", err)
+	}
+
+	rows := make([]AdminOrderRow, 0, query.PageSize)
+	if err := tx.
+		Select(`bookings.id, bookings.user_id, bookings.showtime_id, bookings.status,
+			bookings.status_reason, bookings.total_amount, bookings.sold_via,
+			bookings.customer_name, bookings.customer_phone, bookings.expires_at,
+			bookings.paid_at, bookings.created_at,
+			(SELECT COUNT(*) FROM booking_seats bs WHERE bs.booking_id = bookings.id) AS seats,
+			users.email, users.full_name, users.phone,
+			showtimes.movie_id, movies.title AS movie_title, movies.age_rating AS age_rating,
+			showtimes.hall_id, halls.name AS hall_name, showtimes.start_at, showtimes.end_at,
+			payments.id AS payment_id, payments.provider AS payment_provider,
+			payments.txn_ref AS payment_txn_ref, payments.status AS payment_status,
+			payments.status_reason AS payment_status_reason, payments.amount AS payment_amount,
+			payments.paid_amount AS payment_paid_amount, payments.paid_at AS payment_paid_at,
+			payments.refunded_at AS payment_refunded_at`).
+		Order(adminOrderOrder(query.Sort, query.Order)).
+		Order("bookings.id").
+		Limit(query.PageSize).
+		Offset(query.Offset()).
+		Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list admin orders: %w", err)
+	}
+
+	return rows, total, nil
 }

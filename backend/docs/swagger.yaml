@@ -1,6 +1,109 @@
 basePath: /api/v1
 definitions:
-  dto.BoxOfficeDayResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminAlertsResponse:
+    properties:
+      failed_jobs:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.FailedJobAlert'
+        type: array
+      given_up_emails:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GivenUpEmailAlert'
+        type: array
+      stuck_refunds:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StuckRefundAlert'
+        type: array
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOrderListItem:
+    properties:
+      created_at:
+        type: string
+      customer:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderCustomer'
+      expires_at:
+        type: string
+      id:
+        type: string
+      paid_at:
+        type: string
+      payment:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary'
+      seats:
+        type: integer
+      showtime:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime'
+      showtime_id:
+        type: string
+      sold_via:
+        type: string
+      status:
+        type: string
+      status_reason:
+        type: string
+      total_amount:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOverviewResponse:
+    properties:
+      alerts:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminAlertsResponse'
+      last_7_days:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse'
+        type: array
+      today:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse'
+      upcoming_showtimes:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse'
+        type: array
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminStatsResponse:
+    properties:
+      bookings:
+        type: integer
+      movies:
+        type: integer
+      showtimes:
+        type: integer
+      users:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AuditLogResponse:
+    properties:
+      action:
+        type: string
+      actor_id:
+        type: string
+      actor_role:
+        type: string
+      after_json:
+        additionalProperties: {}
+        type: object
+      before_json:
+        additionalProperties: {}
+        type: object
+      booking_id:
+        type: string
+      created_at:
+        type: string
+      error_message:
+        type: string
+      id:
+        type: string
+      ip:
+        type: string
+      outcome:
+        type: string
+      resource_id:
+        type: string
+      resource_type:
+        type: string
+      user_agent:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BoxOfficeDayResponse:
     properties:
       count:
         type: integer
@@ -10,7 +113,18 @@ definitions:
       total:
         type: integer
     type: object
-  dto.ChangePasswordRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BulkSeatUpdateRequest:
+    properties:
+      changes:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatChange'
+        maxItems: 50
+        minItems: 1
+        type: array
+    required:
+    - changes
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ChangePasswordRequest:
     properties:
       current_password:
         type: string
@@ -23,7 +137,19 @@ definitions:
     - current_password
     - new_password
     type: object
-  dto.CounterSellRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CloneHallRequest:
+    properties:
+      copy_prices:
+        type: boolean
+      name:
+        example: Phong 3
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CounterSellRequest:
     properties:
       customer_name:
         maxLength: 255
@@ -42,7 +168,7 @@ definitions:
     - seat_ids
     - show_id
     type: object
-  dto.CreateUserRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest:
     properties:
       email:
         example: staff1@cinema.local
@@ -68,7 +194,7 @@ definitions:
     - password
     - role
     type: object
-  dto.DailyAggregateResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse:
     properties:
       breakdown:
         additionalProperties: {}
@@ -88,11 +214,11 @@ definitions:
       updated_at:
         type: string
     type: object
-  dto.DailyReportResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyReportResponse:
     properties:
       days:
         items:
-          $ref: '#/definitions/dto.DailyAggregateResponse'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyAggregateResponse'
         type: array
       from:
         example: "2026-09-08"
@@ -105,7 +231,26 @@ definitions:
       total_revenue:
         type: integer
     type: object
-  dto.ForgotPasswordRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DeleteAccountRequest:
+    properties:
+      password:
+        example: secret123
+        type: string
+    required:
+    - password
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.FailedJobAlert:
+    properties:
+      error_message:
+        type: string
+      id:
+        type: string
+      job_name:
+        type: string
+      started_at:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ForgotPasswordRequest:
     properties:
       email:
         example: admin@cinema.local
@@ -114,15 +259,33 @@ definitions:
     required:
     - email
     type: object
-  dto.HallPriceResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GivenUpEmailAlert:
+    properties:
+      attempts:
+        type: integer
+      booking_id:
+        type: string
+      created_at:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse:
     properties:
       price:
         type: integer
       seat_type:
         type: string
     type: object
-  dto.HallRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest:
     properties:
+      aisle_after_cols:
+        description: Column numbers after which there is a vertical aisle, display
+          only.
+        example:
+        - 4
+        items:
+          type: integer
+        maxItems: 49
+        type: array
       gaps:
         example:
         - '["D5"'
@@ -152,6 +315,12 @@ definitions:
         maximum: 50
         minimum: 1
         type: integer
+      screen_position:
+        enum:
+        - front
+        - back
+        example: front
+        type: string
       seat_types:
         additionalProperties:
           items:
@@ -174,38 +343,56 @@ definitions:
           type: string
         maxItems: 100
         type: array
+      template:
+        enum:
+        - small
+        - medium
+        - large
+        example: medium
+        type: string
     required:
     - name
     - prices
-    - rows
-    - seats_per_row
     type: object
-  dto.HallResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse:
     properties:
+      active:
+        type: boolean
+      aisle_after_cols:
+        items:
+          type: integer
+        type: array
       created_at:
         type: string
-      gaps:
-        items:
-          type: string
-        type: array
       id:
         type: string
       name:
         type: string
       rows:
         type: integer
-      seat_types:
-        additionalProperties:
-          items:
-            type: string
-          type: array
-        type: object
+      screen_position:
+        type: string
       seats_per_row:
         type: integer
       updated_at:
         type: string
     type: object
-  dto.HeldSeat:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallTemplateResponse:
+    properties:
+      name:
+        type: string
+      rows:
+        type: integer
+      seat_count:
+        type: integer
+      seat_count_by_type:
+        additionalProperties:
+          type: integer
+        type: object
+      seats_per_row:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HeldSeat:
     properties:
       col_number:
         type: integer
@@ -220,7 +407,7 @@ definitions:
       showtime_seat_id:
         type: string
     type: object
-  dto.HoldRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldRequest:
     properties:
       idempotency_key:
         maxLength: 128
@@ -237,7 +424,7 @@ definitions:
     - seat_ids
     - show_id
     type: object
-  dto.HoldResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldResponse:
     properties:
       booking_id:
         type: string
@@ -247,14 +434,14 @@ definitions:
         type: string
       seats:
         items:
-          $ref: '#/definitions/dto.HeldSeat'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HeldSeat'
         type: array
       showtime_id:
         type: string
       total_amount:
         type: integer
     type: object
-  dto.LoginRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest:
     properties:
       email:
         example: admin@cinema.local
@@ -267,7 +454,7 @@ definitions:
     - email
     - password
     type: object
-  dto.LoginResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse:
     properties:
       access_token:
         type: string
@@ -280,16 +467,16 @@ definitions:
         example: Bearer
         type: string
       user:
-        $ref: '#/definitions/dto.UserResponse'
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
     type: object
-  dto.LogoutRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LogoutRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  dto.MovieRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest:
     properties:
       age_rating:
         description: AgeRating is Vietnamese film classification; empty defaults to
@@ -352,7 +539,7 @@ definitions:
     - status
     - title
     type: object
-  dto.MovieResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse:
     properties:
       age_rating:
         type: string
@@ -384,7 +571,18 @@ definitions:
       updated_at:
         type: string
     type: object
-  dto.OrderDetailResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderCustomer:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      phone:
+        type: string
+      user_id:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse:
     properties:
       created_at:
         type: string
@@ -395,9 +593,9 @@ definitions:
       paid_at:
         type: string
       payment:
-        $ref: '#/definitions/dto.PaymentSummary'
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary'
       showtime:
-        $ref: '#/definitions/dto.OrderShowtime'
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime'
       showtime_id:
         type: string
       status:
@@ -406,12 +604,12 @@ definitions:
         type: string
       tickets:
         items:
-          $ref: '#/definitions/dto.TicketResponse'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse'
         type: array
       total_amount:
         type: integer
     type: object
-  dto.OrderShowtime:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime:
     properties:
       age_rating:
         type: string
@@ -432,7 +630,7 @@ definitions:
       started:
         type: boolean
     type: object
-  dto.OrderStatusResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse:
     properties:
       created_at:
         type: string
@@ -443,9 +641,9 @@ definitions:
       paid_at:
         type: string
       payment:
-        $ref: '#/definitions/dto.PaymentSummary'
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary'
       showtime:
-        $ref: '#/definitions/dto.OrderShowtime'
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime'
       showtime_id:
         type: string
       status:
@@ -455,14 +653,14 @@ definitions:
       total_amount:
         type: integer
     type: object
-  dto.PayRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayRequest:
     properties:
       provider:
         example: mock
         maxLength: 32
         type: string
     type: object
-  dto.PayResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayResponse:
     properties:
       expires_at:
         type: string
@@ -475,7 +673,7 @@ definitions:
       txn_ref:
         type: string
     type: object
-  dto.PaymentProviderResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentProviderResponse:
     properties:
       default:
         type: boolean
@@ -485,7 +683,7 @@ definitions:
         example: mock
         type: string
     type: object
-  dto.PaymentReturnResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentReturnResponse:
     properties:
       booking_id:
         type: string
@@ -498,7 +696,7 @@ definitions:
       payment_status:
         type: string
     type: object
-  dto.PaymentSummary:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary:
     properties:
       amount:
         type: integer
@@ -519,7 +717,7 @@ definitions:
       txn_ref:
         type: string
     type: object
-  dto.PriceRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest:
     properties:
       prices:
         additionalProperties:
@@ -532,14 +730,14 @@ definitions:
     required:
     - prices
     type: object
-  dto.RedeemRequestBody:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemRequestBody:
     properties:
       showtime_id:
         type: string
     required:
     - showtime_id
     type: object
-  dto.RedeemResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemResponse:
     properties:
       age_rating:
         type: string
@@ -564,14 +762,14 @@ definitions:
       ticket_id:
         type: string
     type: object
-  dto.RefreshRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest:
     properties:
       refresh_token:
         type: string
     required:
     - refresh_token
     type: object
-  dto.RegisterRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest:
     properties:
       email:
         example: admin@cinema.local
@@ -592,7 +790,7 @@ definitions:
     - full_name
     - password
     type: object
-  dto.ResetPasswordRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ResetPasswordRequest:
     properties:
       new_password:
         example: newsecret123
@@ -605,10 +803,30 @@ definitions:
     - new_password
     - token
     type: object
-  dto.SeatMapResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatChange:
+    properties:
+      is_gap:
+        type: boolean
+      seat_type:
+        enum:
+        - standard
+        - vip
+        - couple
+        - recliner
+        type: string
+      selector:
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatSelector'
+    required:
+    - selector
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapResponse:
     properties:
       age_rating:
         type: string
+      aisle_after_cols:
+        items:
+          type: integer
+        type: array
       end_at:
         type: string
       hall_id:
@@ -624,9 +842,11 @@ definitions:
           format: int64
           type: integer
         type: object
+      screen_position:
+        type: string
       seats:
         items:
-          $ref: '#/definitions/dto.SeatMapSeat'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapSeat'
         type: array
       showtime_id:
         type: string
@@ -635,7 +855,7 @@ definitions:
       status:
         type: string
     type: object
-  dto.SeatMapSeat:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapSeat:
     properties:
       col_number:
         type: integer
@@ -658,7 +878,7 @@ definitions:
       status:
         type: string
     type: object
-  dto.SeatResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse:
     properties:
       col_number:
         type: integer
@@ -677,7 +897,38 @@ definitions:
       seat_type:
         type: string
     type: object
-  dto.SeatUpdateRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatSelector:
+    properties:
+      cols:
+        example:
+        - 1
+        items:
+          type: integer
+        maxItems: 50
+        type: array
+      labels:
+        example:
+        - '["A1"'
+        - '"A2"]'
+        items:
+          type: string
+        maxItems: 500
+        type: array
+      range:
+        description: Inclusive rectangle, e.g. "A1:C4".
+        example: A1:C4
+        maxLength: 16
+        type: string
+      rows:
+        example:
+        - '["A"'
+        - '"B"]'
+        items:
+          type: string
+        maxItems: 50
+        type: array
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatUpdateRequest:
     properties:
       is_gap:
         description: Omitted keeps the current value.
@@ -690,7 +941,7 @@ definitions:
         - recliner
         type: string
     type: object
-  dto.ShowtimeListItem:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem:
     properties:
       age_rating:
         type: string
@@ -713,7 +964,7 @@ definitions:
       status:
         type: string
     type: object
-  dto.ShowtimeRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeRequest:
     properties:
       hall_id:
         type: string
@@ -734,7 +985,7 @@ definitions:
     - movie_id
     - start_at
     type: object
-  dto.ShowtimeResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse:
     properties:
       age_rating:
         type: string
@@ -759,17 +1010,33 @@ definitions:
       updated_at:
         type: string
     type: object
-  dto.StaffBoardResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffBoardResponse:
     properties:
       date:
         example: "2026-09-14"
         type: string
       showtimes:
         items:
-          $ref: '#/definitions/dto.StaffShowtimeResponse'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse'
         type: array
     type: object
-  dto.StaffShowtimeResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffOverviewResponse:
+    properties:
+      awaiting_checkin:
+        type: integer
+      counter_sales_count:
+        type: integer
+      counter_sales_total:
+        type: integer
+      date:
+        example: "2026-09-14"
+        type: string
+      showtimes:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse'
+        type: array
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffShowtimeResponse:
     properties:
       available:
         type: integer
@@ -794,7 +1061,7 @@ definitions:
       status:
         type: string
     type: object
-  dto.StaffTicketResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffTicketResponse:
     properties:
       booking_id:
         type: string
@@ -809,7 +1076,20 @@ definitions:
       updated_at:
         type: string
     type: object
-  dto.TicketResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StuckRefundAlert:
+    properties:
+      amount:
+        type: integer
+      attempts:
+        type: integer
+      booking_id:
+        type: string
+      last_error:
+        type: string
+      payment_id:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse:
     properties:
       code:
         type: string
@@ -826,7 +1106,7 @@ definitions:
       status:
         type: string
     type: object
-  dto.TokenResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse:
     properties:
       access_token:
         type: string
@@ -839,7 +1119,26 @@ definitions:
         example: Bearer
         type: string
     type: object
-  dto.UpdateProfileRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest:
+    properties:
+      active:
+        type: boolean
+      aisle_after_cols:
+        items:
+          type: integer
+        maxItems: 49
+        type: array
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      screen_position:
+        enum:
+        - front
+        - back
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateProfileRequest:
     properties:
       full_name:
         example: Nguyen Van A
@@ -853,7 +1152,7 @@ definitions:
     required:
     - full_name
     type: object
-  dto.UpdateUserRequest:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateUserRequest:
     properties:
       active:
         type: boolean
@@ -865,7 +1164,7 @@ definitions:
         example: staff
         type: string
     type: object
-  dto.UploadResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UploadResponse:
     properties:
       content_type:
         type: string
@@ -874,7 +1173,7 @@ definitions:
       url:
         type: string
     type: object
-  dto.UserResponse:
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse:
     properties:
       active:
         type: boolean
@@ -893,19 +1192,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  handlers.HealthStatus:
-    properties:
-      database:
-        example: up
-        type: string
-      service:
-        example: BackEnd-CP
-        type: string
-      status:
-        example: ok
-        type: string
-    type: object
-  response.Body:
+  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body:
     properties:
       code:
         example: 0
@@ -919,7 +1206,7 @@ definitions:
         example: success
         type: string
     type: object
-  response.Meta:
+  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta:
     properties:
       page:
         example: 1
@@ -934,11 +1221,23 @@ definitions:
         example: 5
         type: integer
     type: object
-  response.Paged:
+  github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged:
     properties:
       items: {}
       meta:
-        $ref: '#/definitions/response.Meta'
+        $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta'
+    type: object
+  internal_handlers.HealthStatus:
+    properties:
+      database:
+        example: up
+        type: string
+      service:
+        example: BackEnd-CP
+        type: string
+      status:
+        example: ok
+        type: string
     type: object
 info:
   contact: {}
@@ -946,6 +1245,85 @@ info:
   title: BackEnd-CP API
   version: "1.0"
 paths:
+  /admin/audit-logs:
+    get:
+      description: |-
+        Every audited event, newest first. booking_id ties together the
+        whole lifecycle of one order (hold/pay/webhook/refund/redeem)
+        even though they touch different resource_type/resource_id.
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Exact action, e.g. orders.pay
+        in: query
+        name: action
+        type: string
+      - description: e.g. booking, payment, ticket, movie, hall
+        in: query
+        name: resource_type
+        type: string
+      - description: Exact resource id
+        in: query
+        name: resource_id
+        type: string
+      - description: Every event of one order's lifecycle
+        in: query
+        name: booking_id
+        type: string
+      - description: Who did it
+        in: query
+        name: actor_id
+        type: string
+      - description: success | failure
+        in: query
+        name: outcome
+        type: string
+      - description: YYYY-MM-DD, inclusive
+        in: query
+        name: from
+        type: string
+      - description: YYYY-MM-DD, inclusive
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AuditLogResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List audit log entries (admin)
+      tags:
+      - admin-audit
   /admin/batch/jobs:
     get:
       parameters:
@@ -968,19 +1346,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/response.Paged'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Batch job run history
       tags:
       - batch
@@ -1001,26 +1379,51 @@ paths:
         "202":
           description: Accepted
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Start a job now, in the background
       tags:
       - batch
+  /admin/hall-templates:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallTemplateResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Preview the built-in hall templates
+      tags:
+      - halls
   /admin/halls:
     get:
       parameters:
@@ -1045,22 +1448,22 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   allOf:
-                  - $ref: '#/definitions/response.Paged'
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
                   - properties:
                       items:
                         items:
-                          $ref: '#/definitions/dto.HallResponse'
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse'
                         type: array
                     type: object
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: List halls (paginated)
@@ -1075,7 +1478,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.HallRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest'
       produces:
       - application/json
       responses:
@@ -1083,29 +1486,61 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.HallResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Create a hall and generate its seat grid
       tags:
       - halls
   /admin/halls/{id}:
+    delete:
+      description: Refused (409) while it has a showtime not yet ended.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Delete a hall (soft delete)
+      tags:
+      - halls
     get:
       parameters:
       - description: Hall ID
@@ -1120,22 +1555,171 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.HallResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get hall details
+      tags:
+      - halls
+    put:
+      consumes:
+      - application/json
+      description: Deactivating is refused (409) while an open showtime is still to
+        come; once inactive the hall takes no new showtimes.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Rename a hall, change its screen/aisle display, or (de)activate it
+      tags:
+      - halls
+  /admin/halls/{id}/clone:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Hall ID to clone
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New hall name
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CloneHallRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Clone a hall's current seat grid under a new name
+      tags:
+      - halls
+  /admin/halls/{id}/layout:
+    put:
+      consumes:
+      - application/json
+      description: Only while the hall has never had a single booking (409 otherwise).
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New layout (name/prices are ignored here)
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Regenerate a hall's whole seat grid
       tags:
       - halls
   /admin/halls/{id}/prices:
@@ -1153,21 +1737,21 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.HallPriceResponse'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse'
                   type: array
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get the prices of a hall
@@ -1187,7 +1771,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.PriceRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest'
       produces:
       - application/json
       responses:
@@ -1195,25 +1779,25 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.HallPriceResponse'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse'
                   type: array
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Set prices for all seat types of a hall
@@ -1234,24 +1818,74 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.SeatResponse'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
                   type: array
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get the seat grid of a hall
+      tags:
+      - halls
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Changes, one selector each
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BulkSeatUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Change many seats at once (labels, rows, columns or a range)
       tags:
       - halls
   /admin/halls/{id}/seats/{seatId}:
@@ -1274,7 +1908,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.SeatUpdateRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatUpdateRequest'
       produces:
       - application/json
       responses:
@@ -1282,32 +1916,162 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.SeatResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Change a seat's type or gap flag
       tags:
       - halls
+  /admin/orders:
+    get:
+      description: 'The operator counterpart of GET /orders: not scoped to the caller.
+        Online and counter sales alike, with the buyer''s identity, the showtime and
+        the payment attempt the order carries. It reports what the database holds
+        and does not reconcile with the provider — use GET /staff/orders/{id} for
+        that.'
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Booking id, customer email/name/phone, or movie title
+        in: query
+        name: search
+        type: string
+      - description: pending | confirmed | expired | refunded
+        in: query
+        name: status
+        type: string
+      - description: pending | paid | failed | refund_pending | refunded (matches
+          only an order that already carries a payment)
+        in: query
+        name: payment_status
+        type: string
+      - description: online | counter
+        in: query
+        name: sold_via
+        type: string
+      - description: Showtime ID
+        in: query
+        name: showtime_id
+        type: string
+      - description: Movie ID
+        in: query
+        name: movie_id
+        type: string
+      - description: Customer ID
+        in: query
+        name: user_id
+        type: string
+      - description: Single day of created_at (YYYY-MM-DD), wins over from/to
+        in: query
+        name: date
+        type: string
+      - description: created_at range start (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: created_at range end, inclusive (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - description: created_at | paid_at | total_amount | start_at
+        in: query
+        name: sort
+        type: string
+      - description: asc or desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOrderListItem'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List every order for operators, paged and filterable
+      tags:
+      - orders
+  /admin/overview:
+    get:
+      description: Today's revenue/occupancy is computed live, not waiting on the
+        closeDay job. Alerts surface stuck refunds, recent failed batch jobs and confirmed
+        orders whose ticket email exhausted every retry.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOverviewResponse'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: 'Admin dashboard: today (live), the last 7 days, upcoming showtimes
+        and operational alerts, in one call'
+      tags:
+      - reports
   /admin/reports/daily:
     get:
       description: 'Reads daily_aggregates written by closeDay: confirmed bookings
@@ -1328,25 +2092,111 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.DailyReportResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DailyReportResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Revenue per closed day (admin)
       tags:
       - reports
   /admin/showtimes:
+    get:
+      description: 'Shows everything the public picker hides: closed showtimes, draft
+        or ended movies, past dates and halls without a full price set.'
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Match movie title or hall name
+        in: query
+        name: search
+        type: string
+      - description: Movie ID
+        in: query
+        name: movie_id
+        type: string
+      - description: Hall ID
+        in: query
+        name: hall_id
+        type: string
+      - description: open or closed
+        in: query
+        name: status
+        type: string
+      - description: Single day (YYYY-MM-DD), wins over from/to
+        in: query
+        name: date
+        type: string
+      - description: Range start (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: Range end, inclusive (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - description: start_at or created_at
+        in: query
+        name: sort
+        type: string
+      - description: asc or desc
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List showtimes for operators, paged and filterable
+      tags:
+      - showtimes
     post:
       consumes:
       - application/json
@@ -1356,7 +2206,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.ShowtimeRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeRequest'
       produces:
       - application/json
       responses:
@@ -1364,27 +2214,27 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.ShowtimeResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Schedule a showtime in a hall
@@ -1404,22 +2254,60 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Delete a showtime
+      tags:
+      - showtimes
+    get:
+      description: Unlike the booking endpoints this does not require the showtime
+        to be on sale.
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get one showtime for operators
       tags:
       - showtimes
     put:
@@ -1436,7 +2324,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.ShowtimeRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeRequest'
       produces:
       - application/json
       responses:
@@ -1444,32 +2332,63 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.ShowtimeResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Reschedule a showtime
       tags:
       - showtimes
+  /admin/stats:
+    get:
+      description: 'Four totals for the dashboard tiles: movies, showtimes, bookings
+        and users. Soft-deleted rows are excluded and bookings counts confirmed orders
+        only, so pending holds and expired bookings never inflate the tile. Locked
+        accounts are still counted. Staff and customers get 403.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminStatsResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Admin dashboard headline counts
+      tags:
+      - reports
   /admin/uploads/poster:
     post:
       consumes:
@@ -1489,23 +2408,23 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.UploadResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UploadResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Upload a movie poster (admin/staff)
@@ -1541,22 +2460,22 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   allOf:
-                  - $ref: '#/definitions/response.Paged'
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
                   - properties:
                       items:
                         items:
-                          $ref: '#/definitions/dto.UserResponse'
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
                         type: array
                     type: object
               type: object
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: List accounts (admin)
@@ -1571,7 +2490,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.CreateUserRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest'
       produces:
       - application/json
       responses:
@@ -1579,23 +2498,23 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.UserResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Create a staff or admin account (admin)
@@ -1620,7 +2539,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.UpdateUserRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateUserRequest'
       produces:
       - application/json
       responses:
@@ -1628,23 +2547,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.UserResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
               type: object
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Lock/unlock an account and/or change its role (admin)
@@ -1661,18 +2580,18 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.ForgotPasswordRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ForgotPasswordRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Request a password reset email
       tags:
       - auth
@@ -1686,7 +2605,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.LoginRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest'
       produces:
       - application/json
       responses:
@@ -1694,27 +2613,27 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.LoginResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: account locked
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "429":
           description: too many failed attempts
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Login
       tags:
       - auth
@@ -1728,22 +2647,22 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.LogoutRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LogoutRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: invalid or expired token
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: 'Sign out: revokes the whole session family'
       tags:
       - auth
@@ -1757,7 +2676,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.RefreshRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshRequest'
       produces:
       - application/json
       responses:
@@ -1765,19 +2684,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.TokenResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Refresh access token
       tags:
       - auth
@@ -1791,7 +2710,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.RegisterRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -1799,19 +2718,19 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.UserResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Register account
       tags:
       - auth
@@ -1825,18 +2744,18 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.ResetPasswordRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ResetPasswordRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "400":
           description: invalid, expired, or already used token
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Redeem a password reset token
       tags:
       - auth
@@ -1852,7 +2771,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.LoginRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest'
       produces:
       - application/json
       responses:
@@ -1860,23 +2779,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.LoginResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "428":
           description: terms not required or already accepted
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Accept the current terms and sign in
       tags:
       - auth
@@ -1901,7 +2820,7 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: SSE stream of seat changes for a showtime
       tags:
       - events
@@ -1922,7 +2841,7 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   additionalProperties: true
@@ -1931,11 +2850,11 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Create a short-lived realtime token for one showtime
@@ -1951,15 +2870,15 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/handlers.HealthStatus'
+                  $ref: '#/definitions/internal_handlers.HealthStatus'
               type: object
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Health check
       tags:
       - health
@@ -1972,11 +2891,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Infrastructure probe
       tags:
       - health
@@ -2008,26 +2927,26 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   allOf:
-                  - $ref: '#/definitions/response.Paged'
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
                   - properties:
                       items:
                         items:
-                          $ref: '#/definitions/dto.MovieResponse'
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
                         type: array
                     type: object
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: List movies (paginated)
@@ -2042,7 +2961,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.MovieRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest'
       produces:
       - application/json
       responses:
@@ -2050,19 +2969,19 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.MovieResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Create a new movie
@@ -2082,15 +3001,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Delete a movie
@@ -2110,19 +3029,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.MovieResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get movie details
@@ -2142,7 +3061,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.MovieRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest'
       produces:
       - application/json
       responses:
@@ -2150,23 +3069,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.MovieResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Update a movie
@@ -2190,21 +3109,21 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.ShowtimeListItem'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem'
                   type: array
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: List showtimes of a movie for a date
@@ -2230,22 +3149,22 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   allOf:
-                  - $ref: '#/definitions/response.Paged'
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
                   - properties:
                       items:
                         items:
-                          $ref: '#/definitions/dto.OrderStatusResponse'
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse'
                         type: array
                     type: object
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: List the current user's orders
@@ -2266,23 +3185,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.OrderDetailResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get the e-ticket of one order (reconciled, with ticket codes)
@@ -2303,23 +3222,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.OrderStatusResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Release an unpaid hold now
@@ -2342,23 +3261,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.OrderDetailResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Settle a paid booking
@@ -2382,7 +3301,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.PayRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayRequest'
       produces:
       - application/json
       responses:
@@ -2390,27 +3309,27 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.PayResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Start payment for a booking with a chosen provider
@@ -2431,23 +3350,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.OrderStatusResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get booking status (reconciles with the provider)
@@ -2465,7 +3384,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.HoldRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldRequest'
       produces:
       - application/json
       responses:
@@ -2473,27 +3392,27 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.HoldResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HoldResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Hold seats for a showtime
@@ -2536,21 +3455,21 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.PaymentReturnResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentReturnResponse'
               type: object
         "303":
           description: See Other
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Browser return from a provider checkout
       tags:
       - payments
@@ -2563,17 +3482,17 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.PaymentProviderResponse'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentProviderResponse'
                   type: array
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: List the payment providers a customer can choose
@@ -2594,19 +3513,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.SeatMapResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatMapResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Get the seat grid of a showtime with prices
@@ -2628,21 +3547,21 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.ShowtimeListItem'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem'
                   type: array
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Showtimes on sale for a date, all movies
@@ -2662,18 +3581,146 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.BoxOfficeDayResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BoxOfficeDayResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Counter sales of a day (close-day report)
+      tags:
+      - staff
+  /staff/customers:
+    get:
+      description: Only role=customer accounts ever show here; staff/admin accounts
+        stay only in /admin/users.
+      parameters:
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Email, name or phone
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+                        type: array
+                    type: object
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Search customer accounts (support lookup)
+      tags:
+      - staff
+  /staff/customers/{id}:
+    get:
+      description: 404 if the id isn't a customer account — this route never confirms
+        a staff/admin account exists.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: A customer's profile (support lookup)
+      tags:
+      - staff
+  /staff/customers/{id}/orders:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderStatusResponse'
+                        type: array
+                    type: object
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: A customer's booking history (support lookup)
       tags:
       - staff
   /staff/dashboard:
@@ -2690,19 +3737,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.StaffBoardResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffBoardResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: 'Staff board: showtimes of a day with seats sold / held / checked in'
@@ -2720,7 +3767,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.CounterSellRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CounterSellRequest'
       produces:
       - application/json
       responses:
@@ -2728,26 +3775,92 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.OrderDetailResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: seat already taken
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Walk-in sale at the counter
+      tags:
+      - staff
+  /staff/orders/{id}:
+    get:
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderDetailResponse'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Any order's e-ticket detail, by id (support lookup)
+      tags:
+      - staff
+  /staff/overview:
+    get:
+      parameters:
+      - description: Local date YYYY-MM-DD (default today)
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffOverviewResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: 'Staff dashboard: today''s showtime board + counter sales + tickets
+        awaiting check-in, in one call'
       tags:
       - staff
   /staff/showtimes/{id}/tickets:
@@ -2769,25 +3882,25 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/dto.StaffTicketResponse'
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffTicketResponse'
                   type: array
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: 'Tickets of a showtime (status=issued: still waiting at the gate)'
@@ -2811,7 +3924,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.RedeemRequestBody'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemRequestBody'
       produces:
       - application/json
       responses:
@@ -2819,19 +3932,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.RedeemResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "403":
           description: Forbidden
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Check a ticket in at the gate (staff)
@@ -2839,19 +3952,33 @@ paths:
       - tickets
   /users/me:
     delete:
-      description: 409 while a confirmed ticket is still to come; then the account
-        is scrubbed and sessions revoked.
+      consumes:
+      - application/json
+      description: Requires the current password. 401 on a wrong password; 409 while
+        a confirmed ticket is still to come; then the account is scrubbed and sessions
+        revoked.
+      parameters:
+      - description: Current password
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DeleteAccountRequest'
       produces:
       - application/json
       responses:
         "204":
           description: No Content
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "409":
           description: account still holds confirmed tickets
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Delete own account (right to erasure)
@@ -2865,19 +3992,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.UserResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Current logged-in account info
@@ -2892,7 +4019,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.UpdateProfileRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateProfileRequest'
       produces:
       - application/json
       responses:
@@ -2900,19 +4027,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.UserResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UserResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Update own full name and phone
@@ -2930,7 +4057,7 @@ paths:
         name: payload
         required: true
         schema:
-          $ref: '#/definitions/dto.ChangePasswordRequest'
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ChangePasswordRequest'
       produces:
       - application/json
       responses:
@@ -2938,19 +4065,19 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/response.Body'
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
             - properties:
                 data:
-                  $ref: '#/definitions/dto.TokenResponse'
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TokenResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
         "401":
           description: wrong current password
           schema:
-            $ref: '#/definitions/response.Body'
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       security:
       - BearerAuth: []
       summary: Change the current password

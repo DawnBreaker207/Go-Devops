@@ -3,12 +3,32 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+var showtimeSortColumns = map[string]string{
+	"start_at":   "showtimes.start_at",
+	"created_at": "showtimes.created_at",
+}
+
+func showtimeOrder(sort, order string) string {
+	column := showtimeSortColumns[sort]
+	if column == "" {
+		column = "showtimes.start_at"
+	}
+	direction := "DESC"
+	if strings.EqualFold(order, "asc") {
+		direction = "ASC"
+	}
+	return column + " " + direction
+}
 
 type ShowtimeRow struct {
 	models.Showtime
@@ -192,6 +212,59 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 		Order("showtimes.start_at").
 		Scan(&rows).Error
 	return rows, err
+}
+
+// AdminList is the operator counterpart of PickingList: no movie-status filter, no
+// start_at >= now, no complete-price-set requirement, so closed and past showtimes stay
+// visible. The caller resolves from/to into absolute instants so the server timezone
+// stays a service concern; a zero time means that bound is open.
+func (r *ShowtimeRepository) AdminList(ctx context.Context, query dto.ShowtimeAdminListQuery, from, to time.Time) ([]ShowtimeRow, int64, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&models.Showtime{}).
+		Joins("JOIN halls ON halls.id = showtimes.hall_id").
+		Joins("JOIN movies ON movies.id = showtimes.movie_id").
+		Where("showtimes.deleted_at IS NULL")
+
+	if query.MovieID != "" {
+		tx = tx.Where("showtimes.movie_id = ?", query.MovieID)
+	}
+	if query.HallID != "" {
+		tx = tx.Where("showtimes.hall_id = ?", query.HallID)
+	}
+	if query.Status != "" {
+		tx = tx.Where("showtimes.status = ?", query.Status)
+	}
+	if !from.IsZero() {
+		tx = tx.Where("showtimes.start_at >= ?", from)
+	}
+	if !to.IsZero() {
+		tx = tx.Where("showtimes.start_at < ?", to)
+	}
+	if search := strings.TrimSpace(query.Search); search != "" {
+		pattern := "%" + strings.ToLower(search) + "%"
+		tx = tx.Where("LOWER(movies.title) LIKE ? OR LOWER(halls.name) LIKE ?", pattern, pattern)
+	}
+
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count showtimes: %w", err)
+	}
+
+	rows := make([]ShowtimeRow, 0, query.PageSize)
+	if err := tx.
+		Select(`showtimes.id, showtimes.movie_id, showtimes.hall_id, showtimes.start_at,
+			showtimes.end_at, showtimes.status, showtimes.created_at, showtimes.updated_at,
+			halls.name AS hall_name, movies.title AS movie_title, movies.status AS movie_status,
+			movies.age_rating AS age_rating`).
+		Order(showtimeOrder(query.Sort, query.Order)).
+		Order("showtimes.id").
+		Limit(query.PageSize).
+		Offset(query.Offset()).
+		Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list showtimes: %w", err)
+	}
+
+	return rows, total, nil
 }
 
 func (r *ShowtimeRepository) SeatMap(ctx context.Context, showtimeID string) ([]SeatMapRow, error) {

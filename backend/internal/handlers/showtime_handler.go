@@ -138,6 +138,67 @@ func (h *ShowtimeHandler) List(c *gin.Context) {
 	response.OK(c, items)
 }
 
+// AdminList godoc
+//
+//	@Summary		List showtimes for operators, paged and filterable
+//	@Description	Shows everything the public picker hides: closed showtimes, draft or ended movies, past dates and halls without a full price set.
+//	@Tags			showtimes
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			page		query		int		false	"Page"	default(1)
+//	@Param			page_size	query		int		false	"Page size"	default(10)
+//	@Param			search		query		string	false	"Match movie title or hall name"
+//	@Param			movie_id	query		string	false	"Movie ID"
+//	@Param			hall_id		query		string	false	"Hall ID"
+//	@Param			status		query		string	false	"open or closed"
+//	@Param			date		query		string	false	"Single day (YYYY-MM-DD), wins over from/to"
+//	@Param			from		query		string	false	"Range start (YYYY-MM-DD)"
+//	@Param			to			query		string	false	"Range end, inclusive (YYYY-MM-DD)"
+//	@Param			sort		query		string	false	"start_at or created_at"
+//	@Param			order		query		string	false	"asc or desc"
+//	@Success		200			{object}	response.Body{data=response.Paged{items=[]dto.ShowtimeResponse}}
+//	@Failure		400			{object}	response.Body
+//	@Failure		401			{object}	response.Body
+//	@Failure		403			{object}	response.Body
+//	@Router			/admin/showtimes [get]
+func (h *ShowtimeHandler) AdminList(c *gin.Context) {
+	var query dto.ShowtimeAdminListQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Error(c, err)
+		return
+	}
+	query.Normalize()
+
+	items, total, err := h.showtimeService.AdminList(c.Request.Context(), query)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.List(c, items, query.Page, query.PageSize, total)
+}
+
+// Detail godoc
+//
+//	@Summary		Get one showtime for operators
+//	@Description	Unlike the booking endpoints this does not require the showtime to be on sale.
+//	@Tags			showtimes
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Showtime ID"
+//	@Success		200	{object}	response.Body{data=dto.ShowtimeResponse}
+//	@Failure		401	{object}	response.Body
+//	@Failure		403	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Router			/admin/showtimes/{id} [get]
+func (h *ShowtimeHandler) Detail(c *gin.Context) {
+	showtime, err := h.showtimeService.Detail(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, showtime)
+}
+
 // SeatMap godoc
 //
 //	@Summary		Get the seat grid of a showtime with prices

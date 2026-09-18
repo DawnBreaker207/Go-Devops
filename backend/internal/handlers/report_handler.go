@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/response"
 )
@@ -29,7 +30,10 @@ func NewReportHandler(reports service.ReportService) *ReportHandler {
 //	@Failure		403		{object}	response.Body
 //	@Router			/admin/reports/daily [get]
 func (h *ReportHandler) Daily(c *gin.Context) {
-	report, err := h.reports.DailyReport(c.Request.Context(), c.Query("from"), c.Query("to"))
+	// Typed explicitly so this file imports internal/dto: swag resolves the `dto.` prefix
+	// in the annotations from the file's own imports, and without it `make swag` aborts.
+	var report *dto.DailyReportResponse
+	report, err := h.reports.DailyReport(c.Request.Context(), c.Query("from"), c.Query("to")) //nolint:staticcheck // keeps the dto import load-bearing
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -49,6 +53,26 @@ func (h *ReportHandler) Daily(c *gin.Context) {
 //	@Router			/admin/overview [get]
 func (h *ReportHandler) Overview(c *gin.Context) {
 	res, err := h.reports.AdminOverview(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
+// Stats godoc
+//
+//	@Summary		Admin dashboard headline counts
+//	@Description	Four totals for the dashboard tiles: movies, showtimes, bookings and users. Soft-deleted rows are excluded and bookings counts confirmed orders only, so pending holds and expired bookings never inflate the tile. Locked accounts are still counted. Staff and customers get 403.
+//	@Tags			reports
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.Body{data=dto.AdminStatsResponse}
+//	@Failure		401	{object}	response.Body
+//	@Failure		403	{object}	response.Body
+//	@Router			/admin/stats [get]
+func (h *ReportHandler) Stats(c *gin.Context) {
+	res, err := h.reports.AdminStats(c.Request.Context())
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -215,3 +215,44 @@ func (h *BookingHandler) Redeem(c *gin.Context) {
 	}
 	response.OK(c, res)
 }
+
+// AdminList godoc
+//
+//	@Summary		List every order for operators, paged and filterable
+//	@Description	The operator counterpart of GET /orders: not scoped to the caller. Online and counter sales alike, with the buyer's identity, the showtime and the payment attempt the order carries. It reports what the database holds and does not reconcile with the provider — use GET /staff/orders/{id} for that.
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			page			query		int		false	"Page"			default(1)
+//	@Param			page_size		query		int		false	"Page size"		default(10)
+//	@Param			search			query		string	false	"Booking id, customer email/name/phone, or movie title"
+//	@Param			status			query		string	false	"pending | confirmed | expired | refunded"
+//	@Param			payment_status	query		string	false	"pending | paid | failed | refund_pending | refunded (matches only an order that already carries a payment)"
+//	@Param			sold_via		query		string	false	"online | counter"
+//	@Param			showtime_id		query		string	false	"Showtime ID"
+//	@Param			movie_id		query		string	false	"Movie ID"
+//	@Param			user_id			query		string	false	"Customer ID"
+//	@Param			date			query		string	false	"Single day of created_at (YYYY-MM-DD), wins over from/to"
+//	@Param			from			query		string	false	"created_at range start (YYYY-MM-DD)"
+//	@Param			to				query		string	false	"created_at range end, inclusive (YYYY-MM-DD)"
+//	@Param			sort			query		string	false	"created_at | paid_at | total_amount | start_at"
+//	@Param			order			query		string	false	"asc or desc"
+//	@Success		200				{object}	response.Body{data=response.Paged{items=[]dto.AdminOrderListItem}}
+//	@Failure		400				{object}	response.Body
+//	@Failure		401				{object}	response.Body
+//	@Failure		403				{object}	response.Body
+//	@Router			/admin/orders [get]
+func (h *BookingHandler) AdminList(c *gin.Context) {
+	var query dto.AdminOrderListQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Error(c, err)
+		return
+	}
+	query.Normalize()
+	items, total, err := h.bookingService.AdminList(c.Request.Context(), query)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.List(c, items, query.Page, query.PageSize, total)
+}

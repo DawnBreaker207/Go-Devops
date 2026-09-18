@@ -65,6 +65,7 @@ type BookingService interface {
 	AdminOrder(ctx context.Context, bookingID string) (*dto.OrderDetailResponse, error)
 	Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	List(ctx context.Context, userID string, q dto.PageQuery) ([]dto.OrderStatusResponse, int64, error)
+	AdminList(ctx context.Context, query dto.AdminOrderListQuery) ([]dto.AdminOrderListItem, int64, error)
 	Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error)
 	CounterSell(ctx context.Context, req dto.CounterSellRequest) (*dto.OrderDetailResponse, error)
 	SweepExpired(ctx context.Context, limit int) (SweepResult, error)
@@ -88,6 +89,9 @@ type BookingOptions struct {
 	// Check-in window around the showtime start; both zero means 30 and 20 minutes.
 	CheckinOpenBefore time.Duration
 	CheckinCloseAfter time.Duration
+	// Location resolves the date/from/to filters of the operator order list into
+	// local calendar days; nil means UTC.
+	Location *time.Location
 }
 
 type bookingService struct {
@@ -103,6 +107,7 @@ type bookingService struct {
 	lateCaptureWindow time.Duration
 	checkinOpenBefore time.Duration
 	checkinCloseAfter time.Duration
+	location          *time.Location
 }
 
 func NewBookingService(opts BookingOptions) BookingService {
@@ -111,6 +116,9 @@ func NewBookingService(opts BookingOptions) BookingService {
 	}
 	if opts.CheckinOpenBefore == 0 && opts.CheckinCloseAfter == 0 {
 		opts.CheckinOpenBefore, opts.CheckinCloseAfter = defaultCheckinOpenBefore, defaultCheckinCloseAfter
+	}
+	if opts.Location == nil {
+		opts.Location = time.UTC
 	}
 	return &bookingService{
 		db:                opts.DB,
@@ -125,6 +133,7 @@ func NewBookingService(opts BookingOptions) BookingService {
 		lateCaptureWindow: opts.LateCaptureWindow,
 		checkinOpenBefore: opts.CheckinOpenBefore,
 		checkinCloseAfter: opts.CheckinCloseAfter,
+		location:          opts.Location,
 	}
 }
 
@@ -570,6 +579,131 @@ func (s *bookingService) List(ctx context.Context, userID string, q dto.PageQuer
 		items = append(items, orderStatus(&bookings[i], nil, show))
 	}
 	return items, total, nil
+}
+
+// AdminList is the operator order list: every booking, filtered and paged, with
+// the buyer's identity the customer's own list has no use for. Like List it
+// reports what the database holds and does NOT reconcile with the provider —
+// one page would otherwise fire one provider call per row; the sweep and
+// GET /staff/orders/{id} are what keep a single order honest.
+func (s *bookingService) AdminList(ctx context.Context, query dto.AdminOrderListQuery) ([]dto.AdminOrderListItem, int64, error) {
+	from, to, err := s.orderListBounds(query)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, total, err := s.repo.AdminOrderList(ctx, query, from, to)
+	if err != nil {
+		return nil, 0, err
+	}
+	items := make([]dto.AdminOrderListItem, 0, len(rows))
+	for i := range rows {
+		items = append(items, adminOrderItem(&rows[i]))
+	}
+	return items, total, nil
+}
+
+// orderListBounds turns date / from / to into absolute instants in the configured
+// timezone. Date wins over the range. Both bounds are half-open: start <= x < end.
+// Same convention as showtimeService.listBounds.
+func (s *bookingService) orderListBounds(query dto.AdminOrderListQuery) (time.Time, time.Time, error) {
+	loc := s.location
+	if loc == nil {
+		loc = time.UTC
+	}
+	parse := func(value string) (time.Time, error) {
+		parsed, err := time.ParseInLocation(dto.DateLayout, value, loc)
+		if err != nil {
+			return time.Time{}, apperrors.Validation("date must follow format YYYY-MM-DD")
+		}
+		return parsed, nil
+	}
+
+	if query.Date != "" {
+		day, err := parse(query.Date)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		return day, day.AddDate(0, 0, 1), nil
+	}
+
+	var from, to time.Time
+	if query.From != "" {
+		parsed, err := parse(query.From)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		from = parsed
+	}
+	if query.To != "" {
+		parsed, err := parse(query.To)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		// Inclusive upper bound for the caller, half-open for the query.
+		to = parsed.AddDate(0, 0, 1)
+	}
+	if !from.IsZero() && !to.IsZero() && !to.After(from) {
+		return time.Time{}, time.Time{}, apperrors.Validation("to must not be earlier than from")
+	}
+	return from, to, nil
+}
+
+// adminOrderItem is the joined-row twin of orderStatus, which only takes a
+// *models.Booking and so can not be reused here.
+func adminOrderItem(row *repository.AdminOrderRow) dto.AdminOrderListItem {
+	now := time.Now()
+	item := dto.AdminOrderListItem{
+		OrderStatusResponse: dto.OrderStatusResponse{
+			ID:           row.ID,
+			ShowtimeID:   row.ShowtimeID,
+			Status:       row.Status,
+			StatusReason: row.StatusReason,
+			TotalAmount:  row.TotalAmount,
+			CreatedAt:    row.CreatedAt,
+			ExpiresAt:    row.ExpiresAt,
+			PaidAt:       row.PaidAt,
+			Showtime: &dto.OrderShowtime{
+				MovieID:    row.MovieID,
+				MovieTitle: row.MovieTitle,
+				AgeRating:  row.AgeRating,
+				HallID:     row.HallID,
+				HallName:   row.HallName,
+				StartAt:    row.StartAt,
+				EndAt:      row.EndAt,
+				Started:    !row.StartAt.After(now),
+				Ended:      row.EndAt.Before(now),
+			},
+		},
+		SoldVia: row.SoldVia,
+		Seats:   row.Seats,
+	}
+	// Empty until the booking carries an attempt's money (bookings.payment_id).
+	if row.PaymentID != "" {
+		item.Payment = &dto.PaymentSummary{
+			ID:           row.PaymentID,
+			Provider:     row.PaymentProvider,
+			TxnRef:       row.PaymentTxnRef,
+			Status:       row.PaymentStatus,
+			StatusReason: row.PaymentStatusReason,
+			Amount:       row.PaymentAmount,
+			PaidAmount:   row.PaymentPaidAmount,
+			PaidAt:       row.PaymentPaidAt,
+			RefundedAt:   row.PaymentRefundedAt,
+		}
+	}
+	switch {
+	case row.UserID != "":
+		item.Customer = &dto.OrderCustomer{
+			UserID:   row.UserID,
+			Email:    row.Email,
+			FullName: row.FullName,
+			Phone:    row.Phone,
+		}
+	case row.CustomerName != "" || row.CustomerPhone != "":
+		// Counter sale: no account, only what the till wrote down.
+		item.Customer = &dto.OrderCustomer{FullName: row.CustomerName, Phone: row.CustomerPhone}
+	}
+	return item
 }
 
 func (s *bookingService) showtimeOf(ctx context.Context, showtimeID string) (*repository.ShowtimeInfoRow, error) {

@@ -142,6 +142,7 @@ func run() error {
 		LateCaptureWindow: cfg.Payment.LateCaptureWindow,
 		CheckinOpenBefore: time.Duration(cfg.Checkin.OpenBeforeMinutes) * time.Minute,
 		CheckinCloseAfter: time.Duration(cfg.Checkin.CloseAfterMinutes) * time.Minute,
+		Location:          location,
 	}
 	if queueClient != nil {
 		bookingOpts.Publisher = queueClient
