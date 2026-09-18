@@ -15,6 +15,7 @@ import {
   useUpdateShowtime,
 } from './hooks/useShowtimes';
 import type { Showtime, ShowtimePayload, ShowtimeStatus } from '@/types';
+import { SHOWTIME_STATUSES } from '@/types';
 import { useListQuery } from '@/hooks/useListQuery';
 import { errorMessage } from '@/utils/error';
 import { API_DATE_FORMAT, DATE_FORMAT, formatDateTime, toCinemaTime } from '@/utils/format';
@@ -219,8 +220,10 @@ export const ShowtimesPage = () => {
             resetToFirstPage();
           }}
           options={[
-            { value: 'open', label: t('showtime.statusOpen') },
-            { value: 'closed', label: t('showtime.statusClosed') },
+            ...SHOWTIME_STATUSES.map((value) => ({
+              value,
+              label: t(`showtime.status${value === 'open' ? 'Open' : 'Closed'}`),
+            })),
           ]}
         />
         <DatePicker.RangePicker

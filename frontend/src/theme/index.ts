@@ -1,6 +1,6 @@
 import { theme as antdTheme, type ThemeConfig } from 'antd';
 import type { ThemeMode } from '@/stores/appStore';
-import { brand, semantic, surface, textOnBrand } from './tokens';
+import { brand, brandAlpha, semantic, surface, textOnBrand } from './tokens';
 
 export * from './tokens';
 
@@ -38,7 +38,7 @@ export const buildTheme = (mode: ThemeMode): ThemeConfig => {
         itemMarginInline: 8,
         // Sider luon chay Menu theme="light": darkAlgorithm da dao bang mau roi.
         // Menu theme="dark" la dien mao navy cu, dat tren nen toi thi chu chim.
-        itemSelectedBg: dark ? 'rgba(29, 231, 130, 0.16)' : brand.soft,
+        itemSelectedBg: dark ? brandAlpha(0.16) : brand.soft,
         itemSelectedColor: dark ? brand.base : textOnBrand,
       },
       Table: {

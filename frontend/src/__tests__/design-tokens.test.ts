@@ -2,7 +2,16 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { brand, cinemaBackdrop, seat, seatType, semantic, textOnBrand } from '@/theme/tokens';
+import {
+  brand,
+  brandAlpha,
+  cinemaBackdrop,
+  seat,
+  seatType,
+  semantic,
+  surface,
+  textOnBrand,
+} from '@/theme/tokens';
 
 // Doc thang file CSS tu dia. Khong dung `@/index.css?raw` vi vite.config.ts dat
 // test.css = false, nen moi import CSS (ke ca ?raw) deu bi stub thanh rong.
@@ -50,6 +59,8 @@ describe('design token: TS va CSS phai trung nhau', () => {
     ['seat-type-couple-text', seatType.couple.fg],
     ['seat-type-recliner', seatType.recliner.bg],
     ['seat-type-recliner-text', seatType.recliner.fg],
+    ['surface-base', surface.light.base],
+    ['surface-border', surface.light.border],
   ];
 
   it.each(pairs)('--cp-%s khop tokens.ts', (name, value) => {
@@ -90,6 +101,14 @@ describe('design token: cac rang buoc phai giu', () => {
 
   it.each(Object.entries(seatType))('nhan ghe %s doc duoc tren nen cua no', (_name, pair) => {
     expect(contrast(pair.bg, pair.fg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('brandAlpha sinh dung mau brand, khong phai mot ban sao viet tay', () => {
+    // Chan viec quay lai viet 'rgba(29, 231, 130, ...)' bang tay o theme/index.ts.
+    const n = Number.parseInt(brand.base.slice(1), 16);
+    const rgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+    expect(brandAlpha(0.16)).toBe(`rgba(${rgb}, 0.16)`);
+    expect(brandAlpha(1)).toBe(`rgba(${rgb}, 1)`);
   });
 
   it('bon loai ghe co bon mau nen khac nhau', () => {

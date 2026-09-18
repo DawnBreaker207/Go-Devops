@@ -40,6 +40,19 @@ export const brand = {
  */
 export const textOnBrand = '#052E1B';
 
+/**
+ * `brand.base` o mot do trong suot cho truoc.
+ *
+ * Ton tai de khong ai phai viet `rgba(29, 231, 130, ...)` bang tay o cho khac:
+ * mot chuoi rgba nhu the la mot ban sao cua brand.base ma test parity TS<->CSS
+ * khong nhin thay, nen no lang le lech di khi brand doi mau. Tinh tu chinh
+ * brand.base nen khong the lech duoc.
+ */
+export const brandAlpha = (alpha: number): string => {
+  const n = Number.parseInt(brand.base.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
+
 /* -------------------------------------------------------------------------- */
 /* 2. Nen toi cua khu khach hang                                               */
 /* -------------------------------------------------------------------------- */

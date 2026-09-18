@@ -27,6 +27,9 @@
   --cp-seat-sold-text: #8a8f8b;
   --cp-seat-held: #d97706;
   --cp-seat-held-text: #1a1200;
+  --cp-surface-base: #ffffff;
+  --cp-surface-border: #bfbfbf;
+
   --cp-seat-screen: #ffffff;
 
   /* Loai ghe - chi dung trong trinh sua so do cua admin (nen sang). */

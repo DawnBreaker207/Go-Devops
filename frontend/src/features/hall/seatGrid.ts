@@ -159,10 +159,6 @@ export const renderedSeatsPerRow = (hall: Hall, seats: Seat[]): number => {
   return Math.max(widest, hall.seats_per_row);
 };
 
-/** So hang thuc su, dem tu du lieu ghe chu khong tu `hall.rows`. */
-export const renderedRows = (hall: Hall, seats: Seat[]): number =>
-  Math.max(groupSeatsByRow(seats).length, hall.rows);
-
 /** Mo ta luoi cho phan tom tat cua man hinh. */
 export interface GridSummary {
   gridCells: number;

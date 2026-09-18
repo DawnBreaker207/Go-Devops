@@ -8,7 +8,7 @@
   flex-direction: column;
   border-radius: var(--movie-card-radius, 8px);
   overflow: hidden;
-  background: var(--movie-card-bg, #fff);
+  background: var(--movie-card-bg, var(--cp-surface-base));
   cursor: pointer;
   /* Liet ke tung property - khong dung shorthand bat tat ca */
   transition: transform var(--motion-duration-base) var(--motion-ease-out);
@@ -111,8 +111,10 @@
   transform: scale(var(--motion-scale-press));
 }
 
-/* Focus nhin thay duoc trong luc card dang dich chuyen. */
+/* Focus nhin thay duoc trong luc card dang dich chuyen. Vong focus deo mau
+   brand chu khong phai mot mau do rieng: xem .claude/rules/design-tokens.md,
+   khong duoc de ra mau thu hai cho mot man hinh. */
 .movie-card:focus-visible {
-  outline: 2px solid var(--movie-card-focus, #e50914);
+  outline: 2px solid var(--movie-card-focus, var(--cp-brand));
   outline-offset: 2px;
 }

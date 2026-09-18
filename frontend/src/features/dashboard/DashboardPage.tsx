@@ -24,7 +24,14 @@ export const DashboardPage = () => {
   const isAdmin = useHasRole('admin');
   const { data: stats, isFetching: statsLoading, error: statsError } = useAdminStats(isAdmin);
 
-  const { data, isFetching } = useMovieList({ page: 1, page_size: PREVIEW_SIZE });
+  // Phai lay ca `error`: khong lay thi mot request that bai se rot xuong
+  // `data?.items ?? []` va ve ra man hinh RONG, tuc bao "khong co phim nao"
+  // trong khi that ra la khong goi duoc API.
+  const {
+    data,
+    isFetching,
+    error: moviesError,
+  } = useMovieList({ page: 1, page_size: PREVIEW_SIZE });
 
   const cards = [
     { key: 'movies', title: t('menu.movies'), value: stats?.movies, icon: <VideoCameraOutlined /> },
@@ -48,6 +55,15 @@ export const DashboardPage = () => {
   return (
     <>
       <PageHeader title={t('menu.dashboard')} />
+
+      {moviesError ? (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={errorMessage(moviesError, t('common.somethingWrong'))}
+        />
+      ) : null}
 
       {isAdmin ? (
         <>

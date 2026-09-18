@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { showtimeApi } from '@/api/showtime.api';
 import { movieApi } from '@/api/movie.api';
+import { MOVIE_QUERY_KEY } from '@/features/movie/hooks/useMovies';
 import type { ShowtimeListQuery, ShowtimePayload } from '@/types';
 
 export const SHOWTIME_QUERY_KEY = 'showtimes';
@@ -24,7 +25,7 @@ const PICKER_PAGE_SIZE = 100;
 
 export const useMovieOptions = () =>
   useQuery({
-    queryKey: ['movies', { page_size: PICKER_PAGE_SIZE }],
+    queryKey: [MOVIE_QUERY_KEY, { page_size: PICKER_PAGE_SIZE }],
     queryFn: () => movieApi.list({ page: 1, page_size: PICKER_PAGE_SIZE }),
     staleTime: 5 * 60_000,
   });

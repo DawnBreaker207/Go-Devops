@@ -89,15 +89,28 @@ export const LayoutRegenerateModal = ({
         {} as Record<SeatType, number>
       );
 
-      const payload: HallPayload = {
-        name: hall.name,
-        prices: priceMap,
-        screen_position: values.screen_position,
-        aisle_after_cols: parseAisles(values.aisle_after_cols),
-        ...(values.template
-          ? { template: values.template }
-          : { rows: values.rows, seats_per_row: values.seats_per_row }),
-      };
+      /**
+       * Chon mau thi PHAI BO TRONG screen_position va aisle_after_cols.
+       *
+       * `resolveLayout` ben backend chi dien tu mau vao nhung field con trong:
+       * `if len(req.AisleAfterCols) == 0 { req.AisleAfterCols = t.aisleAfterCols }`.
+       * Form nay nap san hai field do tu phong HIEN TAI, nen neu cu gui di thi
+       * chung luon khac rong va luon thang mau - loi di cua mau bi vut im lang,
+       * dung cai ma canh bao ngay trong modal noi la se lay theo mau.
+       */
+      const payload: HallPayload = values.template
+        ? { name: hall.name, prices: priceMap, template: values.template }
+        : {
+            name: hall.name,
+            prices: priceMap,
+            rows: values.rows,
+            seats_per_row: values.seats_per_row,
+            // Khong co mau thi hai field nay BAT BUOC phai gui: RegenerateLayout
+            // gan thang `current.ScreenPosition = req.ScreenPosition`, bo trong
+            // la reset ve 'front' va xoa sach loi di.
+            screen_position: values.screen_position,
+            aisle_after_cols: parseAisles(values.aisle_after_cols),
+          };
 
       await regenerate.mutateAsync({ id: hall.id, payload });
       message.success(t('hall.regenerateSuccess'));
@@ -186,18 +199,28 @@ export const LayoutRegenerateModal = ({
           </>
         )}
 
-        <Form.Item name="screen_position" label={t('hall.screenPosition')}>
-          <Select
-            options={SCREEN_POSITIONS.map((value) => ({
-              value,
-              label: t(`hall.screen_${value}`),
-            }))}
-          />
-        </Form.Item>
+        {/* An khi da chon mau: hai field nay khong duoc gui nua, nen de chung
+            hien ra voi gia tri cu la noi doi voi nguoi dung. */}
+        {usingTemplate ? null : (
+          <>
+            <Form.Item name="screen_position" label={t('hall.screenPosition')}>
+              <Select
+                options={SCREEN_POSITIONS.map((value) => ({
+                  value,
+                  label: t(`hall.screen_${value}`),
+                }))}
+              />
+            </Form.Item>
 
-        <Form.Item name="aisle_after_cols" label={t('hall.aisles')} extra={t('hall.aislesHint')}>
-          <Input placeholder="4, 10" />
-        </Form.Item>
+            <Form.Item
+              name="aisle_after_cols"
+              label={t('hall.aisles')}
+              extra={t('hall.aislesHint')}
+            >
+              <Input placeholder="4, 10" />
+            </Form.Item>
+          </>
+        )}
       </Form>
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
