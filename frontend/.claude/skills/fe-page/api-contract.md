@@ -9,8 +9,8 @@ with guards is `../../../../BackEnd-CP/.claude/skills/be-endpoint/endpoints.md`.
 - `API_BASE_URL` = `import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1'`. The `/api/v1` prefix is
   hardcoded server-side, so api-module paths are always relative to it.
 - Vite dev runs on **:3000 with no proxy** -> the call is cross-origin and depends on the backend CORS allowlist.
-  The code default allows only `:3000`; `config.yaml` also allows `:5173`. **TODO: confirm** what the real `.env`
-  sets, because `.env` beats `config.yaml`.
+  `BackEnd-CP/.env` **does** set `CORS_ALLOWED_ORIGINS`, which overrides the `:3000` + `:5173` pair in
+  `config.yaml`, so a CORS failure in dev is that one line — ask the owner rather than editing the backend.
 - `/health` and `/healthz` sit **outside** `/api/v1`. Poster files are served from `/media/...` (also outside),
   and only when the backend runs the local storage driver.
 
@@ -41,19 +41,19 @@ with guards is `../../../../BackEnd-CP/.claude/skills/be-endpoint/endpoints.md`.
 
 ## Status codes the UI must branch on
 
-| Code    | HTTP | What it means for the UI                                                                                                                                                            |
-| ------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `40001` | 400  | Validation. Render `details` per field; the message is already human-readable.                                                                                                      |
-| `40100` | 401  | Bad credentials / invalid or replayed refresh token. The client already force-logs-out.                                                                                             |
-| `40101` | 401  | Access token expired. **`client.ts` already refreshes and replays** — do not handle it in a screen.                                                                                 |
-| `40300` | 403  | Wrong role, locked account, or someone else's order. Show a permission message, not a retry.                                                                                        |
-| `40400` | 404  | Not found, **and also a wrong HTTP verb** (there is no 405 here).                                                                                                                   |
-| `40900` | 409  | State conflict: seats taken, hold expired, duplicate email, edit lock. Refetch, then tell the user.                                                                                 |
-| `41300` | 413  | Body too large.                                                                                                                                                                     |
-| `42800` | 428  | **Terms must be accepted.** `POST /auth/login` returns this when `ACCOUNT_TERMS_VERSION` is set; the account must `POST /auth/terms-accept` first. There is no screen for this yet. |
-| `42900` | 429  | Rate limit or login lockout. `details.retry_after_seconds` is present for those two — but **absent** for the SSE stream limit, so read it defensively.                              |
-| `50000` | 500  | Genuine server error **or** a malformed request body / non-numeric `?page`. Do not auto-retry blindly.                                                                              |
-| `50300` | 503  | The DB guard tripped; every `/api/v1` route answers this. Retryable.                                                                                                                |
+| Code    | HTTP | What it means for the UI                                                                                                                                                                                                 |
+| ------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `40001` | 400  | Validation. Render `details` per field; the message is already human-readable.                                                                                                                                           |
+| `40100` | 401  | Bad credentials / invalid or replayed refresh token. The client already force-logs-out.                                                                                                                                  |
+| `40101` | 401  | Access token expired. **`client.ts` already refreshes and replays** — do not handle it in a screen.                                                                                                                      |
+| `40300` | 403  | Wrong role, locked account, or someone else's order. Show a permission message, not a retry.                                                                                                                             |
+| `40400` | 404  | Not found, **and also a wrong HTTP verb** (there is no 405 here).                                                                                                                                                        |
+| `40900` | 409  | State conflict: seats taken, hold expired, duplicate email, edit lock. Refetch, then tell the user.                                                                                                                      |
+| `41300` | 413  | Body too large.                                                                                                                                                                                                          |
+| `42800` | 428  | **Cannot currently happen.** The terms gate is unreachable: `account.terms_version` never reaches the backend config, so the gate condition is always false. Do not build an accept-terms screen — see the gotchas file. |
+| `42900` | 429  | Rate limit or login lockout. `details.retry_after_seconds` is present for those two — but **absent** for the SSE stream limit, so read it defensively.                                                                   |
+| `50000` | 500  | Genuine server error **or** a malformed request body / non-numeric `?page`. Do not auto-retry blindly.                                                                                                                   |
+| `50300` | 503  | The DB guard tripped; every `/api/v1` route answers this. Retryable.                                                                                                                                                     |
 
 There is **no 422** anywhere.
 
