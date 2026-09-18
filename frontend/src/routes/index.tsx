@@ -9,6 +9,9 @@ import { ROLES_ADMIN, ROLES_OPERATOR } from './navigation';
 import { PATHS } from './paths';
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
+const RegisterPage = lazy(() => import('@/features/auth/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'));
 const MoviesPage = lazy(() => import('@/features/movie/MoviesPage'));
 const ShowtimesPage = lazy(() => import('@/features/showtime/ShowtimesPage'));
@@ -46,6 +49,11 @@ export const router = createBrowserRouter([
     element: <AuthLayout />,
     children: [{ path: PATHS.login, element: <LoginPage /> }],
   },
+  // Man tai khoan cua KHACH mang vo chia doi rieng (Figma 77-626), khong dung
+  // AuthLayout cua khu van hanh, nen dung o muc goc chu khong boc layout nao.
+  { path: PATHS.register, element: <RegisterPage /> },
+  { path: PATHS.forgotPassword, element: <ForgotPasswordPage /> },
+  { path: PATHS.resetPassword, element: <ResetPasswordPage /> },
   {
     element: <ProtectedRoute />,
     children: [

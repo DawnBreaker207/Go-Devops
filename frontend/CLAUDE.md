@@ -13,9 +13,10 @@ is for an operator. Built: `movie` (table + form), `showtime` (table + filters +
 filters + detail drawer), `hall` (table + create/edit/clone/price modals + a seat-grid editor at
 `/halls/:id/seats`), `user` (table + filters + inline role/lock controls + create modal),
 `report` (date range + per-movie rollup + per-day table with a per-showtime breakdown), `dashboard`.
-**The customer side has started**: `CustomerLayout` (top nav, no sider, plain CSS, its own visual world),
-`browse` (home poster grid + film detail with a day strip and showtime picker) and the `booking-flow` seat
-picker. Not built yet: hold/checkout/payment, my tickets, register, forgot/reset password. Read
+**The customer side is complete**: `CustomerLayout` (top nav, no sider, plain CSS, its own visual world),
+`browse` (home poster grid + film detail with a day strip and showtime picker), the full `booking-flow`
+(seat picker -> hold -> checkout with a countdown -> gateway -> auto-confirm -> tickets -> my tickets), and
+the customer account screens (register, forgot password, reset password) on the Figma split layout. Read
 `../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen.
 
 **The visual language comes from a Figma file**; the information architecture does not — it mirrors the
@@ -44,6 +45,8 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
 - `src/api/<domain>.api.ts` — one `<domain>Api` object literal of arrow methods.
 - `src/features/<domain>/` — singular folder, **plural** page (`movie/MoviesPage.tsx`), plus `components/`,
   `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`, `report`, `browse`, `booking-flow`.
+  `auth` holds BOTH the operator `LoginPage` (an antd card in `AuthLayout`) and the customer account screens
+  (`CustomerAuthShell`, a split panel) — they look nothing alike on purpose.
 - `src/components/` — cross-feature: `Loading`, `PageHeader`, `ErrorBoundary` (the only class component).
 - `src/layouts/` — `MainLayout` and `AuthLayout`. The sidebar and the breadcrumb are both derived from
   `NAV_ITEMS` in `src/routes/navigation.tsx`, filtered by role through `useNavItems()`; `MainLayout` itself
@@ -162,6 +165,11 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
   field on `SeatMapSeat`, it is what `POST /orders/hold` wants, and a seat without it still reports
   `available` because the SQL is a LEFT JOIN. `is_gap` seats also report `available` and also carry an id —
   holding one is a 400. Check both before letting a seat be picked.
+- Never render an order's tickets from `GET /orders`: that list returns `OrderStatusResponse` WITHOUT them.
+  `TicketCard` distinguishes `tickets === undefined` (not loaded) from `[]` (loaded, genuinely none) — mixing
+  the two made a CONFIRMED order read as "Tickets (0) — awaiting payment".
+- Never trust a client-side "I paid". The gateway reports through the IPN; the checkout page polls
+  `GET /orders/:id/status` and `POST /orders/:id/confirm` refuses anything the provider has not settled.
 - Never read `price: 0` on a seat as free. It means the hall has no `hall_prices` row for that seat type, and
   holding it is a 409.
 - Never treat a missing day in `GET /admin/reports/daily` as a zero. `days` holds only the days the `closeDay`
