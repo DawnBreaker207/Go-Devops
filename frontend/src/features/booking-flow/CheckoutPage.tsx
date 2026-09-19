@@ -45,10 +45,22 @@ export const CheckoutPage = () => {
   const isPending = order.data?.status === 'pending';
   // Chi do khi da mo cong: truoc do khong co gi de doi.
   const status = useOrderStatus(bookingId, isPending && gatewayOpened);
-  const paid = status.data?.payment?.status === 'paid' || Boolean(status.data?.paid_at);
+  // Uu tien trang thai vua do duoc; luc chua do thi dung trang thai nap ban dau.
+  const payment = status.data?.payment ?? order.data?.payment;
+  const paid = payment?.status === 'paid' || Boolean(status.data?.paid_at ?? order.data?.paid_at);
+  /**
+   * Lan thanh toan truoc that bai (the bi tu choi, khach bam huy o cong, cong
+   * bao sai so tien...). Don VAN con `pending` va ghe VAN dang duoc giu, nen
+   * khach thu lai duoc - nhung phai noi ra, khong thi ho ngoi nhin dong ho chay
+   * ma khong biet lan vua roi da hong.
+   */
+  const paymentFailed = payment?.status === 'failed';
+  const refunding = payment?.status === 'refund_pending' || payment?.status === 'refunded';
 
   const secondsLeft = useCountdown(order.data?.expires_at);
   const expired = order.data?.status === 'expired' || (isPending && secondsLeft === 0);
+  /** Don da ket thuc va khong con lam gi duoc nua. */
+  const settled = order.data?.status === 'refunded' || order.data?.status === 'expired';
 
   // Cong bao da tra tien -> chot don ngay, khong bat khach bam them mot nut nua.
   useEffect(() => {
@@ -117,6 +129,44 @@ export const CheckoutPage = () => {
         </div>
       ) : null}
 
+      {paymentFailed && isPending ? (
+        <div className="cp-notice cp-notice--error" role="alert">
+          {t('customer.paymentFailed', {
+            reason: payment?.status_reason
+              ? t(`customer.payReason_${payment.status_reason}`, payment.status_reason)
+              : t('customer.payReasonUnknown'),
+          })}
+        </div>
+      ) : null}
+
+      {/*
+        Don da di den trang thai cuoi (hoan tien / het han): noi ro trang thai
+        VA ly do cua chinh DON, khong chi trang thai cua giao dich. `amount_mismatch`
+        chang han nghia la cong bao so tien khac voi don, he thong tu hoan tien
+        va NHA GHE ra - khach can biet de dat lai.
+      */}
+      {settled ? (
+        <div className="cp-notice cp-notice--error" role="alert">
+          {t('customer.orderSettled', {
+            status: t(`booking.status_${o.status}`),
+            reason: o.status_reason
+              ? t(`booking.reason_${o.status_reason}`, o.status_reason)
+              : t('customer.payReasonUnknown'),
+          })}
+        </div>
+      ) : null}
+
+      {refunding ? (
+        // Duong hoan tien: cong bao so tien khac voi don. Backend tu danh dau
+        // refund_pending roi mot buoc sau commit moi goi provider, nen khach
+        // khong phai lam gi - chi can biet dieu do.
+        <div className="cp-notice cp-notice--info">
+          {t('customer.refundNotice', {
+            status: t(`booking.payment_${payment?.status ?? 'refund_pending'}`),
+          })}
+        </div>
+      ) : null}
+
       <section className="cp-checkout__section">
         <h2 className="cp-checkout__section-title">{t('customer.schedule')}</h2>
         <div className="cp-kv">
@@ -168,7 +218,11 @@ export const CheckoutPage = () => {
               onClick={() => void handlePay()}
               disabled={pay.isPending || confirm.isPending}
             >
-              {pay.isPending ? t('common.loading') : t('customer.payNow')}
+              {pay.isPending
+                ? t('common.loading')
+                : paymentFailed
+                  ? t('customer.payRetry')
+                  : t('customer.payNow')}
             </button>
             <button
               type="button"
@@ -181,13 +235,15 @@ export const CheckoutPage = () => {
           </>
         ) : null}
 
-        {expired ? (
+        {/* Bat cu trang thai nao khong phai "dang cho thanh toan" deu phai co
+            mot duong ra. Khong co nut nao la bo khach ket lai giua trang. */}
+        {!isPending || expired ? (
           <button
             type="button"
-            className="cp-btn cp-btn--ghost cp-btn--block"
+            className="cp-btn cp-btn--primary cp-btn--block"
             onClick={() => navigate(PATHS.home)}
           >
-            {t('customer.backHome')}
+            {t('customer.browseFilms')}
           </button>
         ) : null}
 
@@ -202,11 +258,11 @@ export const CheckoutPage = () => {
         ) : null}
       </div>
 
-      {gatewayOpened && isPending && !expired ? (
-        <p className="cp-fineprint">{t('customer.gatewayHint')}</p>
-      ) : (
-        <p className="cp-fineprint">{t('customer.holdHint')}</p>
-      )}
+      {isPending && !expired ? (
+        <p className="cp-fineprint">
+          {gatewayOpened && !paymentFailed ? t('customer.gatewayHint') : t('customer.holdHint')}
+        </p>
+      ) : null}
     </div>
   );
 };
