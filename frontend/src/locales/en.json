@@ -25,6 +25,8 @@
     "updateSuccess": "Updated successfully"
   },
   "menu": {
+    "auditLogs": "Audit logs",
+    "batchJobs": "Batch jobs",
     "bookings": "Bookings",
     "boxOffice": "Box office",
     "customerLookup": "Customer lookup",
@@ -573,5 +575,46 @@
     "searchPlaceholder": "Search by email, name or phone",
     "title": "Customer lookup",
     "viewDetail": "Detail"
+  },
+  "audit": {
+    "action": "Action",
+    "actor": "Actor",
+    "after": "After",
+    "before": "Before",
+    "bookingId": "Order id",
+    "createdAt": "Time",
+    "outcome": "Outcome",
+    "outcome_failure": "Failure",
+    "outcome_success": "Success",
+    "resource": "Resource",
+    "resourceId": "Resource id",
+    "resourceType": "Resource type",
+    "title": "Audit logs",
+    "viewDetail": "View detail"
+  },
+  "batch": {
+    "errorMessage": "Error",
+    "finishedAt": "Finished at",
+    "jobName": "Job name",
+    "processedRows": "Processed rows",
+    "runAction": "Run now",
+    "runConfirmBody": "The job runs in the background. Follow its result in the history table below.",
+    "runConfirmTitle": "Run {{name}} now?",
+    "runJob": "Run now: {{name}}",
+    "runStarted": "{{name}} started",
+    "searchPlaceholder": "Search by job name",
+    "skippedRows": "Skipped rows",
+    "startedAt": "Started at",
+    "status": "Status",
+    "status_failed": "Failed",
+    "status_running": "Running",
+    "status_skipped": "Skipped",
+    "status_stopped": "Stopped",
+    "status_success": "Success",
+    "title": "Batch jobs",
+    "triggeredBy": "Triggered by",
+    "triggeredBy_confirm": "On order confirm",
+    "triggeredBy_cron": "Schedule",
+    "triggeredBy_manual": "Manual"
   }
 }

@@ -25,6 +25,8 @@
     "updateSuccess": "Cập nhật thành công"
   },
   "menu": {
+    "auditLogs": "Nhật ký hệ thống",
+    "batchJobs": "Công việc nền",
     "bookings": "Đặt vé",
     "boxOffice": "Bán vé tại quầy",
     "customerLookup": "Tra cứu khách hàng",
@@ -573,5 +575,46 @@
     "searchPlaceholder": "Tìm theo email, họ tên hoặc số điện thoại",
     "title": "Tra cứu khách hàng",
     "viewDetail": "Chi tiết"
+  },
+  "audit": {
+    "action": "Hành động",
+    "actor": "Người thực hiện",
+    "after": "Sau khi thay đổi",
+    "before": "Trước khi thay đổi",
+    "bookingId": "Mã đơn",
+    "createdAt": "Thời điểm",
+    "outcome": "Kết quả",
+    "outcome_failure": "Thất bại",
+    "outcome_success": "Thành công",
+    "resource": "Đối tượng",
+    "resourceId": "Mã đối tượng",
+    "resourceType": "Loại đối tượng",
+    "title": "Nhật ký hệ thống",
+    "viewDetail": "Xem chi tiết"
+  },
+  "batch": {
+    "errorMessage": "Lỗi",
+    "finishedAt": "Kết thúc lúc",
+    "jobName": "Tên công việc",
+    "processedRows": "Số dòng xử lý",
+    "runAction": "Chạy ngay",
+    "runConfirmBody": "Công việc sẽ chạy nền. Theo dõi kết quả ở bảng lịch sử bên dưới.",
+    "runConfirmTitle": "Chạy công việc {{name}} ngay bây giờ?",
+    "runJob": "Chạy ngay: {{name}}",
+    "runStarted": "Đã bắt đầu chạy {{name}}",
+    "searchPlaceholder": "Tìm theo tên công việc",
+    "skippedRows": "Số dòng bỏ qua",
+    "startedAt": "Bắt đầu lúc",
+    "status": "Trạng thái",
+    "status_failed": "Thất bại",
+    "status_running": "Đang chạy",
+    "status_skipped": "Đã bỏ qua",
+    "status_stopped": "Đã dừng",
+    "status_success": "Thành công",
+    "title": "Công việc nền",
+    "triggeredBy": "Kích hoạt bởi",
+    "triggeredBy_confirm": "Khi xác nhận đơn",
+    "triggeredBy_cron": "Lịch tự động",
+    "triggeredBy_manual": "Chạy tay"
   }
 }

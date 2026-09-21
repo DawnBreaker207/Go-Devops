@@ -24,6 +24,8 @@ const UsersPage = lazy(() => import('@/features/user/UsersPage'));
 const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
 const BoxOfficePage = lazy(() => import('@/features/staff/BoxOfficePage'));
 const CustomerLookupPage = lazy(() => import('@/features/staff/CustomerLookupPage'));
+const AuditLogPage = lazy(() => import('@/features/audit/AuditLogPage'));
+const BatchJobsPage = lazy(() => import('@/features/batch/BatchJobsPage'));
 const HomePage = lazy(() => import('@/features/browse/HomePage'));
 const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
 const FilmsPage = lazy(() => import('@/features/browse/FilmsPage'));
@@ -108,6 +110,8 @@ export const router = createBrowserRouter([
               { path: PATHS.bookings, element: <BookingsPage /> },
               { path: PATHS.users, element: <UsersPage /> },
               { path: PATHS.reports, element: <ReportsPage /> },
+              { path: PATHS.auditLogs, element: <AuditLogPage /> },
+              { path: PATHS.batchJobs, element: <BatchJobsPage /> },
             ],
           },
         ],
