@@ -94,15 +94,16 @@ func run() error {
 	showtimeRepo := repository.NewShowtimeRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
+	notifPrefRepo := repository.NewNotificationPreferenceRepository(db)
 
 	loginGuard := ratelimit.NewFailureLimiter(cfg.RateLimit.Login.MaxFailures, cfg.RateLimit.Login.Lockout, nil)
 	mailer := notify.NewMockMailer(cfg.Mail.OutboxDir)
 	authService := service.NewAuthService(db, userRepo, repository.NewRefreshTokenRepository(db), jwtManager, loginGuard,
 		repository.NewPasswordResetTokenRepository(db), mailer, cfg.Account.PasswordResetURL, cfg.Account.PasswordResetTTL,
-		cfg.Account.TermsVersion)
+		cfg.Account.TermsVersion, cfg.JWT.RefreshTTL)
 	// Locks and role changes reach already-issued tokens within accountStatusTTL.
 	accountStatus := service.NewAccountStatusCache(userRepo, accountStatusTTL)
-	userService := service.NewUserService(db, userRepo, accountStatus.Invalidate)
+	userService := service.NewUserService(db, userRepo, notifPrefRepo, accountStatus.Invalidate)
 	var catalogCache *cache.Cache
 	if cfg.Redis.Addr != "" {
 		catalogCache = cache.New(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)

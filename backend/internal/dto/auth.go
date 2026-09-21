@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email,max=255" example:"admin@cinema.local"`
 	Password string `json:"password" binding:"required,min=6,max=72" example:"secret123"`
@@ -9,8 +11,13 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email" example:"admin@cinema.local"`
 	Password string `json:"password" binding:"required,min=6" example:"secret123"`
+	// DeviceID is generated and kept by the frontend so the resulting session can
+	// later be listed and individually signed out from /users/me/sessions.
+	DeviceID string `json:"device_id" binding:"omitempty,max=255" example:"web-3f0c9b6e"`
 	// ClientIP keys the failed-login lockout together with the email.
 	ClientIP string `json:"-"`
+	// UserAgent is read from the request header by the handler, not the body.
+	UserAgent string `json:"-"`
 }
 
 type RefreshRequest struct {
@@ -45,4 +52,20 @@ type TokenResponse struct {
 type LoginResponse struct {
 	TokenResponse
 	User UserResponse `json:"user"`
+}
+
+// SessionResponse is one signed-in device, as listed by GET /users/me/sessions.
+type SessionResponse struct {
+	ID         string     `json:"id"`
+	UserAgent  string     `json:"user_agent,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	// IsCurrent is true only when the caller told us its device_id and it matches.
+	IsCurrent bool `json:"is_current"`
+}
+
+// SessionListQuery optionally identifies the caller's own device so the response
+// can flag is_current.
+type SessionListQuery struct {
+	DeviceID string `form:"device_id" binding:"omitempty,max=255"`
 }

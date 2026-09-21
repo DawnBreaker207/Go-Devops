@@ -19,8 +19,6 @@ func NewUserHandler(userService service.UserService) *UserHandler {
 	return &UserHandler{userService: userService}
 }
 
-// Me godoc
-//
 //	@Summary		Current logged-in account info
 //	@Tags			users
 //	@Produce		json
@@ -39,8 +37,6 @@ func (h *UserHandler) Me(c *gin.Context) {
 	response.OK(c, user)
 }
 
-// UpdateMe godoc
-//
 //	@Summary		Update own full name and phone
 //	@Tags			users
 //	@Accept			json
@@ -65,8 +61,6 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	response.OK(c, user)
 }
 
-// DeleteMe godoc
-//
 //	@Summary		Delete own account (right to erasure)
 //	@Description	Requires the current password. 401 on a wrong password; 409 while a confirmed ticket is still to come; then the account is scrubbed and sessions revoked.
 //	@Tags			users
@@ -91,8 +85,48 @@ func (h *UserHandler) DeleteMe(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// List godoc
-//
+//	@Summary		Current notification opt-in flags
+//	@Description	Creates the row with the default flags (both on) on first read.
+//	@Tags			users
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.Body{data=dto.NotificationPreferenceResponse}
+//	@Failure		401	{object}	response.Body
+//	@Router			/users/me/notification-preferences [get]
+func (h *UserHandler) GetNotificationPreferences(c *gin.Context) {
+	prefs, err := h.userService.GetNotificationPreferences(c.Request.Context(), middleware.CurrentUserID(c))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, prefs)
+}
+
+//	@Summary		Replace notification opt-in flags
+//	@Description	Both flags may be sent false at once; nothing forces a category to stay on.
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			payload	body		dto.UpdateNotificationPreferenceRequest	true	"New flags"
+//	@Success		200		{object}	response.Body{data=dto.NotificationPreferenceResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Router			/users/me/notification-preferences [put]
+func (h *UserHandler) UpdateNotificationPreferences(c *gin.Context) {
+	var req dto.UpdateNotificationPreferenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	prefs, err := h.userService.UpdateNotificationPreferences(c.Request.Context(), middleware.CurrentUserID(c), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, prefs)
+}
+
 //	@Summary		List accounts (admin)
 //	@Tags			admin-users
 //	@Produce		json
@@ -120,8 +154,6 @@ func (h *UserHandler) List(c *gin.Context) {
 	response.List(c, users, query.Page, query.PageSize, total)
 }
 
-// Create godoc
-//
 //	@Summary		Create a staff or admin account (admin)
 //	@Tags			admin-users
 //	@Accept			json
@@ -147,8 +179,6 @@ func (h *UserHandler) Create(c *gin.Context) {
 	response.Created(c, user)
 }
 
-// Update godoc
-//
 //	@Summary		Lock/unlock an account and/or change its role (admin)
 //	@Description	Send active and/or role. A locked account can not log in, refresh, hold seats or pay; its confirmed tickets still pass the gate. Admins can not lock themselves, change their own role, or lock/demote the last active admin. Also served as PUT.
 //	@Tags			admin-users

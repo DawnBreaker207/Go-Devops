@@ -47,7 +47,7 @@ func TestAccount_DeleteMeInvalidatesStatusCacheAtOnce(t *testing.T) {
 	u := e.newUser(models.RoleCustomer, "erased-cache@test.local", "secret123")
 
 	cache := service.NewAccountStatusCache(repository.NewUserRepository(e.db), time.Hour)
-	accounts := service.NewUserService(e.db, repository.NewUserRepository(e.db), cache.Invalidate)
+	accounts := service.NewUserService(e.db, repository.NewUserRepository(e.db), repository.NewNotificationPreferenceRepository(e.db), cache.Invalidate)
 
 	// Warm the cache with the pre-erasure (active) status.
 	active, _, err := cache.Status(e.ctx, u.ID)
@@ -79,7 +79,7 @@ func TestAuth_TermsGateForcesAcceptance(t *testing.T) {
 	termsAuth := service.NewAuthService(e.db, repository.NewUserRepository(e.db),
 		repository.NewRefreshTokenRepository(e.db), e.jwt, nil,
 		repository.NewPasswordResetTokenRepository(e.db), e.mailer,
-		"http://test.local/reset-password", 30*time.Minute, 1)
+		"http://test.local/reset-password", 30*time.Minute, 1, time.Hour)
 
 	_, err = termsAuth.Login(e.ctx, req)
 	var appErr *apperrors.AppError

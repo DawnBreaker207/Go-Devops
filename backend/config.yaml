@@ -39,7 +39,7 @@ jwt:
   access_secret: dev-access-secret-change-in-prod
   refresh_secret: dev-refresh-secret-change-in-prod
   access_ttl: 15m
-  refresh_ttl: 168h
+  refresh_ttl: 720h
   issuer: backend-cp
 
 # Per-endpoint rate limits (auth against brute force, hold against seat bots).

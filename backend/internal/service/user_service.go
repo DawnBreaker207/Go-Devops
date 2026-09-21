@@ -25,18 +25,21 @@ type UserService interface {
 	Update(ctx context.Context, actorID, userID string, req dto.UpdateUserRequest) (*dto.UserResponse, error)
 	UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*dto.UserResponse, error)
 	DeleteMe(ctx context.Context, userID, password string) error
+	GetNotificationPreferences(ctx context.Context, userID string) (*dto.NotificationPreferenceResponse, error)
+	UpdateNotificationPreferences(ctx context.Context, userID string, req dto.UpdateNotificationPreferenceRequest) (*dto.NotificationPreferenceResponse, error)
 }
 
 type userService struct {
-	db       *gorm.DB
-	userRepo repository.UserRepository
-	onChange []func(userID string)
+	db         *gorm.DB
+	userRepo   repository.UserRepository
+	notifPrefs repository.NotificationPreferenceRepository
+	onChange   []func(userID string)
 }
 
 // NewUserService: onChange callbacks run after an account's active flag or role
 // changed (e.g. AccountStatusCache.Invalidate).
-func NewUserService(db *gorm.DB, userRepo repository.UserRepository, onChange ...func(userID string)) UserService {
-	return &userService{db: db, userRepo: userRepo, onChange: onChange}
+func NewUserService(db *gorm.DB, userRepo repository.UserRepository, notifPrefs repository.NotificationPreferenceRepository, onChange ...func(userID string)) UserService {
+	return &userService{db: db, userRepo: userRepo, notifPrefs: notifPrefs, onChange: onChange}
 }
 
 // UpdateProfile changes the caller's own name and phone; an empty phone clears it.
@@ -74,17 +77,10 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.
 	return &result, nil
 }
 
-// DeleteMe erases the caller's account under the right to erasure. The
-// current password must be re-entered, since this is irreversible. Confirmed
-// tickets still to come come first, so they block the delete (409); afterwards
-// personal fields are scrubbed, sessions dropped and unpaid holds expired.
-// The route restricts this to the customer role, so the account being erased
-// is never an admin: no "last admin" guard is needed here.
-//
-// Unlike Update (admin lock/unlock, reversible via active), this also sets
-// deleted_at: the row disappears from every default GORM query (List,
-// GetByID, Update's own lookup), so there is no path left for an admin to
-// "unlock" an erased account back to life with its scrubbed data.
+// DeleteMe erases the caller's account (right to erasure); password re-entry required.
+// Upcoming confirmed tickets block it (409); then PII is scrubbed, sessions dropped,
+// unpaid holds expired. Customer-only route, so no last-admin guard is needed.
+// Unlike admin Update it sets deleted_at, so no query (or unlock) can revive the row.
 func (s *userService) DeleteMe(ctx context.Context, userID, password string) error {
 	current, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -279,5 +275,49 @@ func (s *userService) Update(ctx context.Context, actorID, userID string, req dt
 		fn(userID)
 	}
 	result := dto.NewUserResponse(user)
+	return &result, nil
+}
+
+// GetNotificationPreferences reads the caller's current opt-in flags,
+// creating the row with the model defaults on first read so a later PUT
+// always has something to update.
+func (s *userService) GetNotificationPreferences(ctx context.Context, userID string) (*dto.NotificationPreferenceResponse, error) {
+	pref, err := s.notifPrefs.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if pref == nil {
+		pref = &models.NotificationPreference{UserID: userID, BookingReminders: true, PromoOffers: true}
+		if err := s.notifPrefs.Create(ctx, s.db.WithContext(ctx), pref); err != nil {
+			return nil, err
+		}
+	}
+	result := dto.NewNotificationPreferenceResponse(pref)
+	return &result, nil
+}
+
+// UpdateNotificationPreferences replaces both flags at once. Both false is a
+// valid state: nothing here forces a user to keep any category on.
+func (s *userService) UpdateNotificationPreferences(ctx context.Context, userID string, req dto.UpdateNotificationPreferenceRequest) (*dto.NotificationPreferenceResponse, error) {
+	pref, err := s.notifPrefs.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if pref == nil {
+			pref = &models.NotificationPreference{
+				UserID:           userID,
+				BookingReminders: req.BookingReminders,
+				PromoOffers:      req.PromoOffers,
+			}
+			return s.notifPrefs.Create(ctx, tx, pref)
+		}
+		pref.BookingReminders, pref.PromoOffers = req.BookingReminders, req.PromoOffers
+		return s.notifPrefs.Update(ctx, tx, userID, req.BookingReminders, req.PromoOffers)
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := dto.NewNotificationPreferenceResponse(pref)
 	return &result, nil
 }

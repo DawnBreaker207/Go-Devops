@@ -72,3 +72,24 @@ type UpdateProfileRequest struct {
 type DeleteAccountRequest struct {
 	Password string `json:"password" binding:"required" example:"secret123"`
 }
+
+// NotificationPreferenceResponse is what a signed-in user currently receives.
+// A user with no row yet gets the same shape, backed by the model defaults.
+type NotificationPreferenceResponse struct {
+	BookingReminders bool `json:"booking_reminders"`
+	PromoOffers      bool `json:"promo_offers"`
+}
+
+func NewNotificationPreferenceResponse(p *models.NotificationPreference) NotificationPreferenceResponse {
+	return NotificationPreferenceResponse{
+		BookingReminders: p.BookingReminders,
+		PromoOffers:      p.PromoOffers,
+	}
+}
+
+// UpdateNotificationPreferenceRequest replaces both flags at once; both false is
+// allowed, since nothing forces a user to keep any notification category on.
+type UpdateNotificationPreferenceRequest struct {
+	BookingReminders bool `json:"booking_reminders"`
+	PromoOffers      bool `json:"promo_offers"`
+}
