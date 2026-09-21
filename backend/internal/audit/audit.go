@@ -1,26 +1,16 @@
 // Package audit writes audit rows in the same transaction as the business change.
 //
-// Action naming convention — <namespace>.<verb>, one action name shared by
-// both the success row (written in-transaction by the service) and the
-// failure row (written by middleware.Audit outside any transaction), so
-// filtering by action always shows both outcomes together:
+// Action naming — <namespace>.<verb>, shared by the in-transaction success row
+// (service) and the failure row (middleware.Audit), so filtering shows both:
 //
 //   - auth.*     — identity: login, register, refresh, logout, password reset.
-//   - users.*    — customer self-service on their own profile (change
-//     password, update profile, delete_me).
-//   - admin.*    — admin/staff mutating catalog & system config (movies,
-//     halls, seats, showtimes, users, media, batch jobs).
-//   - orders.*   — actions a customer or staff member initiates in a
-//     booking's lifecycle (hold, pay, confirm, cancel, expire, counter_sell).
-//   - payments.* — state the system/a webhook drives on its own (failed,
-//     refunded, refund_stuck, abandoned, a rejected/forged callback).
-//   - staff.*    — floor actions outside the standard order lifecycle
-//     (ticket redeem, both the ok and the refused scan).
+//   - users.*    — customer self-service (password, profile, delete_me).
+//   - admin.*    — catalog & system config writes.
+//   - orders.*   — booking lifecycle (hold, pay, confirm, cancel, expire, counter_sell).
+//   - payments.* — system/webhook-driven state (failed, refunded, refund_stuck, abandoned, rejected callback).
+//   - staff.*    — floor actions outside the lifecycle (ticket redeem, ok and refused).
 //
-// Every event that belongs to a booking's lifecycle — regardless of which of
-// booking/payment/ticket it is primarily about — should set Record.BookingID,
-// so "the full history of order X" is one indexed query instead of chasing
-// resource_id across three different resource_types.
+// Lifecycle events should set Record.BookingID, so one query shows an order's full history.
 package audit
 
 import (
@@ -59,7 +49,6 @@ type ctxKey struct{}
 // ErrorMsgKey is the gin key where response.Error stores the message to audit.
 const ErrorMsgKey = "audit_error_message"
 
-// FromContext returns the Record stashed by middleware.Audit, if any.
 func FromContext(ctx context.Context) (Record, bool) {
 	r, ok := ctx.Value(ctxKey{}).(Record)
 	return r, ok
@@ -75,8 +64,7 @@ func ErrorMessage(c *gin.Context) string {
 	return s
 }
 
-// In writes an audit row, usually in the open transaction. Callers must return its
-// error so the business change rolls back with it.
+// In writes an audit row; callers must return its error so the change rolls back with it.
 func In(ctx context.Context, db *gorm.DB, r Record) error {
 	if db == nil {
 		return nil
@@ -103,7 +91,6 @@ func In(ctx context.Context, db *gorm.DB, r Record) error {
 	return db.WithContext(ctx).Create(entry).Error
 }
 
-// FromGin fills IP and User-Agent from the request only when they are empty.
 func FromGin(c *gin.Context, r Record) Record {
 	if r.IP == "" {
 		r.IP = c.ClientIP()

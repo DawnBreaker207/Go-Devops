@@ -34,8 +34,7 @@ func Auth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	}
 }
 
-// OptionalAuth lets anonymous requests through, but a sent token must be valid:
-// the client gets 401 and refreshes instead of silently browsing as a guest.
+// OptionalAuth lets anonymous through, but a sent token must be valid (401, not silent guest).
 func OptionalAuth(jwtManager *jwt.Manager, accounts AccountChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.GetHeader("Authorization") == "" || authenticate(c, jwtManager, accounts) {

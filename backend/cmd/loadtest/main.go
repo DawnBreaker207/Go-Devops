@@ -1,19 +1,13 @@
-// Command loadtest is a small, real HTTP load generator for the running API
-// (SPEC "Hiệu năng (load)": ~300 virtual users reading the catalog, seat map
-// and holding seats for N minutes, printing p50/p95/error rate against
+// Command loadtest drives the running API over HTTP: ~300 virtual users read
+// the catalog/seat map and hold seats, reporting p50/p95/error rate against
 // NFR-PERF-01 (read p95 < 300ms) and NFR-PERF-02 (hold/confirm p95 <= 1s).
-//
-// It talks to the API purely over HTTP, so it exercises a real running
-// server (dev, staging, or a local `go run ./cmd/server`) — it does not
-// import any internal package.
+// It never imports internal packages.
 //
 // Usage:
 //
 //	go run ./cmd/loadtest -base-url http://localhost:8080 -vus 300 -duration 60s
 //
-// If the target has no showtime scheduled for today, pass -bootstrap to have
-// the tool create one itself (needs the default dev admin account and at
-// least one hall from `make migrate-seed`).
+// -bootstrap creates today's showtime itself (needs the dev admin account and a seeded hall).
 package main
 
 import (

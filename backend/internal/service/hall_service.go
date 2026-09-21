@@ -27,6 +27,10 @@ type HallService interface {
 	Clone(ctx context.Context, hallID string, req dto.CloneHallRequest) (*dto.HallResponse, error)
 	UpdateHall(ctx context.Context, hallID string, req dto.UpdateHallRequest) (*dto.HallResponse, error)
 	RegenerateLayout(ctx context.Context, hallID string, req dto.HallRequest) (*dto.HallResponse, error)
+	AddRow(ctx context.Context, hallID string) ([]dto.SeatResponse, error)
+	DeleteRow(ctx context.Context, hallID, rowLabel string) ([]dto.SeatResponse, error)
+	MergeSeats(ctx context.Context, hallID string, req dto.MergeSeatsRequest) (*dto.SeatResponse, error)
+	SplitSeat(ctx context.Context, hallID string, req dto.SplitSeatRequest) ([]dto.SeatResponse, error)
 	DeleteHall(ctx context.Context, hallID string) error
 	Templates() []dto.HallTemplateResponse
 }
@@ -37,8 +41,7 @@ type hallService struct {
 	cache    *cache.Cache
 }
 
-// NewHallService optionally busts the showtime-listing cache on a price
-// change; a nil cache disables it.
+// NewHallService: nil cache disables catalog busting on price change.
 func NewHallService(db *gorm.DB, hallRepo *repository.HallRepository, c *cache.Cache) HallService {
 	return &hallService{db: db, hallRepo: hallRepo, cache: c}
 }
@@ -77,8 +80,7 @@ func (s *hallService) PricesByHall(ctx context.Context, hallID string) ([]models
 	return s.hallRepo.PricesByHall(ctx, hallID)
 }
 
-// hallTemplate is a built-in starting layout an admin can pick instead of
-// typing out rows/seat_types/gaps by hand.
+// hallTemplate: built-in starting layout picked instead of typing rows/types/gaps by hand.
 type hallTemplate struct {
 	rows, seatsPerRow int
 	seatTypes         map[string][]string
@@ -88,8 +90,7 @@ type hallTemplate struct {
 	screenPosition    string
 }
 
-// hallTemplates: small (~60 seats, no frills), medium (~120, a VIP block and
-// a couple row), large (~200, VIP + couple + a center aisle).
+// hallTemplates: small (~60), medium (~120, VIP + couple), large (~200, VIP + couple + aisle).
 var hallTemplates = map[string]hallTemplate{
 	"small": {
 		rows: 6, seatsPerRow: 10,
@@ -111,8 +112,7 @@ var hallTemplates = map[string]hallTemplate{
 	},
 }
 
-// Templates previews the built-in layouts (name, size, seats per type) so an
-// admin can pick one before creating a hall.
+// Templates previews built-in layouts so an admin can pick one before creating a hall.
 func (s *hallService) Templates() []dto.HallTemplateResponse {
 	names := make([]string, 0, len(hallTemplates))
 	for name := range hallTemplates {
@@ -143,8 +143,7 @@ func (s *hallService) Templates() []dto.HallTemplateResponse {
 	return out
 }
 
-// resolveLayout fills unset fields of req from the named template; fields the
-// request set explicitly are kept as is.
+// resolveLayout fills unset req fields from the template; explicit fields are kept.
 func resolveLayout(req dto.HallRequest) (dto.HallRequest, error) {
 	if req.Template == "" {
 		if req.Rows <= 0 || req.SeatsPerRow <= 0 {
@@ -243,8 +242,7 @@ func normalizeHallJSON(hall *models.Hall) {
 	}
 }
 
-// Clone copies a hall's actual current seat grid — including any manual bulk
-// edits, not just its original template — under a new name.
+// Clone copies the hall's current seat grid (incl. manual bulk edits) under a new name.
 func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHallRequest) (*dto.HallResponse, error) {
 	source, err := s.hallRepo.FindByID(ctx, hallID)
 	if err != nil {
@@ -317,8 +315,7 @@ func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHal
 func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req dto.SeatUpdateRequest) (*dto.SeatResponse, error) {
 	var seat *models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock first, check after: an in-flight hold share-locks its showtime, so it commits
-		// and is seen by the check; a later hold sees the new layout.
+		// Lock first, check after: in-flight holds commit first and see the check; later holds see the layout.
 		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
 			return err
 		}
@@ -363,10 +360,8 @@ func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req
 	return &result, nil
 }
 
-// BulkUpdateSeats applies every change of the request to the seats it selects,
-// all in one transaction: one bad change rolls the whole batch back. It never
-// creates or removes a span (col_span is untouched) — that only happens
-// through RegenerateLayout.
+// BulkUpdateSeats applies every change in one transaction (one bad change rolls all back).
+// Never creates/removes a span (col_span untouched) — only RegenerateLayout does that.
 func (s *hallService) BulkUpdateSeats(ctx context.Context, hallID string, req dto.BulkSeatUpdateRequest) ([]dto.SeatResponse, error) {
 	var updated []models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -433,8 +428,7 @@ func (s *hallService) BulkUpdateSeats(ctx context.Context, hallID string, req dt
 	return dto.NewSeatResponses(updated), nil
 }
 
-// selectSeats resolves one selector (exactly one of labels/rows/cols/range) to
-// indexes into seats.
+// selectSeats resolves one selector (exactly one of labels/rows/cols/range) to indexes.
 func selectSeats(seats []models.Seat, sel dto.SeatSelector) ([]int, error) {
 	set := 0
 	if len(sel.Labels) > 0 {
@@ -506,7 +500,6 @@ func selectSeats(seats []models.Seat, sel dto.SeatSelector) ([]int, error) {
 	}
 }
 
-// parseRange parses "A1:C4" into its row/column bounds.
 func parseRange(r string) (fromRow, fromCol, toRow, toCol int, err error) {
 	parts := strings.SplitN(r, ":", 2)
 	if len(parts) != 2 {
@@ -571,10 +564,8 @@ func (s *hallService) SetPrices(ctx context.Context, hallID string, req dto.Pric
 	return response, nil
 }
 
-// UpdateHall changes name/screen/aisle/active. Deactivating is refused (409)
-// while the hall still has an open showtime to come: those must be closed or
-// rescheduled elsewhere first. Once inactive, showtime creation refuses the
-// hall (H6-style guard in showtime_service).
+// UpdateHall changes name/screen/aisle/active. Deactivating is refused (409) while an open
+// showtime is still to come; inactive halls refuse new showtimes (H6 guard in showtime_service).
 func (s *hallService) UpdateHall(ctx context.Context, hallID string, req dto.UpdateHallRequest) (*dto.HallResponse, error) {
 	var hall *models.Hall
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -634,11 +625,8 @@ func (s *hallService) UpdateHall(ctx context.Context, hallID string, req dto.Upd
 	return &result, nil
 }
 
-// RegenerateLayout replaces a hall's whole seat grid. Only legal while the
-// hall has never had a single booking (any status, any showtime, even a
-// deleted one): booking_seats/tickets keep a foreign key into showtime_seats,
-// which points at seats, so a hall that ever sold or held anything can not
-// have its seats deleted without violating that key.
+// RegenerateLayout replaces the whole grid. Only if the hall never had any booking (any status,
+// even deleted showtimes): seats are FK-referenced via showtime_seats, so deletion would violate it.
 func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req dto.HallRequest) (*dto.HallResponse, error) {
 	req, err := resolveLayout(req)
 	if err != nil {
@@ -690,9 +678,8 @@ func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req d
 		current.Rows, current.SeatsPerRow = req.Rows, req.SeatsPerRow
 		current.ScreenPosition, current.AisleAfterCols = req.ScreenPosition, req.AisleAfterCols
 		normalizeHallJSON(current)
-		// UpdateHallLayout, not UpdateHall: the latter's column whitelist omits
-		// rows/seats_per_row, so it would drop the two assignments above and
-		// leave `halls` describing a grid that no longer exists.
+		// UpdateHallLayout, not UpdateHall: the latter's whitelist drops rows/seats_per_row and
+		// would leave `halls` describing a grid that no longer exists.
 		if err := s.hallRepo.UpdateHallLayout(tx, current); err != nil {
 			return err
 		}
@@ -711,8 +698,331 @@ func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req d
 	return &result, nil
 }
 
-// DeleteHall soft-deletes a hall; refused (409) while it has a showtime not
-// yet ended, open or closed.
+// maxHallRows mirrors HallRequest.Rows' `max=50`: AddRow never goes through that DTO's
+// validation, so nothing else would catch the cap.
+const maxHallRows = 50
+
+// AddRow appends one row of standard seats without touching existing ones. Unlike RegenerateLayout
+// it never deletes, so the ordinary HallHasBookings gate (same as UpdateSeat/BulkUpdateSeats) suffices.
+func (s *hallService) AddRow(ctx context.Context, hallID string) ([]dto.SeatResponse, error) {
+	var newSeats []models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		hall, err := s.hallRepo.FindByID(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		if hall == nil {
+			return apperrors.ErrHallNotFound
+		}
+		if hall.Rows >= maxHallRows {
+			return apperrors.ErrHallRowLimitReached
+		}
+		hasBookings, err := s.hallRepo.HallHasBookings(tx, hallID)
+		if err != nil {
+			return err
+		}
+		if hasBookings {
+			return apperrors.ErrHallHasBookings
+		}
+
+		// generateSeats(1, ...) builds row 1 ("A"); remap it onto the real next row instead of
+		// duplicating generation logic.
+		row, err := generateSeats(1, hall.SeatsPerRow, nil, nil, nil)
+		if err != nil {
+			return err
+		}
+		nextRowIndex := hall.Rows + 1
+		nextRowLabel := dto.RowLabel(nextRowIndex)
+		for i := range row {
+			row[i].HallID = hallID
+			row[i].RowIndex = nextRowIndex
+			row[i].RowLabel = nextRowLabel
+		}
+		if err := s.hallRepo.CreateSeats(tx, row); err != nil {
+			if apperrors.IsUniqueViolation(err) {
+				return apperrors.ErrHallRowLimitReached.WithDetails(map[string]string{"row": nextRowLabel})
+			}
+			return err
+		}
+
+		seatIDs := make([]string, len(row))
+		for i, seat := range row {
+			seatIDs[i] = seat.ID
+		}
+		// So the new row is bookable on already-open showtimes too, not just later ones.
+		if err := s.hallRepo.CreateShowtimeSeatsForSeats(tx, hallID, seatIDs); err != nil {
+			return err
+		}
+
+		hall.Rows = nextRowIndex
+		if err := s.hallRepo.UpdateHallLayout(tx, hall); err != nil {
+			return err
+		}
+
+		newSeats = row
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = hallID
+			rec.After = map[string]any{"row_label": nextRowLabel, "seats_added": len(row)}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dto.NewSeatResponses(newSeats), nil
+}
+
+// DeleteRow drops ANY one row, then shifts later rows down so rows stay 1..N (AddRow/RowLabel assume
+// that). Safe: bookings reference seats by id, never row_label, so only deleted seats need the
+// SeatEverHadBooking gate. The shift runs ascending from the deleted row, so each destination is
+// guaranteed free (just vacated) and never collides with uq_seat_hall_row_col.
+func (s *hallService) DeleteRow(ctx context.Context, hallID, rowLabel string) ([]dto.SeatResponse, error) {
+	var removed []models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		hall, err := s.hallRepo.FindByID(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		if hall == nil {
+			return apperrors.ErrHallNotFound
+		}
+		rowIndex := dto.RowNumber(rowLabel)
+		if rowIndex < 1 || rowIndex > hall.Rows {
+			return apperrors.ErrSeatNotFound
+		}
+
+		seats, err := s.hallRepo.SeatsByHall(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		var targetRow []models.Seat
+		for _, seat := range seats {
+			if seat.RowIndex == rowIndex {
+				targetRow = append(targetRow, seat)
+			}
+		}
+
+		for _, seat := range targetRow {
+			everBooked, err := s.hallRepo.SeatEverHadBooking(tx, seat.ID)
+			if err != nil {
+				return err
+			}
+			if everBooked {
+				return apperrors.ErrSeatEverHadBooking
+			}
+		}
+		for _, seat := range targetRow {
+			if err := s.hallRepo.DeleteShowtimeSeatsBySeat(tx, seat.ID); err != nil {
+				return err
+			}
+			if err := s.hallRepo.DeleteSeat(tx, seat.ID); err != nil {
+				return err
+			}
+		}
+
+		for idx := rowIndex + 1; idx <= hall.Rows; idx++ {
+			if err := s.hallRepo.RenumberRow(tx, hallID, idx, idx-1, dto.RowLabel(idx-1)); err != nil {
+				return err
+			}
+		}
+
+		hall.Rows--
+		if err := s.hallRepo.UpdateHallLayout(tx, hall); err != nil {
+			return err
+		}
+
+		removed = targetRow
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = hallID
+			rec.Before = map[string]any{"row_label": rowLabel, "seats_removed": len(targetRow)}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dto.NewSeatResponses(removed), nil
+}
+
+// findSeatByLabel: linear scan is fine (halls are small, <= 2500 cells); avoids a new repo lookup.
+func findSeatByLabel(seats []models.Seat, rowLabel string, col int) *models.Seat {
+	for i := range seats {
+		if seats[i].RowLabel == rowLabel && seats[i].ColNumber == col {
+			return &seats[i]
+		}
+	}
+	return nil
+}
+
+// MergeSeats turns two adjacent standards into one couple (col_span=2) at the left; the right row is
+// deleted (generateSeats emits no row for swallowed columns). Gated per-seat (SeatEverHadBooking), not per-hall.
+func (s *hallService) MergeSeats(ctx context.Context, hallID string, req dto.MergeSeatsRequest) (*dto.SeatResponse, error) {
+	var left models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		hall, err := s.hallRepo.FindByID(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		if hall == nil {
+			return apperrors.ErrHallNotFound
+		}
+		leftRow, leftCol, err := parseGapLabel(req.LeftLabel, hall.Rows, hall.SeatsPerRow)
+		if err != nil {
+			return err
+		}
+		rightRow, rightCol, err := parseGapLabel(req.RightLabel, hall.Rows, hall.SeatsPerRow)
+		if err != nil {
+			return err
+		}
+
+		seats, err := s.hallRepo.SeatsByHall(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		leftSeat := findSeatByLabel(seats, leftRow, leftCol)
+		rightSeat := findSeatByLabel(seats, rightRow, rightCol)
+		if leftSeat == nil || rightSeat == nil {
+			return apperrors.ErrSeatNotFound
+		}
+		if leftRow != rightRow || rightCol != leftCol+1 ||
+			leftSeat.ColSpan != 1 || rightSeat.ColSpan != 1 ||
+			leftSeat.IsGap || rightSeat.IsGap {
+			return apperrors.ErrSeatNotMergeable
+		}
+
+		for _, seat := range []*models.Seat{leftSeat, rightSeat} {
+			everBooked, err := s.hallRepo.SeatEverHadBooking(tx, seat.ID)
+			if err != nil {
+				return err
+			}
+			if everBooked {
+				return apperrors.ErrSeatEverHadBooking
+			}
+		}
+
+		if err := s.hallRepo.DeleteShowtimeSeatsBySeat(tx, rightSeat.ID); err != nil {
+			return err
+		}
+		if err := s.hallRepo.DeleteSeat(tx, rightSeat.ID); err != nil {
+			return err
+		}
+		leftSeat.ColSpan = 2
+		leftSeat.SeatType = "couple"
+		if err := s.hallRepo.UpdateSeatSpan(tx, leftSeat); err != nil {
+			return err
+		}
+
+		left = *leftSeat
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = leftSeat.ID
+			rec.Before = map[string]any{"left": req.LeftLabel, "right": req.RightLabel}
+			rec.After = map[string]any{"seat_type": "couple", "col_span": 2}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := dto.NewSeatResponse(&left)
+	return &result, nil
+}
+
+// SplitSeat turns one couple back into two standards (original keeps col_span=1, new seat at next
+// column). Gated by SeatEverHadBooking on the couple seat.
+func (s *hallService) SplitSeat(ctx context.Context, hallID string, req dto.SplitSeatRequest) ([]dto.SeatResponse, error) {
+	var result []models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		hall, err := s.hallRepo.FindByID(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		if hall == nil {
+			return apperrors.ErrHallNotFound
+		}
+		rowLabel, col, err := parseGapLabel(req.Label, hall.Rows, hall.SeatsPerRow)
+		if err != nil {
+			return err
+		}
+
+		seats, err := s.hallRepo.SeatsByHall(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		seat := findSeatByLabel(seats, rowLabel, col)
+		if seat == nil {
+			return apperrors.ErrSeatNotFound
+		}
+		if seat.ColSpan != 2 {
+			return apperrors.ErrSeatNotCouple
+		}
+
+		everBooked, err := s.hallRepo.SeatEverHadBooking(tx, seat.ID)
+		if err != nil {
+			return err
+		}
+		if everBooked {
+			return apperrors.ErrSeatEverHadBooking
+		}
+
+		seat.ColSpan = 1
+		seat.SeatType = "standard"
+		if err := s.hallRepo.UpdateSeatSpan(tx, seat); err != nil {
+			return err
+		}
+
+		// CreateSeats takes the slice by value: read the generated ID back from newRow[0]
+		// (AddRow avoids this by mutating its slice in place; here the slice is the source of truth).
+		newRow := []models.Seat{{
+			HallID:    hallID,
+			RowIndex:  seat.RowIndex,
+			RowLabel:  seat.RowLabel,
+			ColNumber: col + 1,
+			SeatType:  "standard",
+			IsGap:     false,
+			ColSpan:   1,
+		}}
+		if err := s.hallRepo.CreateSeats(tx, newRow); err != nil {
+			if apperrors.IsUniqueViolation(err) {
+				return apperrors.ErrSeatValidation.WithDetails(map[string]string{"col": strconv.Itoa(col + 1)})
+			}
+			return err
+		}
+		newSeat := newRow[0]
+		if err := s.hallRepo.CreateShowtimeSeatsForSeats(tx, hallID, []string{newSeat.ID}); err != nil {
+			return err
+		}
+
+		result = []models.Seat{*seat, newSeat}
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = seat.ID
+			rec.Before = map[string]any{"seat_type": "couple", "col_span": 2}
+			rec.After = map[string]any{"left": dto.SeatLabel(seat.RowLabel, seat.ColNumber), "right": dto.SeatLabel(newSeat.RowLabel, newSeat.ColNumber)}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dto.NewSeatResponses(result), nil
+}
+
+// DeleteHall soft-deletes a hall; refused (409) while a showtime hasn't ended yet.
 func (s *hallService) DeleteHall(ctx context.Context, hallID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
@@ -797,8 +1107,7 @@ func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps, s
 	return seats, nil
 }
 
-// A span anchor D3 makes one seat covering columns D3-D4; a col_span=2 seat
-// swallows row c+1, which must exist and must not be a gap or another anchor.
+// A span anchor D3 covers D3-D4; the swallowed column must exist and not be a gap/anchor.
 func spanSet(spans []string, rows, seatsPerRow int, gapSet map[string]bool) (span, consumed map[string]bool, err error) {
 	span = make(map[string]bool, len(spans))
 	consumed = make(map[string]bool, len(spans))
@@ -818,10 +1127,8 @@ func spanSet(spans []string, rows, seatsPerRow int, gapSet map[string]bool) (spa
 		if gapSet[label] {
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "gap cannot span"})
 		}
-		// The column this anchor would consume must be free too: it can not
-		// already be another anchor, nor already consumed by one (checking
-		// only the new anchor's own label misses this, e.g. spans ["A3","A2"]
-		// processed in that order would otherwise silently drop seat A4).
+		// The consumed column must be free too (not an anchor/consumed): checking only the new label
+		// misses overlaps like spans ["A3","A2"], which would silently drop seat A4.
 		if span[neighbor] || consumed[neighbor] {
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "overlapping span"})
 		}

@@ -8,10 +8,8 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// The seat grid is generated from these params. With Template set, Rows,
-// SeatsPerRow, SeatTypes, Gaps, Spans, ScreenPosition and AisleAfterCols
-// default to the template's own layout; any of them given explicitly still
-// override it.
+// Seat grid params. With Template set, Rows/SeatsPerRow/SeatTypes/Gaps/Spans/
+// ScreenPosition/AisleAfterCols default to it; explicit fields override.
 type HallRequest struct {
 	Name        string `json:"name" binding:"required,min=1,max=255" example:"Phong 2"`
 	Template    string `json:"template" binding:"omitempty,oneof=small medium large" example:"medium"`
@@ -20,8 +18,7 @@ type HallRequest struct {
 	// Optional: rows not listed are standard.
 	SeatTypes map[string][]string `json:"seat_types"`
 	Gaps      []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
-	// Anchors of 2-column seats, e.g. ["D3"] makes one seat spanning D3-D4; the
-	// neighbor column keeps no seat of its own.
+	// Anchors of 2-column seats, e.g. ["D3"] spans D3-D4; the neighbor keeps no seat.
 	Spans          []string `json:"spans" binding:"omitempty,max=100" example:"[\"D3\"]"`
 	ScreenPosition string   `json:"screen_position" binding:"omitempty,oneof=front back" example:"front"`
 	// Column numbers after which there is a vertical aisle, display only.
@@ -30,8 +27,7 @@ type HallRequest struct {
 	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
 }
 
-// UpdateHallRequest changes a hall's name, screen/aisle display and whether it
-// still takes new showtimes. Omitted fields keep their current value.
+// UpdateHallRequest changes name/screen/aisle/active; omitted fields keep current value.
 type UpdateHallRequest struct {
 	Name           *string `json:"name" binding:"omitempty,min=1,max=255"`
 	ScreenPosition *string `json:"screen_position" binding:"omitempty,oneof=front back"`
@@ -39,8 +35,7 @@ type UpdateHallRequest struct {
 	Active         *bool   `json:"active"`
 }
 
-// CloneHallRequest copies a hall's full seat grid (including any manual seat
-// edits) under a new name.
+// CloneHallRequest copies the full seat grid (incl. manual edits) under a new name.
 type CloneHallRequest struct {
 	Name       string `json:"name" binding:"required,min=1,max=255" example:"Phong 3"`
 	CopyPrices bool   `json:"copy_prices"`
@@ -61,13 +56,11 @@ type SeatChange struct {
 	IsGap    *bool        `json:"is_gap"`
 }
 
-// BulkSeatUpdateRequest applies every change in one transaction; one failing
-// change rolls the whole batch back.
+// BulkSeatUpdateRequest applies every change in one transaction; one failure rolls all back.
 type BulkSeatUpdateRequest struct {
 	Changes []SeatChange `json:"changes" binding:"required,min=1,max=50,dive"`
 }
 
-// HallTemplateResponse previews a built-in hall template before creating it.
 type HallTemplateResponse struct {
 	Name        string         `json:"name"`
 	Rows        int            `json:"rows"`
@@ -82,8 +75,18 @@ type PriceRequest struct {
 
 type SeatUpdateRequest struct {
 	SeatType string `json:"seat_type" binding:"omitempty,oneof=standard vip couple recliner"`
-	// Omitted keeps the current value.
 	IsGap *bool `json:"is_gap"`
+}
+
+// MergeSeatsRequest turns two adjacent standards into one couple (col_span=2); right seat deleted.
+type MergeSeatsRequest struct {
+	LeftLabel  string `json:"left_label" binding:"required,max=8" example:"D3"`
+	RightLabel string `json:"right_label" binding:"required,max=8" example:"D4"`
+}
+
+// SplitSeatRequest turns one couple back into two standards; new seat at next column.
+type SplitSeatRequest struct {
+	Label string `json:"label" binding:"required,max=8" example:"D3"`
 }
 
 type HallResponse struct {

@@ -44,6 +44,10 @@ type AuthService interface {
 	ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error)
 	ForgotPassword(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error
+	// ListSessions: caller's devices; currentDeviceID (may be empty) flags is_current.
+	ListSessions(ctx context.Context, userID, currentDeviceID string) ([]dto.SessionResponse, error)
+	// RevokeSession signs out one device; ErrSessionNotFound if not userID's.
+	RevokeSession(ctx context.Context, userID, sessionID string) error
 }
 
 type authService struct {
@@ -58,16 +62,18 @@ type authService struct {
 	loginGuard  *ratelimit.FailureLimiter
 	// termsVersion is the current terms revision; 0 disables the acceptance gate.
 	termsVersion int
+	// refreshTTL: sliding window a session extends by on each login/refresh.
+	refreshTTL time.Duration
 }
 
 // NewAuthService: loginGuard may be nil (no failed-login lockout).
 func NewAuthService(db *gorm.DB, userRepo repository.UserRepository, tokens repository.RefreshTokenRepository,
 	jwtManager *jwt.Manager, loginGuard *ratelimit.FailureLimiter,
 	resetTokens repository.PasswordResetTokenRepository, mailer notify.Mailer,
-	resetURL string, resetTTL time.Duration, termsVersion int) AuthService {
+	resetURL string, resetTTL time.Duration, termsVersion int, refreshTTL time.Duration) AuthService {
 	return &authService{db: db, userRepo: userRepo, tokens: tokens, resetTokens: resetTokens,
 		mailer: mailer, resetURL: resetURL, resetTTL: resetTTL, jwtManager: jwtManager,
-		loginGuard: loginGuard, termsVersion: termsVersion}
+		loginGuard: loginGuard, termsVersion: termsVersion, refreshTTL: refreshTTL}
 }
 
 func (s *authService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.UserResponse, error) {
@@ -120,7 +126,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		})
 	}
 
-	pair, err := s.issueTokens(ctx, s.db, user, "")
+	pair, err := s.issueTokens(ctx, s.db, user, "", req.DeviceID, req.UserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +138,6 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	}, nil
 }
 
-// AcceptTerms records that the account agreed to the current terms and signs it in.
 func (s *authService) AcceptTerms(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
 	if s.termsVersion <= 0 {
 		return nil, apperrors.Validation("terms acceptance is not required")
@@ -149,7 +154,7 @@ func (s *authService) AcceptTerms(ctx context.Context, req dto.LoginRequest) (*d
 	}
 	user.AcceptedTermsVersion = s.termsVersion
 
-	pair, err := s.issueTokens(ctx, s.db, user, "")
+	pair, err := s.issueTokens(ctx, s.db, user, "", req.DeviceID, req.UserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +166,6 @@ func (s *authService) AcceptTerms(ctx context.Context, req dto.LoginRequest) (*d
 	}, nil
 }
 
-// authenticate runs the shared credential, lockout and account checks.
 func (s *authService) authenticate(ctx context.Context, req dto.LoginRequest) (*models.User, error) {
 	email := normalizeEmail(req.Email)
 	guardKey := email + "|" + req.ClientIP
@@ -197,8 +201,7 @@ func (s *authService) authenticate(ctx context.Context, req dto.LoginRequest) (*
 	return user, nil
 }
 
-// Refresh rotates the refresh token. A token presented twice is a replay: its whole
-// family is revoked and the user must log in again.
+// Refresh rotates the token; a twice-presented token is a replay: whole family revoked, login again.
 func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.TokenResponse, error) {
 	claims, err := s.jwtManager.ParseRefresh(refreshToken)
 	if err != nil {
@@ -238,7 +241,8 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 		if err := s.tokens.MarkUsed(ctx, tx, stored.ID); err != nil {
 			return err
 		}
-		pair, err = s.issueTokens(ctx, tx, u, stored.FamilyID)
+		// Device identity carries forward across rotation (client sends device_id/user_agent at login only).
+		pair, err = s.issueTokens(ctx, tx, u, stored.FamilyID, stored.DeviceID, stored.UserAgent)
 		user = u
 		return err
 	})
@@ -255,8 +259,7 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*dto.To
 	return &result, nil
 }
 
-// Logout revokes the whole token family of the presented refresh token. A token
-// that is already dead still answers 200: the session is simply gone.
+// Logout revokes the token family; an already-dead token still answers 200.
 func (s *authService) Logout(ctx context.Context, refreshToken string) error {
 	claims, err := s.jwtManager.ParseRefresh(refreshToken)
 	if err != nil {
@@ -275,8 +278,7 @@ func (s *authService) Logout(ctx context.Context, refreshToken string) error {
 	})
 }
 
-// ChangePassword checks the current password, then rotates it and revokes every
-// other session; the current one receives a fresh token pair.
+// ChangePassword checks current password, rotates it, revokes other sessions; current gets fresh pair.
 func (s *authService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) (*dto.TokenResponse, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -297,7 +299,7 @@ func (s *authService) ChangePassword(ctx context.Context, userID string, req dto
 		if _, err := s.tokens.RevokeUser(ctx, tx, userID); err != nil {
 			return err
 		}
-		pair, err = s.issueTokens(ctx, tx, user, "")
+		pair, err = s.issueTokens(ctx, tx, user, "", "", "")
 		return err
 	})
 	if err != nil {
@@ -307,9 +309,8 @@ func (s *authService) ChangePassword(ctx context.Context, userID string, req dto
 	return &result, nil
 }
 
-// ForgotPassword always answers 200: it never reveals whether the email exists.
-// For an existing active account it mints one live reset token and emails the
-// link; a missing email burns a bcrypt compare so the answer does not leak timing.
+// ForgotPassword always answers 200 (never reveals existence); missing email burns a bcrypt
+// compare so timing doesn't leak.
 func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 	user, err := s.userRepo.FindByEmail(ctx, normalizeEmail(email))
 	if err != nil {
@@ -348,9 +349,8 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 	return nil
 }
 
-// ResetPassword redeems a single-use token. Wrong, unused, or expired tokens are
-// rejected the same way (400); on success the password changes, the token dies
-// and every refresh token of the user is revoked.
+// ResetPassword redeems a single-use token (wrong/unused/expired all 400); on success the
+// password changes, the token dies and every refresh token is revoked.
 func (s *authService) ResetPassword(ctx context.Context, req dto.ResetPasswordRequest) error {
 	if len(req.Token) < 16 {
 		return apperrors.BadRequest("invalid or expired reset token")
@@ -419,8 +419,9 @@ func (s *authService) sendResetEmail(ctx context.Context, email, token string) e
 	return s.mailer.Send(ctx, notify.Message{To: email, Subject: "Đặt lại mật khẩu", HTML: body.String()})
 }
 
-// issueTokens: an empty familyID starts a new token family (a fresh login).
-func (s *authService) issueTokens(ctx context.Context, tx *gorm.DB, user *models.User, familyID string) (*jwt.TokenPair, error) {
+// issueTokens: empty familyID starts a new family (fresh login); each call slides expiry by
+// refreshTTL and stamps LastUsedAt, so active devices never silently expire.
+func (s *authService) issueTokens(ctx context.Context, tx *gorm.DB, user *models.User, familyID, deviceID, userAgent string) (*jwt.TokenPair, error) {
 	pair, err := s.jwtManager.GeneratePair(user.ID, user.Email, user.Role)
 	if err != nil {
 		return nil, apperrors.Internal("cannot issue token").Wrap(err)
@@ -428,15 +429,55 @@ func (s *authService) issueTokens(ctx context.Context, tx *gorm.DB, user *models
 	if familyID == "" {
 		familyID = uuid.NewString()
 	}
+	now := time.Now()
+	expiresAt := pair.RefreshExpiresAt
+	if s.refreshTTL > 0 {
+		expiresAt = now.Add(s.refreshTTL)
+	}
 	if err := s.tokens.Create(ctx, tx, &models.RefreshToken{
-		ID:        pair.RefreshID,
-		UserID:    user.ID,
-		FamilyID:  familyID,
-		ExpiresAt: pair.RefreshExpiresAt,
+		ID:         pair.RefreshID,
+		UserID:     user.ID,
+		FamilyID:   familyID,
+		DeviceID:   deviceID,
+		UserAgent:  userAgent,
+		ExpiresAt:  expiresAt,
+		LastUsedAt: &now,
 	}); err != nil {
 		return nil, err
 	}
 	return pair, nil
+}
+
+func (s *authService) ListSessions(ctx context.Context, userID, currentDeviceID string) ([]dto.SessionResponse, error) {
+	rows, err := s.tokens.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.SessionResponse, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		out = append(out, dto.SessionResponse{
+			ID:         row.ID,
+			UserAgent:  row.UserAgent,
+			LastUsedAt: row.LastUsedAt,
+			CreatedAt:  row.CreatedAt,
+			IsCurrent:  currentDeviceID != "" && row.DeviceID == currentDeviceID,
+		})
+	}
+	return out, nil
+}
+
+func (s *authService) RevokeSession(ctx context.Context, userID, sessionID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		affected, err := s.tokens.RevokeByID(ctx, tx, sessionID, userID)
+		if err != nil {
+			return err
+		}
+		if affected == 0 {
+			return apperrors.ErrSessionNotFound
+		}
+		return nil
+	})
 }
 
 // loginFailed logs the IP only: emails stay out of logs.
@@ -446,7 +487,6 @@ func (s *authService) loginFailed(key, ip string) {
 	}
 }
 
-// auditSuccess completes the audit record the middleware put in the context.
 func (s *authService) auditSuccess(ctx context.Context, action, userID, role string, after map[string]any) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {

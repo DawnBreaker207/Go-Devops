@@ -1,4 +1,4 @@
-// Package batch runs in-process background jobs with cron scheduling, run logging and chunked retry.
+// Package batch runs in-process cron jobs with run logging and chunked retry.
 package batch
 
 import (
@@ -54,7 +54,6 @@ func NewManager(db *gorm.DB, repo repository.BatchJobRepository) *Manager {
 	return &Manager{db: db, repo: repo, jobs: make(map[string]*Job), ctx: ctx, cancel: cancel}
 }
 
-// Register adds a job; a job with the same name replaces the old one.
 func (m *Manager) Register(job *Job) {
 	m.jobs[job.Name] = job
 }
@@ -67,7 +66,7 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// Start marks runs left RUNNING by a previous process as stopped, then schedules jobs.
+// Start marks orphan RUNNING runs stopped, then schedules jobs.
 func (m *Manager) Start(ctx context.Context) error {
 	stopped, err := m.repo.StopOrphans(ctx)
 	if err != nil {
@@ -95,7 +94,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// A tick that finds the previous run still going is recorded as skipped, not as an error.
+// A tick finding the previous run still going is recorded as skipped, not an error.
 func (m *Manager) runScheduled(name string) {
 	ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
 	defer cancel()
@@ -113,8 +112,7 @@ func (m *Manager) runScheduled(name string) {
 	}
 }
 
-// Stop cancels running jobs (chunked, safe to rerun) and waits for them, bounded by ctx,
-// so shutdown never closes the database under a job.
+// Stop cancels jobs and waits (bounded by ctx) so shutdown never closes the DB under a job.
 func (m *Manager) Stop(ctx context.Context) {
 	m.cancel()
 	done := make(chan struct{})
@@ -132,7 +130,7 @@ func (m *Manager) Stop(ctx context.Context) {
 	}
 }
 
-// Run executes a job and waits for it. It returns ErrJobRunning if the job is already running.
+// Run executes a job; ErrJobRunning if already running.
 func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	job, run, err := m.begin(ctx, name, triggeredBy)
 	if err != nil {
@@ -141,8 +139,7 @@ func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	return m.execute(ctx, job, run)
 }
 
-// Trigger starts a run in the background. It returns once the RUNNING row exists,
-// so an unknown or already running job is reported to the caller.
+// Trigger starts a run in background; returns once the RUNNING row exists.
 func (m *Manager) Trigger(name, triggeredBy string) (string, error) {
 	job, run, err := m.begin(m.ctx, name, triggeredBy)
 	if err != nil {
@@ -224,8 +221,7 @@ type noRetryError struct{ error }
 
 func (e noRetryError) Unwrap() error { return e.error }
 
-// RunInChunks saves progress after each chunk. A failing item is tried up to ItemAttempts
-// times, then skipped; it never stops the job.
+// RunInChunks saves progress per chunk; a failing item retries up to ItemAttempts, then is skipped.
 func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func(ctx context.Context, item T) error) error {
 	const chunkSize = 500
 	processed, skipped := 0, 0

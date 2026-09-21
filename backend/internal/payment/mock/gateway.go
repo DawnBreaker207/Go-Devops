@@ -62,8 +62,7 @@ type notification struct {
 	Signature    string `json:"signature"`
 }
 
-// Gateway simulates a payment provider in memory: checkout page, signed IPNs over HTTP
-// and signed return redirects. A restart forgets every transaction.
+// Gateway simulates a provider in memory; a restart forgets every transaction.
 type Gateway struct {
 	secret   string
 	baseURL  string
@@ -290,7 +289,6 @@ func (g *Gateway) refund(ctx context.Context, ref string, amount int64) error {
 	}
 }
 
-// SetDown makes new payments fail, simulating an outage.
 func (g *Gateway) SetDown(down bool) {
 	g.mu.Lock()
 	g.down = down
@@ -304,7 +302,6 @@ func (g *Gateway) Refunds() int {
 	return g.refunds
 }
 
-// FailRefunds makes every refund fail with err; nil restores them.
 func (g *Gateway) FailRefunds(err error) {
 	g.mu.Lock()
 	g.refundErr = err

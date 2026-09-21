@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	qrcode "github.com/skip2/go-qrcode"
 	"gorm.io/gorm"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
@@ -146,9 +145,9 @@ func (s *ticketEmailService) compose(ctx context.Context, bookingID string) (not
 		Total:      formatVND(header.TotalAmount),
 	}
 	for _, t := range rows {
-		png, err := qrcode.Encode(t.Code, qrcode.Medium, 256)
+		png, err := GenerateQRPNG(t.Code)
 		if err != nil {
-			return notify.Message{}, fmt.Errorf("render QR: %w", err)
+			return notify.Message{}, err
 		}
 		view.Tickets = append(view.Tickets, emailTicket{
 			Seat:     dto.SeatLabel(t.RowLabel, t.ColNumber),
@@ -169,7 +168,7 @@ func (s *ticketEmailService) compose(ctx context.Context, bookingID string) (not
 	}, nil
 }
 
-// ageRatingText renders the rating code for the email: "Mọi lứa tuổi (P)" or "Từ 13 tuổi (T13)".
+// ageRatingText renders the rating code for the email ("P" or "T13 and up").
 func ageRatingText(code string) string {
 	if code == "" || code == "P" {
 		return "Mọi lứa tuổi (P)"

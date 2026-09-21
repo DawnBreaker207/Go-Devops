@@ -6,7 +6,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// ShowtimeRequest schedules a movie in a hall.
 type ShowtimeRequest struct {
 	MovieID string    `json:"movie_id" binding:"required,uuid" example:"10000000-0000-0000-0000-000000000001"`
 	HallID  string    `json:"hall_id" binding:"required,uuid"`
@@ -15,7 +14,6 @@ type ShowtimeRequest struct {
 	Status string `json:"status" binding:"omitempty,oneof=open closed"`
 }
 
-// ShowtimeResponse is a scheduled showtime returned to the client.
 type ShowtimeResponse struct {
 	ID         string    `json:"id"`
 	MovieID    string    `json:"movie_id"`
@@ -30,10 +28,8 @@ type ShowtimeResponse struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// ShowtimeAdminListQuery filters the operator showtime list. Unlike the public picker at
-// GET /showtimes it hides nothing: closed showtimes, draft or ended movies and past dates
-// all stay visible, because those are exactly the rows an operator has to find and fix.
-// Search matches the movie title or the hall name.
+// ShowtimeAdminListQuery: operator list hides nothing (closed/past/draft visible for fixing).
+// Search matches movie title or hall name.
 type ShowtimeAdminListQuery struct {
 	PageQuery
 	MovieID string `form:"movie_id" binding:"omitempty,uuid"`
@@ -47,7 +43,6 @@ type ShowtimeAdminListQuery struct {
 	Order string `form:"order" binding:"omitempty,oneof=asc desc"`
 }
 
-// ShowtimeListItem is one showtime in the movie picker.
 type ShowtimeListItem struct {
 	ID         string    `json:"id"`
 	MovieID    string    `json:"movie_id"`
@@ -61,7 +56,6 @@ type ShowtimeListItem struct {
 	FromPrice  int64     `json:"from_price,omitempty"`
 }
 
-// NewShowtimeListItem maps a row with hall name and price to a DTO.
 func NewShowtimeListItem(s models.Showtime, hallName string, fromPrice int64) ShowtimeListItem {
 	return ShowtimeListItem{
 		ID:        s.ID,
@@ -75,7 +69,13 @@ func NewShowtimeListItem(s models.Showtime, hallName string, fromPrice int64) Sh
 	}
 }
 
-// SeatMapSeat is one seat inside the showtime grid.
+// ShowtimeCancelResponse: bookings refunded through the normal refund pipeline.
+type ShowtimeCancelResponse struct {
+	ShowtimeID       string `json:"showtime_id"`
+	Status           string `json:"status"`
+	BookingsAffected int    `json:"bookings_affected"`
+}
+
 type SeatMapSeat struct {
 	ID             string `json:"id"`
 	ShowtimeSeatID string `json:"showtime_seat_id,omitempty"`
@@ -89,7 +89,6 @@ type SeatMapSeat struct {
 	Price          int64  `json:"price"`
 }
 
-// SeatMapResponse is the seat grid for a showtime.
 type SeatMapResponse struct {
 	ShowtimeID     string           `json:"showtime_id"`
 	MovieID        string           `json:"movie_id"`

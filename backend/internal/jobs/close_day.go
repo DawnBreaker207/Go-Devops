@@ -8,8 +8,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 )
 
-// NewCloseDay writes daily aggregates at 23:59 local time. Yesterday is re-closed too so a
-// missed run or late confirmation is caught up; the upsert keeps one row per day.
+// NewCloseDay closes yesterday and today (upsert, one row per day); rerun-safe.
 func NewCloseDay(reports service.ReportService, location *time.Location) *batch.Job {
 	return &batch.Job{
 		Name:     "closeDay",
