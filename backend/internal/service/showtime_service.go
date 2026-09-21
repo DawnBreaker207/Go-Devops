@@ -477,7 +477,10 @@ func (s *showtimeService) ListByMovie(ctx context.Context, movieID, date string)
 	if err != nil {
 		return nil, err
 	}
-	if movie.Status != models.MovieStatusShowing {
+	// A coming-soon movie normally has no showtimes yet, but an early preview
+	// showtime can be scheduled ahead of its main release; the picker must still
+	// surface it instead of always answering empty for a not-yet-showing movie.
+	if movie.Status != models.MovieStatusShowing && movie.Status != models.MovieStatusComingSoon {
 		return []dto.ShowtimeListItem{}, nil
 	}
 

@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	MovieStatusDraft   = "draft"
-	MovieStatusShowing = "showing"
-	MovieStatusEnded   = "ended"
+	MovieStatusDraft      = "draft"
+	MovieStatusComingSoon = "coming_soon"
+	MovieStatusShowing    = "showing"
+	MovieStatusEnded      = "ended"
 )
 
 type Movie struct {

@@ -20,7 +20,7 @@ type MovieRequest struct {
 	// AgeRating is Vietnamese film classification; empty defaults to P.
 	AgeRating   string `json:"age_rating" binding:"omitempty,oneof=P K T13 T16 T18" example:"T18"`
 	ReleaseDate string `json:"release_date" binding:"required,datetime=2006-01-02" example:"2010-07-16"`
-	Status      string `json:"status" binding:"required,oneof=draft showing ended" example:"showing"`
+	Status      string `json:"status" binding:"required,oneof=draft coming_soon showing ended" example:"showing"`
 }
 
 // Binding validates the format, so errors only occur on direct calls.
@@ -31,7 +31,7 @@ func (r MovieRequest) ParseReleaseDate() (time.Time, error) {
 // Customers never see drafts.
 type MovieListQuery struct {
 	PageQuery
-	Status string `form:"status" binding:"omitempty,oneof=draft showing ended"`
+	Status string `form:"status" binding:"omitempty,oneof=draft coming_soon showing ended"`
 	Genre  string `form:"genre" binding:"omitempty,max=100"`
 	Sort   string `form:"sort" binding:"omitempty,oneof=release_date title created_at"`
 	Order  string `form:"order" binding:"omitempty,oneof=asc desc" example:"desc"`

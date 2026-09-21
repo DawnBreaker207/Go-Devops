@@ -195,7 +195,10 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 			movies.age_rating AS age_rating, showtimes.hall_id,
 			showtimes.start_at, showtimes.end_at, showtimes.status, halls.name AS hall_name,
 			MIN(hall_prices.price) AS from_price`).
-		Joins("JOIN movies ON movies.id = showtimes.movie_id AND movies.deleted_at IS NULL AND movies.status = ?", models.MovieStatusShowing).
+		// A coming-soon movie can carry an early preview showtime; the picker must
+		// not hide it just because the movie has not moved to "showing" yet.
+		Joins("JOIN movies ON movies.id = showtimes.movie_id AND movies.deleted_at IS NULL AND movies.status IN ?",
+			[]string{models.MovieStatusShowing, models.MovieStatusComingSoon}).
 		Joins("JOIN halls ON halls.id = showtimes.hall_id AND halls.deleted_at IS NULL").
 		Joins("JOIN hall_prices ON hall_prices.hall_id = showtimes.hall_id")
 	if movieID != "" {
