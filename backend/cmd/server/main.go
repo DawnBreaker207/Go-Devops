@@ -131,19 +131,21 @@ func run() error {
 	tokens := sse.NewTokenStore(sse.DefaultTokenTTL, nil)
 
 	bookingOpts := service.BookingOptions{
-		DB:            db,
-		Repo:          bookingRepo,
-		Payments:      paymentRepo,
-		Providers:     providers,
-		PublicBaseURL: cfg.Payment.PublicBaseURL,
-		HoldTTL:       time.Duration(cfg.Booking.HoldTTLMinutes) * time.Minute,
-		MaxSeats:      cfg.Booking.MaxSeatsPerBooking,
-		Hub:           hub,
+		DB:                 db,
+		Repo:               bookingRepo,
+		Payments:           paymentRepo,
+		Providers:          providers,
+		PublicBaseURL:      cfg.Payment.PublicBaseURL,
+		HoldTTL:            time.Duration(cfg.Booking.HoldTTLMinutes) * time.Minute,
+		MaxSeats:           cfg.Booking.MaxSeatsPerBooking,
+		RefreshMaxLifetime: time.Duration(cfg.Booking.HoldMaxLifetimeMinutes) * time.Minute,
+		Hub:                hub,
 
 		LateCaptureWindow: cfg.Payment.LateCaptureWindow,
 		CheckinOpenBefore: time.Duration(cfg.Checkin.OpenBeforeMinutes) * time.Minute,
 		CheckinCloseAfter: time.Duration(cfg.Checkin.CloseAfterMinutes) * time.Minute,
 		Location:          location,
+		CatalogCache:      catalogCache,
 	}
 	if queueClient != nil {
 		bookingOpts.Publisher = queueClient
@@ -191,7 +193,7 @@ func run() error {
 		Movie:    handlers.NewMovieHandler(movieService),
 		Batch:    handlers.NewBatchHandler(batchManager, batchRepo, db),
 		Hall:     handlers.NewHallHandler(hallService),
-		Showtime: handlers.NewShowtimeHandler(showtimeService),
+		Showtime: handlers.NewShowtimeHandler(showtimeService, bookingService),
 		Booking:  handlers.NewBookingHandler(bookingService),
 		SSE:      handlers.NewSSEHandler(hub, tokens, showtimeService),
 		Payment:  handlers.NewPaymentHandler(providers, bookingService, cfg.Payment.ReturnRedirectURL),

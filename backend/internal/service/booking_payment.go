@@ -34,8 +34,7 @@ const (
 	defaultLateCaptureWindow = 24 * time.Hour
 )
 
-// Pay stores the attempt row before calling the provider, so an immediate IPN finds it;
-// the provider is never called inside a transaction.
+// Pay stores the attempt row before calling the provider (so an immediate IPN finds it); never calls inside a transaction.
 func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req dto.PayRequest) (*dto.PayResponse, error) {
 	name := strings.TrimSpace(req.Provider)
 	if name == "" {
@@ -57,8 +56,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 	)
 	err := s.inTx(ctx, func(tx *gorm.DB) error {
 		attempt, reused, resume = nil, false, false
-		// Account row before booking row, the same order as a hold, so an
-		// account lock waiting between them can not deadlock the two.
+		// Account row before booking row (same order as hold) so locks can't deadlock.
 		active, err := s.repo.UserActive(ctx, tx, userID)
 		if err != nil {
 			return err
@@ -86,14 +84,17 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		if b.ExpiresAt == nil || !b.ExpiresAt.After(now) {
 			return apperrors.ErrBookingExpired
 		}
-		// No money for a show that stopped selling or already started: the
-		// confirm could only refund it.
+		// No money for a stopped/started show: confirm could only refund it.
 		showtime, err := s.repo.LockShowtime(ctx, tx, b.ShowtimeID)
 		if err != nil {
 			return err
 		}
 		if showtime == nil || showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now) {
 			return apperrors.ErrShowtimeClosed
+		}
+		// Zero total means no seats (prices are always positive): an init shell can't start payment.
+		if b.TotalAmount <= 0 {
+			return apperrors.ErrBookingEmpty
 		}
 		booking = *b
 
@@ -104,8 +105,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		if open != nil {
 			attempt, reused = open, true
 			if open.RedirectURL == nil {
-				// Stored but never opened (provider call failed or the process died): after a
-				// grace period this request takes it over with the same reference.
+			// Stored but never opened (call failed/died): after a grace period this request takes it over.
 				n, err := s.payments.ClaimOrphanCheckout(ctx, tx, open.ID, orphanCheckoutAfter)
 				if err != nil {
 					return err
@@ -154,8 +154,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 	cancel()
 	bg := context.WithoutCancel(ctx)
 	if err != nil && resume {
-		// Retrying an orphan keeps the attempt open; the sweep abandons it if
-		// the provider never answers.
+		// Retrying an orphan keeps the attempt open; the sweep abandons it if the provider never answers.
 		return nil, apperrors.ErrPaymentGateway.Wrap(err)
 	}
 	if err != nil {
@@ -225,8 +224,7 @@ func (s *bookingService) HandleNotification(ctx context.Context, provider paymen
 	return ack
 }
 
-// HandleReturn trusts the redirect only to identify the attempt; the real state is
-// queried from the provider.
+// HandleReturn trusts the redirect only to identify the attempt; state is queried from the provider.
 func (s *bookingService) HandleReturn(ctx context.Context, provider payment.Provider, r *http.Request) (*dto.PaymentReturnResponse, error) {
 	ref, err := provider.ParseReturn(r)
 	if errors.Is(err, payment.ErrInvalidSignature) {
@@ -274,8 +272,7 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 	err := s.inTx(ctx, func(tx *gorm.DB) error {
 		ack, out, bookingID, showID = payment.AckProcessed, finalizeOutcome{}, "", ""
 
-		// Booking row before payment row, the same order as Pay, so a pay
-		// request and a notification of the same booking can not deadlock.
+		// Booking row before payment row (same order as Pay) so pay and notification can't deadlock.
 		found, err := s.payments.FindByRef(ctx, providerName, n.TxnRef)
 		if err != nil {
 			return err
@@ -323,8 +320,7 @@ func (s *bookingService) applyNotification(ctx context.Context, providerName str
 			return nil
 		}
 
-		// The booking already carries money of another attempt (the customer
-		// paid twice, e.g. with two providers): this payment goes straight back.
+		// Booking already carries another attempt's money (paid twice): this payment goes straight back.
 		if b.PaidAt != nil {
 			if _, err := s.payments.MarkCaptured(ctx, tx, attempt.ID, models.PaymentRefundPending,
 				n.Amount, n.ProviderTxnID, n.Data, models.PaymentReasonDuplicate); err != nil {
@@ -368,6 +364,9 @@ func (s *bookingService) Confirm(ctx context.Context, userID, bookingID string) 
 	b, err := s.ownedBooking(ctx, userID, bookingID)
 	if err != nil {
 		return nil, err
+	}
+	if b.TotalAmount <= 0 {
+		return nil, apperrors.ErrBookingEmpty
 	}
 	settled, err := s.finalize(ctx, b.ID, sourceCustomer)
 	if err != nil {
@@ -425,10 +424,9 @@ func (s *bookingService) finalize(ctx context.Context, bookingID, source string)
 	return s.repo.FindByID(context.WithoutCancel(ctx), bookingID)
 }
 
-// finalizeTx is the only place a paid booking leaves PENDING. It sells every held seat (fenced
-// by hold version, TTL and showtime state) or refunds, in one transaction; the provider refund
-// runs after commit. The locked booking row makes concurrent IPN, reconcile and confirm converge.
-// A non-empty reason forces the refund.
+// finalizeTx: the only place a paid booking leaves PENDING. Sells held seats (fenced by hold
+// version/TTL/showtime) or refunds in one transaction; provider refund after commit. The locked
+// row makes concurrent IPN/reconcile/confirm converge; non-empty reason forces the refund.
 func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.Booking, reason, source string, out *finalizeOutcome) error {
 	switch b.Status {
 	case models.BookingConfirmed, models.BookingRefunded:
@@ -558,10 +556,8 @@ func (s *bookingService) refundTx(ctx context.Context, tx *gorm.DB, b *models.Bo
 		return fmt.Errorf("refund payment %s: not in paid state", *b.PaymentID)
 	}
 	out.refunds = append(out.refunds, *b.PaymentID)
-	// resource_type="payment" here matches the other orders.refund call site
-	// (the duplicate-capture case in applyNotification): both refund a
-	// payment attempt, so both key off the payment, with booking_id as the
-	// correlation field rather than the primary resource.
+	// resource_type="payment" matches the duplicate-capture site in applyNotification: both refund an
+	// attempt, keyed off the payment with booking_id as correlation.
 	return s.audit(ctx, tx, "orders.refund", "payment", *b.PaymentID, b.ID, map[string]any{
 		"status": models.BookingRefunded, "reason": reason, "amount": b.TotalAmount,
 		"payment_id": *b.PaymentID, "source": source,
@@ -583,8 +579,7 @@ func (s *bookingService) afterFinalize(ctx context.Context, bookingID, showID st
 
 // settleRefund: a failure leaves the refund pending; the sweep retries.
 func (s *bookingService) settleRefund(ctx context.Context, paymentID string) bool {
-	// Claim first: the IPN path and the sweep may both get here, and a provider
-	// must never be asked twice at the same time.
+	// Claim first: IPN path and sweep may both get here; provider must never be asked twice at once.
 	attempt, err := s.payments.ClaimRefund(ctx, paymentID, refundLease)
 	if err != nil {
 		logger.Warn("claim refund failed", logger.String("payment_id", paymentID), logger.Err(err))
@@ -645,8 +640,7 @@ func (s *bookingService) deferRefund(ctx context.Context, attempt *models.Paymen
 	}
 }
 
-// reconcile queries providers because the IPN may be lost, and settles a paid
-// booking whose confirm never completed.
+// reconcile queries providers (IPN may be lost) and settles paid bookings whose confirm never completed.
 func (s *bookingService) reconcile(ctx context.Context, b *models.Booking) error {
 	if b.Status == models.BookingPending && b.PaidAt != nil {
 		_, err := s.finalize(ctx, b.ID, sourceReconcile)
@@ -694,8 +688,7 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 		return reconcileNothing, nil
 	}
 	if attempt.Status == models.PaymentFailed {
-		// Money collected after we gave up on the attempt: settling it
-		// confirms the booking or refunds the money. Never abandoned again.
+		// Money collected after give-up: settling confirms or refunds. Never abandoned again.
 		if qerr == nil && n.Status == payment.StatePaid {
 			n.TxnRef = attempt.TxnRef
 			if _, err := s.applyNotification(ctx, attempt.Provider, n, sourceReconcile); err != nil {
@@ -737,6 +730,126 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 		return reconcileNothing, nil
 	}
 	return reconcileNothing, nil
+}
+
+// CancelShowtime: same MarkRefundPending-in-tx + post-commit settleRefund pipeline as every other
+// refund (see finalizeTx/refundTx). CONFIRMED flips straight to REFUNDED with tickets voided
+// (RefundBooking can't undo a sale); PENDING is released/expired, refunded too if already paid.
+func (s *bookingService) CancelShowtime(ctx context.Context, showtimeID string) (*dto.ShowtimeCancelResponse, error) {
+	var (
+		refundPaymentIDs []string
+		released         []string
+		affected         int
+	)
+	err := s.inTx(ctx, func(tx *gorm.DB) error {
+		refundPaymentIDs, released, affected = nil, nil, 0
+
+		showtime, err := s.repo.LockShowtimeExclusive(ctx, tx, showtimeID)
+		if err != nil {
+			return err
+		}
+		if showtime == nil {
+			return apperrors.ErrShowtimeNotFound
+		}
+		if showtime.Status == models.ShowtimeCancelled {
+			return apperrors.ErrShowtimeAlreadyCancelled
+		}
+
+		ids, err := s.repo.BookingIDsForShowtime(ctx, tx, showtimeID, []string{models.BookingPending, models.BookingConfirmed})
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			b, err := s.repo.LockBooking(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if b == nil {
+				continue
+			}
+			switch b.Status {
+			case models.BookingPending:
+				bseats, err := s.repo.BookingSeats(ctx, tx, b.ID)
+				if err != nil {
+					return err
+				}
+				for _, bs := range bseats {
+					n, err := s.repo.ReleaseHeldSeat(ctx, tx, bs.ShowtimeSeatID, b.UserID, bs.HoldVersion)
+					if err != nil {
+						return err
+					}
+					if n > 0 {
+						released = append(released, bs.ShowtimeSeatID)
+					}
+				}
+				if b.PaidAt != nil && b.PaymentID != nil {
+					// Rare: paid but never finalized. Refund the money and settle the
+					// booking through the normal refund path.
+					n, err := s.payments.MarkRefundPending(ctx, tx, *b.PaymentID, models.ReasonShowtimeCancelled)
+					if err != nil {
+						return err
+					}
+					if n > 0 {
+						refundPaymentIDs = append(refundPaymentIDs, *b.PaymentID)
+					}
+					if _, err := s.repo.RefundBooking(ctx, tx, b.ID, models.ReasonShowtimeCancelled); err != nil {
+						return err
+					}
+				} else {
+					if _, err := s.repo.ExpireBooking(ctx, tx, b.ID, models.ReasonShowtimeCancelled); err != nil {
+						return err
+					}
+				}
+			case models.BookingConfirmed:
+				if _, err := s.repo.VoidTicketsForBooking(ctx, tx, b.ID); err != nil {
+					return err
+				}
+				if b.PaymentID != nil {
+					n, err := s.payments.MarkRefundPending(ctx, tx, *b.PaymentID, models.ReasonShowtimeCancelled)
+					if err != nil {
+						return err
+					}
+					if n > 0 {
+						refundPaymentIDs = append(refundPaymentIDs, *b.PaymentID)
+					}
+				}
+				if _, err := s.repo.RefundConfirmedBooking(ctx, tx, b.ID, models.ReasonShowtimeCancelled); err != nil {
+					return err
+				}
+			default:
+				continue
+			}
+			affected++
+			if err := s.audit(ctx, tx, "orders.refund", "booking", b.ID, b.ID, map[string]any{
+				"status": models.BookingRefunded, "reason": models.ReasonShowtimeCancelled, "source": "admin_cancel_showtime",
+			}); err != nil {
+				return err
+			}
+		}
+
+		if _, err := s.repo.CancelShowtimeStatus(ctx, tx, showtimeID); err != nil {
+			return err
+		}
+		return s.audit(ctx, tx, "admin.cancel_showtime", "showtime", showtimeID, "", map[string]any{
+			"status": models.ShowtimeCancelled, "bookings_affected": affected,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	bumpCatalog(ctx, s.catalogCache)
+
+	bg := context.WithoutCancel(ctx)
+	for _, id := range refundPaymentIDs {
+		s.settleRefund(bg, id)
+	}
+	s.broadcast(showtimeID, models.SeatStatusAvailable, released)
+
+	return &dto.ShowtimeCancelResponse{
+		ShowtimeID:       showtimeID,
+		Status:           models.ShowtimeCancelled,
+		BookingsAffected: affected,
+	}, nil
 }
 
 func (s *bookingService) SweepExpired(ctx context.Context, limit int) (SweepResult, error) {

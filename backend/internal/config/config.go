@@ -37,18 +37,14 @@ type RedisConfig struct {
 	Password string        `mapstructure:"password"`
 	DB       int           `mapstructure:"db"`
 	TTL      time.Duration `mapstructure:"ttl"`
-	// ShowtimesTTL is much shorter than TTL: a showtime must fall out of "on
-	// sale" listings close to when it actually starts or closes.
+	// ShowtimesTTL is much shorter than TTL: listings must drop a showtime near start/close.
 	ShowtimesTTL time.Duration `mapstructure:"showtimes_ttl"`
 }
 
-// AccountConfig wires the self-service account flows.
 type AccountConfig struct {
-	// TermsVersion is the current terms revision; 0 disables the gate. A user
-	// whose AcceptedTermsVersion is older can not log in until they accept.
+	// TermsVersion is the current terms revision; 0 disables the gate.
 	TermsVersion int `mapstructure:"terms_version"`
-	// PasswordResetURL is the frontend page the reset link points to; the token is appended
-	// as ?token=<hex>. Reset tokens stay valid PasswordResetTTL (5m-24h).
+	// PasswordResetURL is the frontend reset page; token appended as ?token=<hex>.
 	PasswordResetURL string        `mapstructure:"password_reset_url"`
 	PasswordResetTTL time.Duration `mapstructure:"password_reset_ttl"`
 }
@@ -78,8 +74,7 @@ type ServerConfig struct {
 	ShutdownTimeout   time.Duration `mapstructure:"shutdown_timeout"`
 	// MaxBodyBytes caps JSON request bodies; uploads enforce their own limit.
 	MaxBodyBytes int64 `mapstructure:"max_body_bytes"`
-	// TrustedProxies (IPs or CIDRs) may set X-Forwarded-For. Empty trusts none, so the
-	// client IP is the TCP peer and rate limits can't be dodged.
+	// TrustedProxies (IPs/CIDRs) may set X-Forwarded-For; empty trusts none.
 	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
@@ -137,9 +132,11 @@ type QueueConfig struct {
 type BookingConfig struct {
 	HoldTTLMinutes     int `mapstructure:"hold_ttl_minutes"`
 	MaxSeatsPerBooking int `mapstructure:"max_seats_per_booking"`
+	// HoldMaxLifetimeMinutes caps total booking age from created_at; 0 means HoldTTLMinutes (no refresh).
+	HoldMaxLifetimeMinutes int `mapstructure:"hold_max_lifetime_minutes"`
 }
 
-// CheckinConfig: tickets are accepted from OpenBeforeMinutes before the showtime to CloseAfterMinutes after its start.
+// Checkin window around showtime start.
 type CheckinConfig struct {
 	OpenBeforeMinutes int `mapstructure:"open_before_minutes"`
 	CloseAfterMinutes int `mapstructure:"close_after_minutes"`
@@ -197,7 +194,6 @@ func (d DatabaseConfig) DSN() string {
 	)
 }
 
-// MigrateURL is the connection URL for golang-migrate.
 func (d DatabaseConfig) MigrateURL() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -271,8 +267,7 @@ func loadDotEnv(file string) error {
 // Fragments of the placeholder secrets shipped in config.yaml, .env.example and docker-compose.yml.
 var devSecretMarkers = []string{"change_me", "change-me", "changeme", "change-in-prod", "change_in_prod"}
 
-// productionSecret rejects short or placeholder secrets: with a public dev secret anyone
-// could sign admin tokens or fake payment notifications.
+// productionSecret rejects short/placeholder secrets (forged tokens/notifications risk).
 func productionSecret(name, value string) error {
 	if len(value) < 32 {
 		return fmt.Errorf("%s must be at least 32 characters in production", name)
@@ -331,6 +326,9 @@ func (c *Config) validate() error {
 	}
 	if c.Booking.MaxSeatsPerBooking < 1 || c.Booking.MaxSeatsPerBooking > 50 {
 		return fmt.Errorf("booking.max_seats_per_booking must be between 1 and 50, got %d", c.Booking.MaxSeatsPerBooking)
+	}
+	if c.Booking.HoldMaxLifetimeMinutes < 0 || c.Booking.HoldMaxLifetimeMinutes > 180 {
+		return fmt.Errorf("booking.hold_max_lifetime_minutes must be between 0 and 180, got %d", c.Booking.HoldMaxLifetimeMinutes)
 	}
 	if c.App.RoomCleanupMinutes < 0 || c.App.RoomCleanupMinutes > 240 {
 		return fmt.Errorf("app.room_cleanup_minutes must be between 0 and 240, got %d", c.App.RoomCleanupMinutes)
@@ -445,6 +443,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("booking.hold_ttl_minutes", 10)
 	v.SetDefault("booking.max_seats_per_booking", 10)
+	v.SetDefault("booking.hold_max_lifetime_minutes", 15)
 
 	v.SetDefault("checkin.open_before_minutes", 30)
 	v.SetDefault("checkin.close_after_minutes", 20)

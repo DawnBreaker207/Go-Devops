@@ -29,7 +29,8 @@ const (
 	ReasonShowtimeClosed  = "showtime_closed" // showtime closed or started before confirm
 	ReasonAmountMismatch  = "amount_mismatch"
 	ReasonPaidAfterExpiry = "paid_after_expiry"
-	ReasonCanceled        = "canceled" // the customer released the hold
+	ReasonCanceled          = "canceled" // the customer released the hold
+	ReasonShowtimeCancelled = "showtime_cancelled" // the cinema cancelled the whole showtime
 )
 
 // At most one PENDING booking per user per showtime (partial unique index).
@@ -91,6 +92,9 @@ func (s *BookingSeat) BeforeCreate(*gorm.DB) error {
 const (
 	TicketIssued   = "issued"
 	TicketRedeemed = "redeemed"
+	// TicketVoid marks a ticket whose showtime was cancelled by the cinema; it can
+	// never be redeemed again.
+	TicketVoid = "void"
 )
 
 const (

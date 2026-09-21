@@ -34,3 +34,4 @@ tmp/
 # claude code (personal, never shared)
 .claude/settings.local.json
 CLAUDE.local.md
+.claude/worktrees/

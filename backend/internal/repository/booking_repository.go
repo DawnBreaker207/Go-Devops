@@ -42,6 +42,15 @@ type TicketGateRow struct {
 	ColNumber     int       `gorm:"column:col_number"`
 }
 
+// TicketOwnerRow: ticket plus owner identity for GET /tickets/{id}/qr authorization.
+type TicketOwnerRow struct {
+	ID        string `gorm:"column:id"`
+	Code      string `gorm:"column:code"`
+	Status    string `gorm:"column:status"`
+	BookingID string `gorm:"column:booking_id"`
+	UserID    string `gorm:"column:user_id"`
+}
+
 type BookingHeader struct {
 	ID          string    `gorm:"column:id"`
 	Status      string    `gorm:"column:status"`
@@ -66,10 +75,8 @@ type ShowtimeInfoRow struct {
 	EndAt      time.Time `gorm:"column:end_at"`
 }
 
-// AdminOrderRow is one booking on the operator list: the booking columns the
-// list shows, the account it belongs to (none for a counter sale), the showtime
-// it is for, and the payment attempt whose money it carries (none until it
-// carries one). Nullable text columns are plain strings, as BookingHeader does.
+// AdminOrderRow: one operator-list booking (account, showtime, carried payment attempt).
+// Nullable text columns are plain strings, like BookingHeader.
 type AdminOrderRow struct {
 	ID            string     `gorm:"column:id"`
 	UserID        string     `gorm:"column:user_id"`
@@ -108,6 +115,26 @@ type AdminOrderRow struct {
 	PaymentRefundedAt   *time.Time `gorm:"column:payment_refunded_at"`
 }
 
+// TransactionRow: one payment attempt for GET /users/me/transactions, with booking/movie/hall/start
+// context but not the full order shape GET /orders covers.
+type TransactionRow struct {
+	PaymentID        string     `gorm:"column:payment_id"`
+	Provider         string     `gorm:"column:provider"`
+	TxnRef           string     `gorm:"column:txn_ref"`
+	Status           string     `gorm:"column:status"`
+	StatusReason     string     `gorm:"column:status_reason"`
+	Amount           int64      `gorm:"column:amount"`
+	PaidAmount       *int64     `gorm:"column:paid_amount"`
+	PaidAt           *time.Time `gorm:"column:paid_at"`
+	RefundedAt       *time.Time `gorm:"column:refunded_at"`
+	PaymentCreatedAt time.Time  `gorm:"column:payment_created_at"`
+	BookingID        string     `gorm:"column:booking_id"`
+	ShowtimeID       string     `gorm:"column:showtime_id"`
+	MovieTitle       string     `gorm:"column:movie_title"`
+	HallName         string     `gorm:"column:hall_name"`
+	StartAt          time.Time  `gorm:"column:start_at"`
+}
+
 // Methods taking tx run in the caller's transaction; a nil tx uses the plain connection.
 type BookingRepository interface {
 	Now(ctx context.Context, tx *gorm.DB) (time.Time, error)
@@ -116,6 +143,8 @@ type BookingRepository interface {
 	FindByIDAndUser(ctx context.Context, id, userID string) (*models.Booking, error)
 	ListByUser(ctx context.Context, userID string, page, pageSize int) ([]models.Booking, int64, error)
 	AdminOrderList(ctx context.Context, query dto.AdminOrderListQuery, from, to time.Time) ([]AdminOrderRow, int64, error)
+	// TransactionsByUser: every payment attempt on the user's bookings, newest first (financial view).
+	TransactionsByUser(ctx context.Context, userID string, page, pageSize int) ([]TransactionRow, int64, error)
 
 	LockUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) error
 	UserActive(ctx context.Context, tx *gorm.DB, userID string) (bool, error)
@@ -123,6 +152,9 @@ type BookingRepository interface {
 	LockLatestByKey(ctx context.Context, tx *gorm.DB, idempotencyKey string) (*models.Booking, error)
 	LockPendingByUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) (*models.Booking, error)
 	LockShowtime(ctx context.Context, tx *gorm.DB, id string) (*models.Showtime, error)
+	// LockShowtimeExclusive: LockShowtime's exclusive counterpart for cancel-showtime; waits out
+	// in-flight holds/pays/confirms (same discipline as ShowtimeRepository.LockForUpdate).
+	LockShowtimeExclusive(ctx context.Context, tx *gorm.DB, id string) (*models.Showtime, error)
 	MovieShowing(ctx context.Context, tx *gorm.DB, movieID string) (bool, error)
 
 	Create(ctx context.Context, tx *gorm.DB, booking *models.Booking) error
@@ -131,9 +163,19 @@ type BookingRepository interface {
 	BookingSeats(ctx context.Context, tx *gorm.DB, bookingID string) ([]models.BookingSeat, error)
 
 	ExpireBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
+	// ExtendBookingExpiry moves a pending unpaid booking's expiry; concurrent changes make it a no-op.
+	ExtendBookingExpiry(ctx context.Context, tx *gorm.DB, id string, expiresAt time.Time) (int64, error)
 	SetPaid(ctx context.Context, tx *gorm.DB, id, paymentID string) (int64, error)
 	ConfirmBooking(ctx context.Context, tx *gorm.DB, id string) (int64, error)
 	RefundBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
+	// RefundConfirmedBooking: RefundBooking for CONFIRMED (tickets issued), only for showtime-cancel.
+	RefundConfirmedBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
+	// VoidTicketsForBooking marks a booking's issued tickets void, for showtime-cancel.
+	VoidTicketsForBooking(ctx context.Context, tx *gorm.DB, bookingID string) (int64, error)
+	// BookingIDsForShowtime lists a showtime's bookings in given statuses, for the cancel cascade.
+	BookingIDsForShowtime(ctx context.Context, tx *gorm.DB, showtimeID string, statuses []string) ([]string, error)
+	// CancelShowtimeStatus moves a showtime to 'cancelled'; 0 rows means already cancelled.
+	CancelShowtimeStatus(ctx context.Context, tx *gorm.DB, showtimeID string) (int64, error)
 
 	LockSeats(ctx context.Context, tx *gorm.DB, showtimeID string, ids []string) ([]models.ShowtimeSeat, error)
 	HoldSeat(ctx context.Context, tx *gorm.DB, id, userID string, heldUntil time.Time) (int64, error)
@@ -147,6 +189,8 @@ type BookingRepository interface {
 	TicketRows(ctx context.Context, bookingID string) ([]TicketRow, error)
 	ShowtimeInfos(ctx context.Context, ids []string) (map[string]ShowtimeInfoRow, error)
 	TicketForGate(ctx context.Context, ref string) (*TicketGateRow, error)
+	// TicketByID looks a ticket up by id (not code) for QR; works whether or not the showtime started.
+	TicketByID(ctx context.Context, id string) (*TicketOwnerRow, error)
 	RedeemTicket(ctx context.Context, tx *gorm.DB, ticketID string) (int64, error)
 
 	SweepExpiredHolds(ctx context.Context, limit int) ([]models.ShowtimeSeat, error)
@@ -224,8 +268,7 @@ func (r *bookingRepository) ListByUser(ctx context.Context, userID string, page,
 	return bookings, total, nil
 }
 
-// LockUserShow serializes one user's holds on one showtime (tabs, retries) so each sees the
-// booking the previous one committed. The two-key lock does not collide with the one-key hall lock.
+// LockUserShow serializes one user's holds on one showtime; two-key lock avoids the hall lock.
 func (r *bookingRepository) LockUserShow(ctx context.Context, tx *gorm.DB, userID, showtimeID string) error {
 	if err := r.conn(ctx, tx).Exec("SELECT pg_advisory_xact_lock(hashtext(?), hashtext(?))", userID, showtimeID).Error; err != nil {
 		return fmt.Errorf("lock user showtime: %w", err)
@@ -233,8 +276,7 @@ func (r *bookingRepository) LockUserShow(ctx context.Context, tx *gorm.DB, userI
 	return nil
 }
 
-// UserActive share-locks the user row so an admin locking the account waits for in-flight
-// holds and payments. Take it before any booking lock to keep one lock order.
+// UserActive share-locks the user row; take before any booking lock to keep one lock order.
 func (r *bookingRepository) UserActive(ctx context.Context, tx *gorm.DB, userID string) (bool, error) {
 	var active []bool
 	if err := r.conn(ctx, tx).Raw(`SELECT active FROM users WHERE id = ? AND deleted_at IS NULL FOR SHARE`, userID).
@@ -260,10 +302,13 @@ func (r *bookingRepository) LockPendingByUserShow(ctx context.Context, tx *gorm.
 		Where("user_id = ? AND showtime_id = ? AND status = ?", userID, showtimeID, models.BookingPending), "lock pending booking")
 }
 
-// LockShowtime takes a share lock: holds and confirms run in parallel, but an
-// admin closing/rescheduling the show waits for them (and vice versa).
+// LockShowtime share lock: holds/confirms run parallel, but showtime close/reschedule waits.
 func (r *bookingRepository) LockShowtime(ctx context.Context, tx *gorm.DB, id string) (*models.Showtime, error) {
 	return firstOrNil[models.Showtime](r.conn(ctx, tx).Clauses(forShare()).Where("id = ?", id), "lock showtime")
+}
+
+func (r *bookingRepository) LockShowtimeExclusive(ctx context.Context, tx *gorm.DB, id string) (*models.Showtime, error) {
+	return firstOrNil[models.Showtime](r.conn(ctx, tx).Clauses(forUpdate()).Where("id = ?", id), "lock showtime exclusive")
 }
 
 func (r *bookingRepository) MovieShowing(ctx context.Context, tx *gorm.DB, movieID string) (bool, error) {
@@ -311,6 +356,16 @@ func (r *bookingRepository) ExpireBooking(ctx context.Context, tx *gorm.DB, id, 
 	return res.RowsAffected, nil
 }
 
+func (r *bookingRepository) ExtendBookingExpiry(ctx context.Context, tx *gorm.DB, id string, expiresAt time.Time) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET expires_at = ?, updated_at = NOW()
+		WHERE id = ? AND status = ? AND paid_at IS NULL`,
+		expiresAt, id, models.BookingPending)
+	if res.Error != nil {
+		return 0, fmt.Errorf("extend booking expiry: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
 // Expired bookings can be paid too (late payment); they are refunded right after.
 func (r *bookingRepository) SetPaid(ctx context.Context, tx *gorm.DB, id, paymentID string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET paid_at = NOW(), payment_id = ?, updated_at = NOW()
@@ -344,6 +399,45 @@ func (r *bookingRepository) RefundBooking(ctx context.Context, tx *gorm.DB, id, 
 	return res.RowsAffected, nil
 }
 
+// Only reachable from the showtime-cancel cascade; skips RefundBooking's pending/expired path.
+func (r *bookingRepository) RefundConfirmedBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET status = ?, status_reason = ?, updated_at = NOW()
+		WHERE id = ? AND status = ? AND paid_at IS NOT NULL`,
+		models.BookingRefunded, reason, id, models.BookingConfirmed)
+	if res.Error != nil {
+		return 0, fmt.Errorf("refund confirmed booking: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *bookingRepository) VoidTicketsForBooking(ctx context.Context, tx *gorm.DB, bookingID string) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE tickets SET status = ?, updated_at = NOW() WHERE booking_id = ? AND status = ?`,
+		models.TicketVoid, bookingID, models.TicketIssued)
+	if res.Error != nil {
+		return 0, fmt.Errorf("void tickets: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *bookingRepository) BookingIDsForShowtime(ctx context.Context, tx *gorm.DB, showtimeID string, statuses []string) ([]string, error) {
+	var ids []string
+	if err := r.conn(ctx, tx).Model(&models.Booking{}).
+		Where("showtime_id = ? AND status IN ?", showtimeID, statuses).
+		Pluck("id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("list bookings for showtime: %w", err)
+	}
+	return ids, nil
+}
+
+func (r *bookingRepository) CancelShowtimeStatus(ctx context.Context, tx *gorm.DB, showtimeID string) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE showtimes SET status = ?, updated_at = NOW() WHERE id = ? AND status <> ?`,
+		models.ShowtimeCancelled, showtimeID, models.ShowtimeCancelled)
+	if res.Error != nil {
+		return 0, fmt.Errorf("cancel showtime: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
 // Seats are locked in id order so concurrent holds and confirms never deadlock.
 func (r *bookingRepository) LockSeats(ctx context.Context, tx *gorm.DB, showtimeID string, ids []string) ([]models.ShowtimeSeat, error) {
 	if len(ids) == 0 {
@@ -358,7 +452,6 @@ func (r *bookingRepository) LockSeats(ctx context.Context, tx *gorm.DB, showtime
 	return seats, nil
 }
 
-// HoldSeat returns the seat's new fencing version.
 func (r *bookingRepository) HoldSeat(ctx context.Context, tx *gorm.DB, id, userID string, heldUntil time.Time) (int64, error) {
 	var version int64
 	res := r.conn(ctx, tx).Raw(`UPDATE showtime_seats
@@ -494,6 +587,18 @@ func (r *bookingRepository) TicketForGate(ctx context.Context, ref string) (*Tic
 	return &rows[0], nil
 }
 
+func (r *bookingRepository) TicketByID(ctx context.Context, id string) (*TicketOwnerRow, error) {
+	var rows []TicketOwnerRow
+	if err := r.db.WithContext(ctx).Raw(`SELECT t.id, t.code, t.status, b.id AS booking_id, COALESCE(b.user_id::text, '') AS user_id
+		FROM tickets t JOIN bookings b ON b.id = t.booking_id WHERE t.id = ?`, id).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("find ticket by id: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
+}
+
 func (r *bookingRepository) RedeemTicket(ctx context.Context, tx *gorm.DB, ticketID string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ? AND status = ?`,
 		models.TicketRedeemed, ticketID, models.TicketIssued)
@@ -503,9 +608,8 @@ func (r *bookingRepository) RedeemTicket(ctx context.Context, tx *gorm.DB, ticke
 	return res.RowsAffected, nil
 }
 
-// SKIP LOCKED: seats locked by an in-flight hold/confirm are left to the next tick, so the sweep
-// never waits or deadlocks with them (it does not lock in id order). The outer WHERE is re-checked
-// under the row lock, so a seat just sold or re-held is skipped. One audit row per showtime.
+// SKIP LOCKED so the sweep never waits/deadlocks with in-flight holds (no id-order locking);
+// re-checked under lock, so just-sold/re-held seats are skipped. One audit row per showtime.
 func (r *bookingRepository) SweepExpiredHolds(ctx context.Context, limit int) ([]models.ShowtimeSeat, error) {
 	var seats []models.ShowtimeSeat
 	if err := r.db.WithContext(ctx).Raw(`
@@ -590,8 +694,7 @@ func (r *bookingRepository) DeferFinalize(ctx context.Context, id string) (int, 
 	return attempts, nil
 }
 
-// After this many tries the email is given up; the tickets stay on the web.
-// idx_bookings_email_pending hardcodes the same limit.
+// After this many tries the email is given up (tickets stay on the web); idx_bookings_email_pending hardcodes it.
 const MaxTicketEmailAttempts = 6
 
 // Given-up emails drop out, so they never starve newer ones.
@@ -607,9 +710,7 @@ func (r *bookingRepository) PendingEmailIDs(ctx context.Context, limit int) ([]s
 	return ids, nil
 }
 
-// GivenUpEmails are confirmed bookings whose ticket email exhausted every
-// retry — the sweep will never touch them again, so the admin overview is
-// the only place they still surface.
+// GivenUpEmails: confirmed bookings whose ticket email exhausted retries; only the admin overview surfaces them.
 func (r *bookingRepository) GivenUpEmails(ctx context.Context, limit int) ([]models.Booking, error) {
 	var out []models.Booking
 	if err := r.db.WithContext(ctx).
@@ -621,8 +722,7 @@ func (r *bookingRepository) GivenUpEmails(ctx context.Context, limit int) ([]mod
 	return out, nil
 }
 
-// The 5-minute lease keeps two workers from mailing the same booking; a worker dying mid-send
-// leaves it for retry after the lease. 0 rows means nothing to do.
+// 5-minute lease so two workers never mail the same booking; 0 rows means nothing to do.
 func (r *bookingRepository) ClaimEmail(ctx context.Context, id string) (int64, error) {
 	res := r.db.WithContext(ctx).Exec(`UPDATE bookings
 		SET email_claimed_until = NOW() + INTERVAL '5 minutes', email_attempts = email_attempts + 1
@@ -672,8 +772,7 @@ func (r *bookingRepository) BookingHeader(ctx context.Context, id string) (*Book
 	return &rows[0], nil
 }
 
-// CreateCounterBooking inserts a walk-in sale: no account, no payment, cash
-// collected at the counter (paid_at = NOW()), straight to confirmed by the service.
+// CreateCounterBooking: walk-in sale, no account/payment, cash at counter (paid_at = NOW()).
 func (r *bookingRepository) CreateCounterBooking(ctx context.Context, tx *gorm.DB, b *models.Booking) error {
 	if b.ID == "" {
 		b.ID = uuid.NewString()
@@ -688,8 +787,7 @@ func (r *bookingRepository) CreateCounterBooking(ctx context.Context, tx *gorm.D
 	return nil
 }
 
-// SellSeatAtCounter sells a free seat directly at the till: only an AVAILABLE
-// seat can be upgraded to SOLD, fencing concurrent holds and finalizes.
+// SellSeatAtCounter: only AVAILABLE -> SOLD, fencing concurrent holds/finalizes.
 func (r *bookingRepository) SellSeatAtCounter(ctx context.Context, tx *gorm.DB, id string) (int64, error) {
 	res := r.conn(ctx, tx).Exec(`UPDATE showtime_seats
 		SET status = ?, held_by = NULL, held_until = NULL, version = version + 1, updated_at = NOW()
@@ -701,8 +799,7 @@ func (r *bookingRepository) SellSeatAtCounter(ctx context.Context, tx *gorm.DB, 
 	return res.RowsAffected, nil
 }
 
-// adminOrderSortColumns whitelists the sort keys of the operator order list;
-// anything else falls back to created_at. Values are literals, never user input.
+// adminOrderSortColumns whitelists operator-list sort keys; values are literals, never user input.
 var adminOrderSortColumns = map[string]string{
 	"created_at":   "bookings.created_at",
 	"paid_at":      "bookings.paid_at",
@@ -722,14 +819,9 @@ func adminOrderOrder(sort, order string) string {
 	return column + " " + direction
 }
 
-// AdminOrderList is the operator counterpart of ListByUser: no user scope, and
-// the account, showtime and carried payment come back in the same query so one
-// page is one round trip. The caller resolves from/to into absolute instants so
-// the timezone stays a service concern; a zero time means that bound is open.
-// Deleted showtimes, movies and halls are joined in on purpose (same reason as
-// ShowtimeInfos): an old order must still show what was bought. users is a LEFT
-// JOIN because a counter sale has no account, and erased accounts are kept
-// because erasure scrubs the row in place rather than removing it.
+// AdminOrderList: unscoped ListByUser with account/showtime/payment in one round trip; from/to are
+// absolute instants (timezone is the service's; zero = open). Deleted catalog rows join in so old
+// orders still show what was bought; users is LEFT JOIN (counter has no account, erasure scrubs in place).
 func (r *bookingRepository) AdminOrderList(ctx context.Context, query dto.AdminOrderListQuery, from, to time.Time) ([]AdminOrderRow, int64, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&models.Booking{}).
@@ -773,8 +865,7 @@ func (r *bookingRepository) AdminOrderList(ctx context.Context, query dto.AdminO
 			lowered, pattern, pattern, pattern, "%"+search+"%", pattern)
 	}
 
-	// Count before Select: the Select below carries a correlated seats subquery
-	// that must not end up inside count(...). Same ordering as movieRepository.List.
+	// Count before Select so the seats subquery stays out of count(...). Same as movieRepository.List.
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count admin orders: %w", err)
@@ -803,5 +894,37 @@ func (r *bookingRepository) AdminOrderList(ctx context.Context, query dto.AdminO
 		return nil, 0, fmt.Errorf("list admin orders: %w", err)
 	}
 
+	return rows, total, nil
+}
+
+// TransactionsByUser: every attempt on the caller's bookings, newest first — incl. failed/superseded
+// tries the booking no longer carries via bookings.payment_id.
+func (r *bookingRepository) TransactionsByUser(ctx context.Context, userID string, page, pageSize int) ([]TransactionRow, int64, error) {
+	tx := r.db.WithContext(ctx).
+		Model(&models.Payment{}).
+		Joins("JOIN bookings ON bookings.id = payments.booking_id").
+		Joins("JOIN showtimes ON showtimes.id = bookings.showtime_id").
+		Joins("JOIN movies ON movies.id = showtimes.movie_id").
+		Joins("JOIN halls ON halls.id = showtimes.hall_id").
+		Where("bookings.user_id = ?", userID)
+
+	var total int64
+	if err := tx.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count transactions: %w", err)
+	}
+
+	rows := make([]TransactionRow, 0, pageSize)
+	if err := tx.
+		Select(`payments.id AS payment_id, payments.provider, payments.txn_ref, payments.status,
+			payments.status_reason, payments.amount, payments.paid_amount, payments.paid_at,
+			payments.refunded_at, payments.created_at AS payment_created_at,
+			bookings.id AS booking_id, bookings.showtime_id,
+			movies.title AS movie_title, halls.name AS hall_name, showtimes.start_at`).
+		Order("payments.created_at DESC").
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list transactions: %w", err)
+	}
 	return rows, total, nil
 }

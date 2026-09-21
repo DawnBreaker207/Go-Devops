@@ -9,13 +9,19 @@ type HoldRequest struct {
 	IdempotencyKey string   `json:"idempotency_key" binding:"omitempty,min=1,max=128"`
 }
 
-// CounterSellRequest is a walk-in sale at the till: no account, no payment
-// provider; cash is collected and the booking is confirmed immediately.
+// CounterSellRequest: walk-in sale, no account/provider; cash, confirmed immediately.
 type CounterSellRequest struct {
 	ShowID        string   `json:"show_id" binding:"required"`
 	SeatIDs       []string `json:"seat_ids" binding:"required,min=1"`
 	CustomerName  string   `json:"customer_name" binding:"omitempty,max=255"`
 	CustomerPhone string   `json:"customer_phone" binding:"omitempty,max=20"`
+}
+
+// TicketQRResponse: ticket QR as base64 PNG (same encoding as ticket emails).
+type TicketQRResponse struct {
+	TicketID string `json:"ticket_id"`
+	Code     string `json:"code"`
+	QRBase64 string `json:"qr_base64"`
 }
 
 type HeldSeat struct {
@@ -36,8 +42,27 @@ type HoldResponse struct {
 	ReplacedBookingID string     `json:"replaced_booking_id,omitempty"`
 }
 
-// An empty provider uses the configured default (see GET /payments/providers).
-// The amount always comes from the booking, never from the client.
+// InitRequest opens a seatless PENDING booking; seats attach later via POST /orders/hold.
+type InitRequest struct {
+	ShowID string `json:"show_id" binding:"required"`
+}
+
+// InitResponse mirrors the timing part of HoldResponse (no seats yet).
+type InitResponse struct {
+	BookingID  string    `json:"booking_id"`
+	ShowtimeID string    `json:"showtime_id"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	// TTLSeconds lets the client run its ticker without clock math.
+	TTLSeconds int64 `json:"ttl_seconds"`
+	Reused bool `json:"reused"`
+}
+
+type RefreshResponse struct {
+	BookingID string    `json:"booking_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// Empty provider uses the default (GET /payments/providers); amount always comes from the booking.
 type PayRequest struct {
 	Provider string `json:"provider" binding:"omitempty,max=32" example:"mock"`
 	ClientIP string `json:"-"`
@@ -111,15 +136,12 @@ type RedeemResponse struct {
 	CheckinClosesAt *time.Time `json:"checkin_closes_at,omitempty"`
 }
 
-// AdminOrderListQuery filters the operator order list. Unlike GET /orders it is
-// not scoped to the caller: online and counter sales are listed side by side.
-// date/from/to bound created_at as local calendar days, the same convention as
-// GET /admin/showtimes (ShowtimeAdminListQuery).
+// AdminOrderListQuery: operator list, unscoped (online + counter side by side).
+// date/from/to bound created_at as local days, same as ShowtimeAdminListQuery.
 type AdminOrderListQuery struct {
 	PageQuery
 	Status string `form:"status" binding:"omitempty,oneof=pending confirmed expired refunded"`
-	// PaymentStatus matches the attempt whose money the order already carries
-	// (bookings.payment_id); an unpaid hold with an open checkout carries none.
+	// PaymentStatus matches the carried attempt (bookings.payment_id); an unpaid open checkout carries none.
 	PaymentStatus string `form:"payment_status" binding:"omitempty,oneof=pending paid failed refund_pending refunded"`
 	SoldVia       string `form:"sold_via" binding:"omitempty,oneof=online counter"`
 	ShowtimeID    string `form:"showtime_id" binding:"omitempty,uuid"`
@@ -133,9 +155,7 @@ type AdminOrderListQuery struct {
 	Order string `form:"order" binding:"omitempty,oneof=asc desc"`
 }
 
-// OrderCustomer is who an order belongs to. An online order carries the account
-// (user_id/email/full_name/phone); a counter sale has no account, only the
-// walk-in name and phone taken at the till.
+// OrderCustomer: online carries the account; counter carries only till name/phone.
 type OrderCustomer struct {
 	UserID   string `json:"user_id,omitempty"`
 	Email    string `json:"email,omitempty"`
@@ -143,10 +163,7 @@ type OrderCustomer struct {
 	Phone    string `json:"phone,omitempty"`
 }
 
-// AdminOrderListItem is one row of the operator order list: exactly the order
-// shape the customer already sees, plus who bought it, how it was sold and how
-// many seats it holds. Embedding keeps the existing order shape valid, the same
-// choice as OrderDetailResponse.
+// AdminOrderListItem: customer order shape plus buyer, sold_via and seat count.
 type AdminOrderListItem struct {
 	OrderStatusResponse
 	SoldVia  string         `json:"sold_via"`

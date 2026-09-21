@@ -242,6 +242,9 @@ func newEnv(t *testing.T) *env {
 		PublicBaseURL: merchantURL,
 		HoldTTL:       10 * time.Minute,
 		MaxSeats:      4,
+		// Generous lifetime so refresh tests can extend; hold-replace tests
+		// (T21) never call Refresh and stay pinned to the old expiry.
+		RefreshMaxLifetime: 30 * time.Minute,
 		Publisher:     e.pub,
 		Hub:           e.hub,
 	})
@@ -253,8 +256,8 @@ func newEnv(t *testing.T) *env {
 	e.jwt = jwt.NewManager("test-access-secret", "test-refresh-secret", "test", 15*time.Minute, time.Hour)
 	guard := ratelimit.NewFailureLimiter(5, 5*time.Minute, func() time.Time { return e.now })
 	e.auth = service.NewAuthService(testDB, userRepo, repository.NewRefreshTokenRepository(testDB), e.jwt, guard,
-		repository.NewPasswordResetTokenRepository(testDB), e.mailer, "http://test.local/reset-password", 30*time.Minute, 0)
-	e.accounts = service.NewUserService(testDB, userRepo)
+		repository.NewPasswordResetTokenRepository(testDB), e.mailer, "http://test.local/reset-password", 30*time.Minute, 0, time.Hour)
+	e.accounts = service.NewUserService(testDB, userRepo, repository.NewNotificationPreferenceRepository(testDB))
 	e.reports = service.NewReportService(repository.NewReportRepository(testDB), repository.NewShowtimeRepository(testDB),
 		repository.NewPaymentRepository(testDB), repository.NewBatchJobRepository(testDB), repository.NewBookingRepository(testDB), time.UTC)
 	e.movies = service.NewMovieService(testDB, repository.NewMovieRepository(testDB), nil, 0)

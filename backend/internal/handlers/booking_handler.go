@@ -17,8 +17,6 @@ func NewBookingHandler(bookingService service.BookingService) *BookingHandler {
 	return &BookingHandler{bookingService: bookingService}
 }
 
-// Hold godoc
-//
 //	@Summary		Hold seats for a showtime
 //	@Description	Reserves seats for 10 minutes and locks their price. A second hold of the same user/show replaces the first without extending its expiry.
 //	@Tags			orders
@@ -46,8 +44,54 @@ func (h *BookingHandler) Hold(c *gin.Context) {
 	response.Created(c, res)
 }
 
-// Pay godoc
-//
+//	@Summary		Open an empty booking for a showtime
+//	@Description	Creates a seatless PENDING booking so the client can count down from entry; seats attach later with POST /orders/hold (replace path). Re-entering with a still-valid pending booking returns it.
+//	@Tags			orders
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			payload	body		dto.InitRequest	true	"Showtime to open a booking for"
+//	@Success		201		{object}	response.Body{data=dto.InitResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		403		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/orders/init [post]
+func (h *BookingHandler) Init(c *gin.Context) {
+	var req dto.InitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	res, err := h.bookingService.Init(c.Request.Context(), middleware.CurrentUserID(c), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, res)
+}
+
+//	@Summary		Extend a pending booking for the heartbeat
+//	@Description	Silent heartbeat: pushes expiry forward by one TTL, never past created_at + booking.hold_max_lifetime_minutes. Refused for paid, closed or seat-lost bookings.
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	string	true	"Booking ID"
+//	@Success		200		{object}	response.Body{data=dto.RefreshResponse}
+//	@Failure		401		{object}	response.Body
+//	@Failure		403		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/orders/{id}/refresh [post]
+func (h *BookingHandler) Refresh(c *gin.Context) {
+	res, err := h.bookingService.Refresh(c.Request.Context(), middleware.CurrentUserID(c), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
 //	@Summary		Start payment for a booking with a chosen provider
 //	@Description	Returns the provider checkout URL. The amount comes from the booking. Paying again with the same provider returns the open checkout; another provider opens a new attempt.
 //	@Tags			orders
@@ -77,8 +121,6 @@ func (h *BookingHandler) Pay(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// Confirm godoc
-//
 //	@Summary		Settle a paid booking
 //	@Description	Reconciles with the provider, then confirms (issues tickets) or reports the refund. Idempotent.
 //	@Tags			orders
@@ -99,8 +141,6 @@ func (h *BookingHandler) Confirm(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// Status godoc
-//
 //	@Summary		Get booking status (reconciles with the provider)
 //	@Tags			orders
 //	@Produce		json
@@ -120,8 +160,6 @@ func (h *BookingHandler) Status(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// Cancel godoc
-//
 //	@Summary		Release an unpaid hold now
 //	@Tags			orders
 //	@Produce		json
@@ -141,8 +179,6 @@ func (h *BookingHandler) Cancel(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// List godoc
-//
 //	@Summary		List the current user's orders
 //	@Tags			orders
 //	@Produce		json
@@ -167,8 +203,31 @@ func (h *BookingHandler) List(c *gin.Context) {
 	response.List(c, items, q.Page, q.PageSize, total)
 }
 
-// Order godoc
-//
+//	@Summary		List the current user's payment transactions
+//	@Description	Financial history (amount, provider, status, refunds) with just enough booking/showtime context to place each one — distinct from GET /orders, which is the booking/ticket history.
+//	@Tags			orders
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			page		query	int	false	"Page"	default(1)
+//	@Param			page_size	query	int	false	"Page size"	default(10)
+//	@Success		200			{object}	response.Body{data=response.Paged{items=[]dto.TransactionResponse}}
+//	@Failure		401			{object}	response.Body
+//	@Router			/users/me/transactions [get]
+func (h *BookingHandler) Transactions(c *gin.Context) {
+	var q dto.PageQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.Error(c, err)
+		return
+	}
+	q.Normalize()
+	items, total, err := h.bookingService.Transactions(c.Request.Context(), middleware.CurrentUserID(c), q)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.List(c, items, q.Page, q.PageSize, total)
+}
+
 //	@Summary		Get the e-ticket of one order (reconciled, with ticket codes)
 //	@Tags			orders
 //	@Produce		json
@@ -188,8 +247,6 @@ func (h *BookingHandler) Order(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// Redeem godoc
-//
 //	@Summary		Check a ticket in at the gate (staff)
 //	@Description	id is the ticket id or the code read from the QR. Verdict: ok | used | wrong_show | not_found | too_early | closed (outside the check-in window, returned as checkin_opens_at / checkin_closes_at).
 //	@Tags			tickets
@@ -216,8 +273,26 @@ func (h *BookingHandler) Redeem(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// AdminList godoc
-//
+//	@Summary		Get a ticket's QR code
+//	@Description	Base64 PNG, same encoding the ticket email embeds inline. Works whether or not the showtime has started; only the ticket's own buyer or staff/admin may fetch it.
+//	@Tags			tickets
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	string	true	"Ticket ID"
+//	@Success		200	{object}	response.Body{data=dto.TicketQRResponse}
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Router			/tickets/{id}/qr [get]
+func (h *BookingHandler) TicketQR(c *gin.Context) {
+	res, err := h.bookingService.TicketQR(c.Request.Context(),
+		middleware.CurrentUserID(c), middleware.CurrentUserRole(c), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
 //	@Summary		List every order for operators, paged and filterable
 //	@Description	The operator counterpart of GET /orders: not scoped to the caller. Online and counter sales alike, with the buyer's identity, the showtime and the payment attempt the order carries. It reports what the database holds and does not reconcile with the provider — use GET /staff/orders/{id} for that.
 //	@Tags			orders

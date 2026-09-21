@@ -81,7 +81,8 @@ redis:
 # Booking: seat hold TTL and per-booking seat cap.
 booking:
   hold_ttl_minutes: 10
-  max_seats_per_booking: 10
+  max_seats_per_booking: 8
+  hold_max_lifetime_minutes: 15
 
 # Gate check-in window around the showtime start; outside it a scan answers
 # too_early / closed and the ticket stays unused.

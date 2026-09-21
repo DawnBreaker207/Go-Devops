@@ -63,7 +63,8 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 	mediaDir := h.t.TempDir()
 	userRepo := repository.NewUserRepository(db)
 	accounts := service.NewAccountStatusCache(userRepo, 30*time.Second)
-	userService := service.NewUserService(db, userRepo, accounts.Invalidate)
+	notifPrefRepo := repository.NewNotificationPreferenceRepository(db)
+	userService := service.NewUserService(db, userRepo, notifPrefRepo, accounts.Invalidate)
 	public := h.publicLimiter
 	if public == nil {
 		public = ratelimit.New(10000, 1000)
@@ -81,7 +82,7 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Movie:    handlers.NewMovieHandler(h.movies),
 		Batch:    handlers.NewBatchHandler(h.batchManager(db, runs), runs, db),
 		Hall:     handlers.NewHallHandler(h.halls),
-		Showtime: handlers.NewShowtimeHandler(h.showtimes),
+		Showtime: handlers.NewShowtimeHandler(h.showtimes, h.svc),
 		Booking:  handlers.NewBookingHandler(h.svc),
 		SSE:      handlers.NewSSEHandler(h.hub, h.tokens, h.showtimes),
 		Payment:  handlers.NewPaymentHandler(h.providers, h.svc, ""),
@@ -89,6 +90,8 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Report:   handlers.NewReportHandler(h.reports),
 		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
+		Combo: handlers.NewComboHandler(service.NewComboService(
+			repository.NewComboRepository(db), repository.NewComboOrderRepository(db), repository.NewBookingRepository(db))),
 	})
 }
 
