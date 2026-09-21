@@ -8,3 +8,4 @@ export * from './showtime';
 export * from './seatmap';
 export * from './order';
 export * from './booking';
+export * from './account';

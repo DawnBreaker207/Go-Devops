@@ -1,12 +1,12 @@
 import { lazy } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
 import CustomerLayout from '@/layouts/CustomerLayout';
 import ProtectedRoute from './ProtectedRoute';
 import RequireRole from './RequireRole';
 import { ROLES_ADMIN, ROLES_OPERATOR } from './navigation';
-import { PATHS } from './paths';
+import { PATHS, accountTicketsPath } from './paths';
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
 const CustomerLoginPage = lazy(() => import('@/features/auth/CustomerLoginPage'));
@@ -14,6 +14,7 @@ const RegisterPage = lazy(() => import('@/features/auth/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'));
+const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'));
 const MoviesPage = lazy(() => import('@/features/movie/MoviesPage'));
 const ShowtimesPage = lazy(() => import('@/features/showtime/ShowtimesPage'));
 const HallsPage = lazy(() => import('@/features/hall/HallsPage'));
@@ -26,7 +27,7 @@ const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
 const SelectSeatPage = lazy(() => import('@/features/booking-flow/SelectSeatPage'));
 const CheckoutPage = lazy(() => import('@/features/booking-flow/CheckoutPage'));
 const OrderSuccessPage = lazy(() => import('@/features/booking-flow/OrderSuccessPage'));
-const MyTicketsPage = lazy(() => import('@/features/booking-flow/MyTicketsPage'));
+const AccountPage = lazy(() => import('@/features/browse/AccountPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const router = createBrowserRouter([
@@ -43,7 +44,9 @@ export const router = createBrowserRouter([
       // van hanh, va moi man da tu xu ly loi cua no.
       { path: PATHS.checkout, element: <CheckoutPage /> },
       { path: PATHS.orderSuccess, element: <OrderSuccessPage /> },
-      { path: PATHS.myTickets, element: <MyTicketsPage /> },
+      { path: PATHS.account, element: <AccountPage /> },
+      // Legacy /my-tickets route: tickets now live in Account, redirect keeps old bookmarks working.
+      { path: '/my-tickets', element: <Navigate to={accountTicketsPath()} replace /> },
       // Customer account screen (Figma 77-626) sits in CustomerLayout to share
       // header/footer. `handle.fullBleed` drops <main> max-width/padding for the split panel.
       {
@@ -80,6 +83,7 @@ export const router = createBrowserRouter([
             element: <RequireRole roles={ROLES_OPERATOR} />,
             children: [
               { path: PATHS.dashboard, element: <DashboardPage /> },
+              { path: PATHS.profile, element: <ProfilePage /> },
               { path: PATHS.movies, element: <MoviesPage /> },
               { path: PATHS.showtimes, element: <ShowtimesPage /> },
               { path: PATHS.halls, element: <HallsPage /> },

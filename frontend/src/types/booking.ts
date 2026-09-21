@@ -6,7 +6,7 @@ import type { SeatType } from './hall';
 export type BookingStatus = 'pending' | 'confirmed' | 'expired' | 'refunded';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refund_pending' | 'refunded';
 export type SoldVia = 'online' | 'counter';
-export type TicketStatus = 'issued' | 'redeemed';
+export type TicketStatus = 'issued' | 'redeemed' | 'void';
 
 export const BOOKING_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'expired', 'refunded'];
 export const PAYMENT_STATUSES: PaymentStatus[] = [
@@ -26,7 +26,9 @@ export type BookingStatusReason =
   | 'showtime_closed'
   | 'amount_mismatch'
   | 'paid_after_expiry'
-  | 'canceled';
+  | 'canceled'
+  /** Operator-cancelled show (not a customer fault); order flips to `refunded` with automatic refund. */
+  | 'showtime_cancelled';
 
 export type PaymentStatusReason = 'create_failed' | 'declined' | 'abandoned' | 'duplicate_payment';
 

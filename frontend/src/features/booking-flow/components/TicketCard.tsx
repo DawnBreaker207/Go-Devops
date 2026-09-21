@@ -14,6 +14,8 @@ interface TicketCardProps {
    * lam mot don DA XAC NHAN hien ra "Ve (0) - Cho thanh toan", tuc noi sai.
    */
   tickets?: Ticket[];
+  /** "Rebook quickly" button - "Past" group of the My-tickets tab only. */
+  showRebook?: boolean;
 }
 
 /**

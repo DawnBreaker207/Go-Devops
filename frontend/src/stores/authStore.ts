@@ -28,7 +28,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, isAuthenticated: false, isBootstrapping: false });
   },
 
-  /** Goi 1 lan luc khoi dong app: neu con token thi lay lai thong tin user */
+  /** One-time app start: re-fetch user when a token exists. */
   bootstrap: async () => {
     if (!tokenStorage.getAccessToken()) {
       set({ user: null, isAuthenticated: false, isBootstrapping: false });
@@ -43,3 +43,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
+
+/** Overwrite `user` when another mutation (e.g. useUpdateProfile) returns a fresher record. Single place for this; the store never auto-syncs with React Query. */
+export const syncAuthUser = (user: User) => useAuthStore.setState({ user });
