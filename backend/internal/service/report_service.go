@@ -20,6 +20,7 @@ type ReportService interface {
 	AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error)
 	StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error)
 	AdminStats(ctx context.Context) (*dto.AdminStatsResponse, error)
+	Breakdown(ctx context.Context, from, to string) (*dto.BreakdownResponse, error)
 }
 
 type reportService struct {
@@ -38,17 +39,15 @@ func NewReportService(repo repository.ReportRepository, showtimes *repository.Sh
 		bookings: bookings, location: location}
 }
 
-// alertListLimit bounds each operational-alert list on the admin overview.
 const alertListLimit = 20
 
-// dayBounds returns the local date and its [from, to) instants.
 func (s *reportService) dayBounds(day time.Time) (string, time.Time, time.Time) {
 	d := day.In(s.location)
 	from := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, s.location)
 	return from.Format(dto.DateLayout), from, from.AddDate(0, 0, 1)
 }
 
-// CloseDay upserts the daily_aggregates row of day's local date; rerunning it replaces the numbers.
+// CloseDay upserts the day's daily_aggregates row; reruns replace the numbers.
 func (s *reportService) CloseDay(ctx context.Context, day time.Time) (*dto.DailyAggregateResponse, error) {
 	date, from, to := s.dayBounds(day)
 	if err := s.repo.UpsertDailyAggregate(ctx, date, from, to); err != nil {
@@ -64,31 +63,39 @@ func (s *reportService) CloseDay(ctx context.Context, day time.Time) (*dto.Daily
 	return newDailyAggregateResponse(agg), nil
 }
 
-// DailyReport returns what closeDay last wrote for [from, to] (default: the last 7 days);
-// run closeDay to refresh today.
-func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.DailyReportResponse, error) {
+// parseRange resolves [from, to] local days (default: last 7 incl. today).
+func (s *reportService) parseRange(from, to string) (fromDay, toDay time.Time, err error) {
 	now := time.Now().In(s.location)
-	toDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
+	toDay = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
 	if to != "" {
-		parsed, err := time.ParseInLocation(dto.DateLayout, to, s.location)
-		if err != nil {
-			return nil, apperrors.Validation("to must follow format YYYY-MM-DD")
+		parsed, perr := time.ParseInLocation(dto.DateLayout, to, s.location)
+		if perr != nil {
+			return fromDay, toDay, apperrors.Validation("to must follow format YYYY-MM-DD")
 		}
 		toDay = parsed
 	}
-	fromDay := toDay.AddDate(0, 0, -6)
+	fromDay = toDay.AddDate(0, 0, -6)
 	if from != "" {
-		parsed, err := time.ParseInLocation(dto.DateLayout, from, s.location)
-		if err != nil {
-			return nil, apperrors.Validation("from must follow format YYYY-MM-DD")
+		parsed, perr := time.ParseInLocation(dto.DateLayout, from, s.location)
+		if perr != nil {
+			return fromDay, toDay, apperrors.Validation("from must follow format YYYY-MM-DD")
 		}
 		fromDay = parsed
 	}
 	if fromDay.After(toDay) {
-		return nil, apperrors.Validation("from must not be after to")
+		return fromDay, toDay, apperrors.Validation("from must not be after to")
 	}
 	if toDay.Sub(fromDay) > 366*24*time.Hour {
-		return nil, apperrors.Validation("the range can not exceed 366 days")
+		return fromDay, toDay, apperrors.Validation("the range can not exceed 366 days")
+	}
+	return fromDay, toDay, nil
+}
+
+// DailyReport returns what closeDay last wrote for [from, to] (default last 7 days); run closeDay to refresh today.
+func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.DailyReportResponse, error) {
+	fromDay, toDay, err := s.parseRange(from, to)
+	if err != nil {
+		return nil, err
 	}
 
 	rows, err := s.repo.DailyAggregates(ctx, fromDay.Format(dto.DateLayout), toDay.Format(dto.DateLayout))
@@ -105,6 +112,46 @@ func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.
 		res.TotalRevenue += day.TotalRevenue
 		res.TicketsSold += day.TicketsSold
 		res.Days = append(res.Days, *day)
+	}
+	return res, nil
+}
+
+// Breakdown aggregates paid money live for [from, to] (default last 7 days):
+// daily line, top movies/halls and the payment-method split for the Analytics
+// tab. Same money rule as closeDay throughout.
+func (s *reportService) Breakdown(ctx context.Context, from, to string) (*dto.BreakdownResponse, error) {
+	fromDay, toDay, err := s.parseRange(from, to)
+	if err != nil {
+		return nil, err
+	}
+	// End-exclusive upper bound: include the whole `to` day.
+	rows, err := s.repo.RevenueBreakdown(ctx,
+		time.Date(fromDay.Year(), fromDay.Month(), fromDay.Day(), 0, 0, 0, 0, s.location),
+		time.Date(toDay.Year(), toDay.Month(), toDay.Day(), 0, 0, 0, 0, s.location).AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	res := &dto.BreakdownResponse{
+		From:      fromDay.Format(dto.DateLayout),
+		To:        toDay.Format(dto.DateLayout),
+		Days:      make([]dto.BreakdownDay, 0, len(rows.Days)),
+		Movies:    make([]dto.BreakdownMovie, 0, len(rows.Movies)),
+		Halls:     make([]dto.BreakdownHall, 0, len(rows.Halls)),
+		Providers: make([]dto.BreakdownProvider, 0, len(rows.Providers)),
+	}
+	for _, d := range rows.Days {
+		res.Days = append(res.Days, dto.BreakdownDay{Date: d.Date, Revenue: d.Revenue, Tickets: d.Tickets})
+		res.TotalRevenue += d.Revenue
+		res.TicketsSold += d.Tickets
+	}
+	for _, m := range rows.Movies {
+		res.Movies = append(res.Movies, dto.BreakdownMovie{MovieID: m.MovieID, Title: m.Title, Revenue: m.Revenue, Tickets: m.Tickets})
+	}
+	for _, h := range rows.Halls {
+		res.Halls = append(res.Halls, dto.BreakdownHall{HallID: h.HallID, Name: h.Name, Revenue: h.Revenue, Tickets: h.Tickets})
+	}
+	for _, p := range rows.Providers {
+		res.Providers = append(res.Providers, dto.BreakdownProvider{Provider: p.Provider, Revenue: p.Revenue, Count: p.Count})
 	}
 	return res, nil
 }
@@ -173,7 +220,7 @@ func (s *reportService) ShowtimeTickets(ctx context.Context, showtimeID, status 
 	return out, nil
 }
 
-// BoxOfficeDay settles the counter: how many walk-in sales the register took.
+// BoxOfficeDay: walk-in sales the register took.
 func (s *reportService) BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error) {
 	day := time.Now()
 	if date != "" {
@@ -191,10 +238,8 @@ func (s *reportService) BoxOfficeDay(ctx context.Context, date string) (*dto.Box
 	return &dto.BoxOfficeDayResponse{Date: label, Count: count, Total: total}, nil
 }
 
-// AdminOverview is the one-call admin dashboard: today computed live (not
-// waiting on closeDay), the last 7 closed days, what's left to show today,
-// and operational alerts that would otherwise only surface by manually
-// filtering /admin/audit-logs or /admin/batch/jobs.
+// AdminOverview: one-call dashboard (live today, last 7 closed days, remaining shows,
+// plus alerts otherwise found only by filtering audit-logs/batch-jobs).
 func (s *reportService) AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error) {
 	now := time.Now().In(s.location)
 	todayLabel, todayFrom, todayTo := s.dayBounds(now)
@@ -282,9 +327,7 @@ func (s *reportService) operationalAlerts(ctx context.Context) (*dto.AdminAlerts
 	return &dto.AdminAlertsResponse{StuckRefunds: stuckOut, FailedJobs: jobsOut, GivenUpEmails: emailsOut}, nil
 }
 
-// StaffOverview composes the existing staff board and box office numbers
-// with one derived count (tickets sold but not yet scanned), so the floor
-// app can land on a single call instead of two.
+// StaffOverview: board + box office + derived awaiting count, one call for the floor app.
 func (s *reportService) StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error) {
 	board, err := s.StaffBoard(ctx, date)
 	if err != nil {
@@ -318,11 +361,8 @@ func newDailyAggregateResponse(a *models.DailyAggregate) *dto.DailyAggregateResp
 	}
 }
 
-// AdminStats is the dashboard's four headline counts. Deliberately separate from
-// AdminOverview: overview answers "how is today going", stats answers "how big is
-// the catalogue" — different cadence, different cost, and the tiles must render
-// even when the overview's alert queries are slow. Read-only: no transaction, no
-// audit row, no bumpCatalog.
+// AdminStats: four headline counts, separate from AdminOverview (different cadence/cost; tiles render
+// even when alert queries are slow). Read-only: no transaction, no audit row, no bumpCatalog.
 func (s *reportService) AdminStats(ctx context.Context) (*dto.AdminStatsResponse, error) {
 	row, err := s.repo.EntityCounts(ctx)
 	if err != nil {

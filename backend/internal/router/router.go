@@ -38,6 +38,7 @@ type Handlers struct {
 	Report   *handlers.ReportHandler
 	Media    *handlers.MediaHandler
 	Audit    *handlers.AuditHandler
+	Combo    *handlers.ComboHandler
 }
 
 type Limiters struct {
@@ -57,8 +58,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 
 	engine := gin.New()
 	engine.RedirectTrailingSlash = false
-	// Only configured proxies may set X-Forwarded-For, so rate limits and the
-	// login lockout can not be dodged with a forged header.
+	// Only configured proxies may set X-Forwarded-For, so limits/lockout can't be dodged.
 	if err := engine.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
 		_ = engine.SetTrustedProxies(nil)
 	}
@@ -114,6 +114,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		public.GET("/movies/:id", h.Movie.Detail)
 		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
 		public.GET("/showtimes", h.Showtime.List)
+		public.GET("/combos", h.Combo.List)
 	}
 
 	protected := v1.Group("")
@@ -121,11 +122,15 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 	{
 		protected.GET("/users/me", h.User.Me)
 		protected.PUT("/users/me", middleware.Audit(db, "users.update_profile", "user"), h.User.UpdateMe)
-		// Account erasure is a customer self-service right; staff/admin are
-		// operational accounts managed by an admin (lock/unlock), not self-erased.
+		// Erasure is customer self-service; staff/admin accounts are managed by an admin, not self-erased.
 		protected.DELETE("/users/me", middleware.Audit(db, "users.delete_me", "user"),
 			middleware.RequireRoles(models.RoleCustomer), h.User.DeleteMe)
 		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)
+		protected.GET("/users/me/sessions", h.Auth.ListSessions)
+		protected.DELETE("/users/me/sessions/:id", middleware.Audit(db, "users.revoke_session", "session"), h.Auth.RevokeSession)
+		protected.GET("/users/me/transactions", h.Booking.Transactions)
+		protected.GET("/users/me/notification-preferences", h.User.GetNotificationPreferences)
+		protected.PUT("/users/me/notification-preferences", middleware.Audit(db, "users.update_notification_preferences", "user"), h.User.UpdateNotificationPreferences)
 
 		protected.GET("/shows/:id/seats", h.Showtime.SeatMap)
 
@@ -150,6 +155,10 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.PUT("/halls/:id/layout", middleware.Audit(db, "admin.update_hall_layout", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.RegenerateLayout)
 			catalog.DELETE("/halls/:id", middleware.Audit(db, "admin.delete_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteHall)
 			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
+			catalog.POST("/halls/:id/seats/rows", middleware.Audit(db, "admin.add_hall_row", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.AddRow)
+			catalog.DELETE("/halls/:id/seats/rows/:rowLabel", middleware.Audit(db, "admin.delete_hall_row", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteRow)
+			catalog.POST("/halls/:id/seats/merge", middleware.Audit(db, "admin.merge_hall_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.MergeSeats)
+			catalog.POST("/halls/:id/seats/split", middleware.Audit(db, "admin.split_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SplitSeat)
 			catalog.PUT("/halls/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
 			catalog.PUT("/halls/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 			catalog.GET("/showtimes", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.AdminList)
@@ -157,6 +166,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)
 			catalog.PUT("/showtimes/:id", middleware.Audit(db, "admin.update_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Update)
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
+			catalog.POST("/showtimes/:id/cancel", middleware.Audit(db, "admin.cancel_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Cancel)
 		}
 
 		orders := protected.Group("/orders")
@@ -164,12 +174,16 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			orders.GET("", h.Booking.List)
 			orders.POST("/hold", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.hold", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Hold)
+			orders.POST("/init", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.init", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Booking.Init)
 			orders.POST("/:id/pay", middleware.Audit(db, "orders.pay", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Pay)
 			orders.POST("/:id/confirm", middleware.Audit(db, "orders.confirm", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Confirm)
 			orders.POST("/:id/cancel", middleware.Audit(db, "orders.cancel", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Cancel)
+			orders.POST("/:id/refresh", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.refresh", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Booking.Refresh)
 			orders.GET("/:id/status", middleware.RequireRoles(models.RoleCustomer), h.Booking.Status)
 			orders.GET("/:id", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
 			orders.GET("/:id/tickets", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
@@ -179,11 +193,18 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		{
 			tickets.POST("/:id/redeem", middleware.Audit(db, "staff.redeem_ticket", "ticket"),
 				middleware.RequireRoles(models.RoleStaff, models.RoleAdmin), h.Booking.Redeem)
+			tickets.GET("/:id/qr", h.Booking.TicketQR)
 		}
 
 		protected.GET("/events/token", middleware.RateLimitByUser(limits.Events), h.SSE.IssueToken)
 
 		protected.GET("/payments/providers", h.Payment.Providers)
+
+		comboOrders := protected.Group("/combo-orders")
+		{
+			comboOrders.POST("", middleware.Audit(db, "combo_orders.create", "combo_order"), h.Combo.CreateOrder)
+			comboOrders.GET("/me", h.Combo.ListMyOrders)
+		}
 
 		staff := protected.Group("/staff")
 		staff.Use(middleware.RequireRoles(models.RoleStaff, models.RoleAdmin))
@@ -191,13 +212,11 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			staff.GET("/dashboard", h.Staff.Dashboard)
 			staff.GET("/overview", h.Staff.Overview)
 			staff.GET("/boxoffice/day", h.Staff.BoxOfficeDay)
-			// Same action name as the success row the service writes in-transaction
-			// (orders.counter_sell) — filtering by action must show both outcomes.
+			// Same action as the service's in-transaction success row, so filtering shows both outcomes.
 			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
 			staff.GET("/orders/:id", h.Staff.OrderDetail)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
-			// Customer support lookup: read-only, scoped to role=customer accounts
-			// only (staff/admin accounts stay visible only via /admin/users).
+			// Customer support lookup, read-only, scoped to role=customer (staff/admin only via /admin/users).
 			staff.GET("/customers", h.Staff.SearchCustomers)
 			staff.GET("/customers/:id", h.Staff.CustomerProfile)
 			staff.GET("/customers/:id/orders", h.Staff.CustomerOrders)
@@ -212,6 +231,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			middleware.RequireRoles(models.RoleAdmin), h.User.Update)
 
 		protected.GET("/admin/reports/daily", middleware.RequireRoles(models.RoleAdmin), h.Report.Daily)
+		protected.GET("/admin/reports/breakdown", middleware.RequireRoles(models.RoleAdmin), h.Report.Breakdown)
 		protected.GET("/admin/overview", middleware.RequireRoles(models.RoleAdmin), h.Report.Overview)
 		protected.GET("/admin/stats", middleware.RequireRoles(models.RoleAdmin), h.Report.Stats)
 
@@ -233,8 +253,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		{
 			admin.GET("/batch/jobs", h.Batch.List)
 			admin.GET("/audit-logs", h.Audit.List)
-			// Admin-only on purpose: staff read orders one id at a time
-			// (/staff/orders/:id), never every customer's email next to money.
+			// Admin-only: staff read one order at a time (/staff/orders/:id), never all emails next to money.
 			admin.GET("/orders", h.Booking.AdminList)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)

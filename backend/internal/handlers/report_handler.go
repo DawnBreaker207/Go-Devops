@@ -16,8 +16,6 @@ func NewReportHandler(reports service.ReportService) *ReportHandler {
 	return &ReportHandler{reports: reports}
 }
 
-// Daily godoc
-//
 //	@Summary		Revenue per closed day (admin)
 //	@Description	Reads daily_aggregates written by closeDay: confirmed bookings by payment time. Default range: last 7 days. Staff and customers get 403.
 //	@Tags			reports
@@ -41,8 +39,29 @@ func (h *ReportHandler) Daily(c *gin.Context) {
 	response.OK(c, report)
 }
 
-// Overview godoc
-//
+//	@Summary		Revenue analytics breakdown (admin)
+//	@Description	Live aggregation over paid money in [from, to]: daily line, top movies/halls and the payment-method split. Same money rule as closeDay (confirmed bookings by payment time). Default range: last 7 days. Staff and customers get 403.
+//	@Tags			reports
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			from	query		string	false	"YYYY-MM-DD"
+//	@Param			to		query		string	false	"YYYY-MM-DD (default today)"
+//	@Success		200		{object}	response.Body{data=dto.BreakdownResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		403		{object}	response.Body
+//	@Router			/admin/reports/breakdown [get]
+func (h *ReportHandler) Breakdown(c *gin.Context) {
+	// Typed explicitly so this file imports internal/dto: swag resolves the `dto.` prefix
+	// in the annotations from the file's own imports, and without it `make swag` aborts.
+	var report *dto.BreakdownResponse
+	report, err := h.reports.Breakdown(c.Request.Context(), c.Query("from"), c.Query("to")) //nolint:staticcheck // keeps the dto import load-bearing
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, report)
+}
+
 //	@Summary		Admin dashboard: today (live), the last 7 days, upcoming showtimes and operational alerts, in one call
 //	@Description	Today's revenue/occupancy is computed live, not waiting on the closeDay job. Alerts surface stuck refunds, recent failed batch jobs and confirmed orders whose ticket email exhausted every retry.
 //	@Tags			reports
@@ -60,8 +79,6 @@ func (h *ReportHandler) Overview(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// Stats godoc
-//
 //	@Summary		Admin dashboard headline counts
 //	@Description	Four totals for the dashboard tiles: movies, showtimes, bookings and users. Soft-deleted rows are excluded and bookings counts confirmed orders only, so pending holds and expired bookings never inflate the tile. Locked accounts are still counted. Staff and customers get 403.
 //	@Tags			reports

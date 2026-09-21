@@ -1071,6 +1071,326 @@
                 }
             }
         },
+        "/admin/halls/{id}/seats/merge": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The right seat is deleted entirely; the left seat becomes col_span=2, seat_type=couple. Refused (409) if either seat has booking history.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Merge two adjacent standard seats into one couple seat",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Left/right seat labels",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MergeSeatsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/halls/{id}/seats/rows": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Never touches an existing seat - safe while the hall has a live booking (409 only on an actual conflict), unlike regenerating the whole layout.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Append one new row of standard seats to a hall",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/halls/{id}/seats/rows/{rowLabel}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Any row can be removed, not just the last - rows after it shift down by one so numbering stays 1..N with no gap. Refused (409) if any seat in the removed row has booking history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Remove one row and renumber every row after it",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Row label, e.g. C",
+                        "name": "rowLabel",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/halls/{id}/seats/split": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The seat becomes col_span=1, and a new standard seat is created at the next column. Refused (409) if the seat has booking history.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Split one couple seat back into two standard seats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Couple seat label",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SplitSeatRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/halls/{id}/seats/{seatId}": {
             "put": {
                 "security": [
@@ -1349,6 +1669,69 @@
                                     }
                                 }
                             ]
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/reports/breakdown": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Live aggregation over paid money in [from, to]: daily line, top movies/halls and the payment-method split. Same money rule as closeDay (confirmed bookings by payment time). Default range: last 7 days. Staff and customers get 403.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "summary": "Revenue analytics breakdown (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "YYYY-MM-DD",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "YYYY-MM-DD (default today)",
+                        "name": "to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
                     },
                     "403": {
@@ -1820,6 +2203,70 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/showtimes/{id}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unlike DELETE (refused once a showtime has any booking), this cancels the showtime and refunds every booking that already paid for it through the normal refund pipeline. Voids issued tickets of confirmed bookings.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "showtimes"
+                ],
+                "summary": "Cancel an already-sold showtime and refund its bookings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Showtime ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeCancelResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "showtime is already cancelled",
                         "schema": {
                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
@@ -2545,6 +2992,182 @@
                 }
             }
         },
+        "/combo-orders": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Independent of the ticket booking flow; booking_id is an optional correlation only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "combos"
+                ],
+                "summary": "Place a combo/concession order",
+                "parameters": [
+                    {
+                        "description": "Combo order",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboOrderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "booking_id does not belong to the caller",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/combo-orders/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "combos"
+                ],
+                "summary": "List the current user's combo orders",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/combos": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "combos"
+                ],
+                "summary": "List active combo/concession products",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/events/shows/{id}": {
             "get": {
                 "description": "No JWT: the realtime token is the credential. Events: connected, seats (debounced ~100ms); \": ping\" every 15s.",
@@ -3241,6 +3864,81 @@
                 }
             }
         },
+        "/orders/init": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a seatless PENDING booking so the client can count down from entry; seats attach later with POST /orders/hold (replace path). Re-entering with a still-valid pending booking returns it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "Open an empty booking for a showtime",
+                "parameters": [
+                    {
+                        "description": "Showtime to open a booking for",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/orders/{id}": {
             "get": {
                 "security": [
@@ -3506,6 +4204,76 @@
                     },
                     "502": {
                         "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/orders/{id}/refresh": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Silent heartbeat: pushes expiry forward by one TTL, never past created_at + booking.hold_max_lifetime_minutes. Refused for paid, closed or seat-lost bookings.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "Extend a pending booking for the heartbeat",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Booking ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
@@ -4403,6 +5171,64 @@
                 }
             }
         },
+        "/tickets/{id}/qr": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Base64 PNG, same encoding the ticket email embeds inline. Works whether or not the showtime has started; only the ticket's own buyer or staff/admin may fetch it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tickets"
+                ],
+                "summary": "Get a ticket's QR code",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ticket ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketQRResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/tickets/{id}/redeem": {
             "post": {
                 "security": [
@@ -4630,6 +5456,110 @@
                 }
             }
         },
+        "/users/me/notification-preferences": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates the row with the default flags (both on) on first read.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Current notification opt-in flags",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.NotificationPreferenceResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Both flags may be sent false at once; nothing forces a category to stay on.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Replace notification opt-in flags",
+                "parameters": [
+                    {
+                        "description": "New flags",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateNotificationPreferenceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.NotificationPreferenceResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/users/me/password": {
             "put": {
                 "security": [
@@ -4686,6 +5616,180 @@
                     },
                     "401": {
                         "description": "wrong current password",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/sessions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Pass device_id (the caller's own, if known) to flag it as is_current.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "List signed-in devices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Caller's own device id",
+                        "name": "device_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SessionResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/sessions/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Revokes exactly one session; the account's other devices stay signed in.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Sign out one device",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session (refresh token) id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "session does not belong to the caller",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/transactions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Financial history (amount, provider, status, refunds) with just enough booking/showtime context to place each one — distinct from GET /orders, which is the booking/ticket history.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "orders"
+                ],
+                "summary": "List the current user's payment transactions",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TransactionResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
@@ -4866,6 +5970,112 @@
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownDay": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "example": "2026-09-14"
+                },
+                "revenue": {
+                    "type": "integer"
+                },
+                "tickets": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownHall": {
+            "type": "object",
+            "properties": {
+                "hall_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "integer"
+                },
+                "tickets": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownMovie": {
+            "type": "object",
+            "properties": {
+                "movie_id": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "integer"
+                },
+                "tickets": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownProvider": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "revenue": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownResponse": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownDay"
+                    }
+                },
+                "from": {
+                    "type": "string",
+                    "example": "2026-09-08"
+                },
+                "halls": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownHall"
+                    }
+                },
+                "movies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownMovie"
+                    }
+                },
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownProvider"
+                    }
+                },
+                "tickets_sold": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "string",
+                    "example": "2026-09-14"
+                },
+                "total_revenue": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BulkSeatUpdateRequest": {
             "type": "object",
             "required": [
@@ -4917,6 +6127,92 @@
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemRequest": {
+            "type": "object",
+            "required": [
+                "combo_id",
+                "quantity"
+            ],
+            "properties": {
+                "combo_id": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "maximum": 20,
+                    "minimum": 1
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemResponse": {
+            "type": "object",
+            "properties": {
+                "combo_id": {
+                    "type": "string"
+                },
+                "combo_name": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "subtotal": {
+                    "type": "integer"
+                },
+                "unit_price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderResponse": {
+            "type": "object",
+            "properties": {
+                "booking_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemResponse"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CounterSellRequest": {
             "type": "object",
             "required": [
@@ -4941,6 +6237,24 @@
                 },
                 "show_id": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboOrderRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "booking_id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemRequest"
+                    }
                 }
             }
         },
@@ -5180,7 +6494,7 @@
                     "example": 12
                 },
                 "spans": {
-                    "description": "Anchors of 2-column seats, e.g. [\"D3\"] makes one seat spanning D3-D4; the\nneighbor column keeps no seat of its own.",
+                    "description": "Anchors of 2-column seats, e.g. [\"D3\"] spans D3-D4; the neighbor keeps no seat.",
                     "type": "array",
                     "maxItems": 100,
                     "items": {
@@ -5332,6 +6646,38 @@
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitRequest": {
+            "type": "object",
+            "required": [
+                "show_id"
+            ],
+            "properties": {
+                "show_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitResponse": {
+            "type": "object",
+            "properties": {
+                "booking_id": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "reused": {
+                    "type": "boolean"
+                },
+                "showtime_id": {
+                    "type": "string"
+                },
+                "ttl_seconds": {
+                    "description": "TTLSeconds lets the client run its ticker without clock math.",
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest": {
             "type": "object",
             "required": [
@@ -5339,6 +6685,12 @@
                 "password"
             ],
             "properties": {
+                "device_id": {
+                    "description": "DeviceID is generated and kept by the frontend so the resulting session can\nlater be listed and individually signed out from /users/me/sessions.",
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "web-3f0c9b6e"
+                },
                 "email": {
                     "type": "string",
                     "example": "admin@cinema.local"
@@ -5380,6 +6732,25 @@
             "properties": {
                 "refresh_token": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MergeSeatsRequest": {
+            "type": "object",
+            "required": [
+                "left_label",
+                "right_label"
+            ],
+            "properties": {
+                "left_label": {
+                    "type": "string",
+                    "maxLength": 8,
+                    "example": "D3"
+                },
+                "right_label": {
+                    "type": "string",
+                    "maxLength": 8,
+                    "example": "D4"
                 }
             }
         },
@@ -5443,6 +6814,7 @@
                     "type": "string",
                     "enum": [
                         "draft",
+                        "coming_soon",
                         "showing",
                         "ended"
                     ],
@@ -5506,6 +6878,17 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.NotificationPreferenceResponse": {
+            "type": "object",
+            "properties": {
+                "booking_reminders": {
+                    "type": "boolean"
+                },
+                "promo_offers": {
+                    "type": "boolean"
                 }
             }
         },
@@ -5808,6 +7191,17 @@
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshResponse": {
+            "type": "object",
+            "properties": {
+                "booking_id": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest": {
             "type": "object",
             "required": [
@@ -6041,7 +7435,6 @@
             "type": "object",
             "properties": {
                 "is_gap": {
-                    "description": "Omitted keeps the current value.",
                     "type": "boolean"
                 },
                 "seat_type": {
@@ -6052,6 +7445,41 @@
                         "couple",
                         "recliner"
                     ]
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SessionResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_current": {
+                    "description": "IsCurrent is true only when the caller told us its device_id and it matches.",
+                    "type": "boolean"
+                },
+                "last_used_at": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeCancelResponse": {
+            "type": "object",
+            "properties": {
+                "bookings_affected": {
+                    "type": "integer"
+                },
+                "showtime_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -6154,6 +7582,19 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SplitSeatRequest": {
+            "type": "object",
+            "required": [
+                "label"
+            ],
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "maxLength": 8,
+                    "example": "D3"
                 }
             }
         },
@@ -6277,6 +7718,20 @@
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketQRResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "qr_base64": {
+                    "type": "string"
+                },
+                "ticket_id": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse": {
             "type": "object",
             "properties": {
@@ -6322,6 +7777,56 @@
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TransactionResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "booking_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "hall_name": {
+                    "type": "string"
+                },
+                "movie_title": {
+                    "type": "string"
+                },
+                "paid_amount": {
+                    "type": "integer"
+                },
+                "paid_at": {
+                    "type": "string"
+                },
+                "payment_id": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "refunded_at": {
+                    "type": "string"
+                },
+                "showtime_id": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_reason": {
+                    "type": "string"
+                },
+                "txn_ref": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest": {
             "type": "object",
             "properties": {
@@ -6346,6 +7851,17 @@
                         "front",
                         "back"
                     ]
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateNotificationPreferenceRequest": {
+            "type": "object",
+            "properties": {
+                "booking_reminders": {
+                    "type": "boolean"
+                },
+                "promo_offers": {
+                    "type": "boolean"
                 }
             }
         },

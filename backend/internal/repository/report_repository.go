@@ -42,11 +42,11 @@ type ReportRepository interface {
 	CounterSalesDay(ctx context.Context, from, to time.Time) (count, total int64, err error)
 	LiveDayAggregate(ctx context.Context, from, to time.Time) (LiveAggregateRow, error)
 	EntityCounts(ctx context.Context) (EntityCountsRow, error)
+	RevenueBreakdown(ctx context.Context, from, to time.Time) (BreakdownRows, error)
 }
 
-// LiveAggregateRow is the same shape as a daily_aggregates row, computed on
-// the spot for a window that closeDay may not have run for yet (typically
-// "today").
+// LiveAggregateRow: daily_aggregates shape computed live for a window
+// closeDay hasn't closed yet (typically today).
 type LiveAggregateRow struct {
 	TotalRevenue  int64   `gorm:"column:total_revenue"`
 	TicketsSold   int     `gorm:"column:tickets_sold"`
@@ -55,13 +55,94 @@ type LiveAggregateRow struct {
 	OccupancyRate float64 `gorm:"column:occupancy_rate"`
 }
 
-// EntityCountsRow is the four headline counts of the admin dashboard, in one
-// round trip.
+// EntityCountsRow: four headline counts of the admin dashboard, one round trip.
 type EntityCountsRow struct {
 	Movies    int64 `gorm:"column:movies"`
 	Showtimes int64 `gorm:"column:showtimes"`
 	Bookings  int64 `gorm:"column:bookings"`
 	Users     int64 `gorm:"column:users"`
+}
+
+// BreakdownRows: paid-money analytics for one window. Revenue follows the
+// closeDay rule (confirmed bookings by payment time); tickets count issued
+// tickets of those bookings. Top 10 each, by revenue.
+type BreakdownMovieRow struct {
+	MovieID string `gorm:"column:movie_id"`
+	Title   string `gorm:"column:title"`
+	Revenue int64  `gorm:"column:revenue"`
+	Tickets int    `gorm:"column:tickets"`
+}
+
+type BreakdownHallRow struct {
+	HallID  string `gorm:"column:hall_id"`
+	Name    string `gorm:"column:name"`
+	Revenue int64  `gorm:"column:revenue"`
+	Tickets int    `gorm:"column:tickets"`
+}
+
+type BreakdownProviderRow struct {
+	Provider string `gorm:"column:provider"`
+	Revenue  int64  `gorm:"column:revenue"`
+	Count    int    `gorm:"column:count"`
+}
+
+type BreakdownDayRow struct {
+	Date    string `gorm:"column:date"`
+	Revenue int64  `gorm:"column:revenue"`
+	Tickets int    `gorm:"column:tickets"`
+}
+
+type BreakdownRows struct {
+	Days      []BreakdownDayRow
+	Movies    []BreakdownMovieRow
+	Halls     []BreakdownHallRow
+	Providers []BreakdownProviderRow
+}
+
+func (r *reportRepository) RevenueBreakdown(ctx context.Context, from, to time.Time) (BreakdownRows, error) {
+	var out BreakdownRows
+	params := map[string]any{"from": from, "to": to}
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT CAST(b.paid_at AS date)::text AS date,
+			COALESCE(SUM(b.total_amount), 0) AS revenue,
+			COALESCE(SUM((SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id)), 0) AS tickets
+		FROM bookings b
+		WHERE b.status = 'confirmed' AND b.paid_at >= @from AND b.paid_at < @to
+		GROUP BY 1 ORDER BY 1`, params).Scan(&out.Days).Error; err != nil {
+		return out, fmt.Errorf("breakdown days: %w", err)
+	}
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT m.id AS movie_id, m.title,
+			COALESCE(SUM(b.total_amount), 0) AS revenue,
+			COALESCE(SUM((SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id)), 0) AS tickets
+		FROM bookings b
+		JOIN showtimes st ON st.id = b.showtime_id
+		JOIN movies m ON m.id = st.movie_id
+		WHERE b.status = 'confirmed' AND b.paid_at >= @from AND b.paid_at < @to
+		GROUP BY m.id, m.title ORDER BY revenue DESC LIMIT 10`, params).Scan(&out.Movies).Error; err != nil {
+		return out, fmt.Errorf("breakdown movies: %w", err)
+	}
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT h.id AS hall_id, h.name,
+			COALESCE(SUM(b.total_amount), 0) AS revenue,
+			COALESCE(SUM((SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id)), 0) AS tickets
+		FROM bookings b
+		JOIN showtimes st ON st.id = b.showtime_id
+		JOIN halls h ON h.id = st.hall_id
+		WHERE b.status = 'confirmed' AND b.paid_at >= @from AND b.paid_at < @to
+		GROUP BY h.id, h.name ORDER BY revenue DESC LIMIT 10`, params).Scan(&out.Halls).Error; err != nil {
+		return out, fmt.Errorf("breakdown halls: %w", err)
+	}
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT provider,
+			COALESCE(SUM(COALESCE(paid_amount, amount)), 0) AS revenue,
+			COUNT(*) AS count
+		FROM payments
+		WHERE status = 'paid' AND paid_at >= @from AND paid_at < @to
+		GROUP BY provider ORDER BY revenue DESC`, params).Scan(&out.Providers).Error; err != nil {
+		return out, fmt.Errorf("breakdown providers: %w", err)
+	}
+	return out, nil
 }
 
 type reportRepository struct {
@@ -72,8 +153,7 @@ func NewReportRepository(db *gorm.DB) ReportRepository {
 	return &reportRepository{db: db}
 }
 
-// Revenue and tickets count CONFIRMED bookings paid in [from, to); seats and occupancy count
-// showtimes starting in it. ON CONFLICT makes a re-run replace the day's numbers, never add to them.
+// Revenue/tickets count CONFIRMED paid in [from, to); seats/occupancy count showtimes starting in it. ON CONFLICT replaces the day.
 const upsertDailyAggregateSQL = `
 WITH paid AS (
 	SELECT b.id, b.total_amount
@@ -201,9 +281,7 @@ func (r *reportRepository) CounterSalesDay(ctx context.Context, from, to time.Ti
 	return row.Count, row.Total, nil
 }
 
-// LiveDayAggregate is the read-only twin of upsertDailyAggregateSQL's
-// computation, for a window (typically "today") that hasn't been closed by
-// the closeDay job yet — an admin overview should not have to wait for it.
+// LiveDayAggregate: read-only twin of the upsert computation, so overview needn't wait for closeDay.
 const liveDayAggregateSQL = `
 WITH paid AS (
 	SELECT b.id, b.total_amount
@@ -240,11 +318,8 @@ func (r *reportRepository) LiveDayAggregate(ctx context.Context, from, to time.T
 	return row, nil
 }
 
-// Four scalar subselects rather than four Count() calls: one round trip, and the
-// same projection shape liveDayAggregateSQL already uses. Raw SQL bypasses GORM's
-// soft-delete scope, so every deleted_at predicate is written out by hand —
-// bookings deliberately has none, that table has no such column. 'confirmed' is
-// models.BookingConfirmed, inlined the way the adjacent aggregate SQL does it.
+// One round trip of scalar subselects. Raw SQL bypasses GORM soft-delete scope, so
+// deleted_at predicates are hand-written (bookings has none); 'confirmed' = models.BookingConfirmed.
 const entityCountsSQL = `
 SELECT
 	(SELECT COUNT(*) FROM movies    WHERE deleted_at IS NULL)   AS movies,

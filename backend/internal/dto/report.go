@@ -2,8 +2,7 @@ package dto
 
 import "time"
 
-// StaffShowtimeResponse is one showtime on the staff board. It carries seat
-// counts only: staff never see money
+// StaffShowtimeResponse: one showtime, seat counts only (no money).
 type StaffShowtimeResponse struct {
 	ID         string    `json:"id"`
 	MovieTitle string    `json:"movie_title"`
@@ -18,20 +17,18 @@ type StaffShowtimeResponse struct {
 	CheckedIn  int       `json:"checked_in"`
 }
 
-// StaffBoardResponse is the staff dashboard of one day.
 type StaffBoardResponse struct {
 	Date      string                  `json:"date" example:"2026-09-14"`
 	Showtimes []StaffShowtimeResponse `json:"showtimes"`
 }
 
-// BoxOfficeDayResponse settles the counter's day: walk-in sales only.
+// BoxOfficeDayResponse: walk-in sales of one day.
 type BoxOfficeDayResponse struct {
 	Date  string `json:"date" example:"2026-09-14"`
 	Count int64  `json:"count"`
 	Total int64  `json:"total"`
 }
 
-// StaffTicketResponse is one ticket of a showtime at the gate.
 type StaffTicketResponse struct {
 	ID        string    `json:"id"`
 	BookingID string    `json:"booking_id"`
@@ -41,7 +38,7 @@ type StaffTicketResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// DailyReportResponse is the admin revenue report over closed days.
+// DailyReportResponse: admin revenue over closed days.
 type DailyReportResponse struct {
 	From         string                   `json:"from" example:"2026-09-08"`
 	To           string                   `json:"to" example:"2026-09-14"`
@@ -50,7 +47,6 @@ type DailyReportResponse struct {
 	Days         []DailyAggregateResponse `json:"days"`
 }
 
-// DailyAggregateResponse is the closeDay rollup of one day.
 type DailyAggregateResponse struct {
 	ReportDate    string         `json:"report_date"`
 	TotalRevenue  int64          `json:"total_revenue"`
@@ -62,7 +58,7 @@ type DailyAggregateResponse struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
-// StuckRefundAlert is a refund that has failed provider-side several times in a row.
+// StuckRefundAlert: refund failing provider-side repeatedly.
 type StuckRefundAlert struct {
 	PaymentID string `json:"payment_id"`
 	BookingID string `json:"booking_id"`
@@ -71,7 +67,6 @@ type StuckRefundAlert struct {
 	LastError string `json:"last_error,omitempty"`
 }
 
-// FailedJobAlert is a recent batch job run that ended in failure.
 type FailedJobAlert struct {
 	ID           string    `json:"id"`
 	JobName      string    `json:"job_name"`
@@ -86,17 +81,14 @@ type GivenUpEmailAlert struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// AdminAlertsResponse surfaces operational issues that would otherwise only
-// be found by manually filtering /admin/audit-logs or /admin/batch/jobs.
+// AdminAlertsResponse: issues otherwise found only by filtering audit-logs/batch-jobs.
 type AdminAlertsResponse struct {
 	StuckRefunds  []StuckRefundAlert  `json:"stuck_refunds"`
 	FailedJobs    []FailedJobAlert    `json:"failed_jobs"`
 	GivenUpEmails []GivenUpEmailAlert `json:"given_up_emails"`
 }
 
-// AdminOverviewResponse is the one-call admin dashboard: today's business
-// computed live (not waiting on closeDay), the last 7 closed days for trend,
-// what's still to come today, and anything that needs an admin's attention.
+// AdminOverviewResponse: one-call dashboard (live today, last 7 closed days, upcoming, alerts).
 type AdminOverviewResponse struct {
 	Today             DailyAggregateResponse   `json:"today"`
 	Last7Days         []DailyAggregateResponse `json:"last_7_days"`
@@ -104,8 +96,7 @@ type AdminOverviewResponse struct {
 	Alerts            AdminAlertsResponse      `json:"alerts"`
 }
 
-// StaffOverviewResponse composes the existing staff board and box office
-// numbers with one derived count, so the floor app can land on a single call.
+// StaffOverviewResponse: board + box office + derived awaiting count, one call for the floor app.
 type StaffOverviewResponse struct {
 	Date              string                  `json:"date" example:"2026-09-14"`
 	Showtimes         []StaffShowtimeResponse `json:"showtimes"`
@@ -114,14 +105,52 @@ type StaffOverviewResponse struct {
 	AwaitingCheckin   int                     `json:"awaiting_checkin"`
 }
 
-// AdminStatsResponse is the admin dashboard's four headline counts, one per
-// tile. Soft-deleted movies, showtimes and users are excluded; bookings counts
-// CONFIRMED orders only, so a hold nobody paid for never inflates a tile
-// labelled "Bookings". Locked (active=false) users are still counted: a lock is
-// an operational state, not a deletion — and GET /admin/users counts them too.
+// AdminStatsResponse: four headline counts. Excludes soft-deleted; bookings counts
+// CONFIRMED only; locked users still counted (lock ≠ deletion, same as GET /admin/users).
 type AdminStatsResponse struct {
 	Movies    int64 `json:"movies"`
 	Showtimes int64 `json:"showtimes"`
 	Bookings  int64 `json:"bookings"`
 	Users     int64 `json:"users"`
+}
+
+// BreakdownResponse: revenue analytics over PAID money in [from, to] - top
+// movies/halls, payment-method split and the daily line. Same money rule as
+// closeDay (confirmed bookings by payment time), aggregated live instead of
+// waiting for closed rows, so charts work for any range including today.
+type BreakdownMovie struct {
+	MovieID  string `json:"movie_id"`
+	Title    string `json:"title"`
+	Revenue  int64  `json:"revenue"`
+	Tickets  int    `json:"tickets"`
+}
+
+type BreakdownHall struct {
+	HallID  string `json:"hall_id"`
+	Name    string `json:"name"`
+	Revenue int64  `json:"revenue"`
+	Tickets int    `json:"tickets"`
+}
+
+type BreakdownProvider struct {
+	Provider string `json:"provider"`
+	Revenue  int64  `json:"revenue"`
+	Count    int    `json:"count"`
+}
+
+type BreakdownDay struct {
+	Date    string `json:"date" example:"2026-09-14"`
+	Revenue int64  `json:"revenue"`
+	Tickets int    `json:"tickets"`
+}
+
+type BreakdownResponse struct {
+	From         string              `json:"from" example:"2026-09-08"`
+	To           string              `json:"to" example:"2026-09-14"`
+	TotalRevenue int64               `json:"total_revenue"`
+	TicketsSold  int                 `json:"tickets_sold"`
+	Days         []BreakdownDay      `json:"days"`
+	Movies       []BreakdownMovie    `json:"movies"`
+	Halls        []BreakdownHall     `json:"halls"`
+	Providers    []BreakdownProvider `json:"providers"`
 }

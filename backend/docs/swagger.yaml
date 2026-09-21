@@ -113,6 +113,76 @@ definitions:
       total:
         type: integer
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownDay:
+    properties:
+      date:
+        example: "2026-09-14"
+        type: string
+      revenue:
+        type: integer
+      tickets:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownHall:
+    properties:
+      hall_id:
+        type: string
+      name:
+        type: string
+      revenue:
+        type: integer
+      tickets:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownMovie:
+    properties:
+      movie_id:
+        type: string
+      revenue:
+        type: integer
+      tickets:
+        type: integer
+      title:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownProvider:
+    properties:
+      count:
+        type: integer
+      provider:
+        type: string
+      revenue:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownResponse:
+    properties:
+      days:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownDay'
+        type: array
+      from:
+        example: "2026-09-08"
+        type: string
+      halls:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownHall'
+        type: array
+      movies:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownMovie'
+        type: array
+      providers:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownProvider'
+        type: array
+      tickets_sold:
+        type: integer
+      to:
+        example: "2026-09-14"
+        type: string
+      total_revenue:
+        type: integer
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BulkSeatUpdateRequest:
     properties:
       changes:
@@ -149,6 +219,63 @@ definitions:
     required:
     - name
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemRequest:
+    properties:
+      combo_id:
+        type: string
+      quantity:
+        maximum: 20
+        minimum: 1
+        type: integer
+    required:
+    - combo_id
+    - quantity
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemResponse:
+    properties:
+      combo_id:
+        type: string
+      combo_name:
+        type: string
+      quantity:
+        type: integer
+      subtotal:
+        type: integer
+      unit_price:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderResponse:
+    properties:
+      booking_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemResponse'
+        type: array
+      status:
+        type: string
+      total:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse:
+    properties:
+      active:
+        type: boolean
+      description:
+        type: string
+      id:
+        type: string
+      image_url:
+        type: string
+      name:
+        type: string
+      price:
+        type: integer
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CounterSellRequest:
     properties:
       customer_name:
@@ -167,6 +294,18 @@ definitions:
     required:
     - seat_ids
     - show_id
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboOrderRequest:
+    properties:
+      booking_id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderItemRequest'
+        minItems: 1
+        type: array
+    required:
+    - items
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest:
     properties:
@@ -334,9 +473,8 @@ definitions:
         minimum: 1
         type: integer
       spans:
-        description: |-
-          Anchors of 2-column seats, e.g. ["D3"] makes one seat spanning D3-D4; the
-          neighbor column keeps no seat of its own.
+        description: Anchors of 2-column seats, e.g. ["D3"] spans D3-D4; the neighbor
+          keeps no seat.
         example:
         - '["D3"]'
         items:
@@ -441,8 +579,36 @@ definitions:
       total_amount:
         type: integer
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitRequest:
+    properties:
+      show_id:
+        type: string
+    required:
+    - show_id
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitResponse:
+    properties:
+      booking_id:
+        type: string
+      expires_at:
+        type: string
+      reused:
+        type: boolean
+      showtime_id:
+        type: string
+      ttl_seconds:
+        description: TTLSeconds lets the client run its ticker without clock math.
+        type: integer
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.LoginRequest:
     properties:
+      device_id:
+        description: |-
+          DeviceID is generated and kept by the frontend so the resulting session can
+          later be listed and individually signed out from /users/me/sessions.
+        example: web-3f0c9b6e
+        maxLength: 255
+        type: string
       email:
         example: admin@cinema.local
         type: string
@@ -475,6 +641,20 @@ definitions:
         type: string
     required:
     - refresh_token
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MergeSeatsRequest:
+    properties:
+      left_label:
+        example: D3
+        maxLength: 8
+        type: string
+      right_label:
+        example: D4
+        maxLength: 8
+        type: string
+    required:
+    - left_label
+    - right_label
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieRequest:
     properties:
@@ -518,6 +698,7 @@ definitions:
       status:
         enum:
         - draft
+        - coming_soon
         - showing
         - ended
         example: showing
@@ -570,6 +751,13 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.NotificationPreferenceResponse:
+    properties:
+      booking_reminders:
+        type: boolean
+      promo_offers:
+        type: boolean
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderCustomer:
     properties:
@@ -769,6 +957,13 @@ definitions:
     required:
     - refresh_token
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshResponse:
+    properties:
+      booking_id:
+        type: string
+      expires_at:
+        type: string
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RegisterRequest:
     properties:
       email:
@@ -931,7 +1126,6 @@ definitions:
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatUpdateRequest:
     properties:
       is_gap:
-        description: Omitted keeps the current value.
         type: boolean
       seat_type:
         enum:
@@ -939,6 +1133,30 @@ definitions:
         - vip
         - couple
         - recliner
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SessionResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      is_current:
+        description: IsCurrent is true only when the caller told us its device_id
+          and it matches.
+        type: boolean
+      last_used_at:
+        type: string
+      user_agent:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeCancelResponse:
+    properties:
+      bookings_affected:
+        type: integer
+      showtime_id:
+        type: string
+      status:
         type: string
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeListItem:
@@ -1009,6 +1227,15 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SplitSeatRequest:
+    properties:
+      label:
+        example: D3
+        maxLength: 8
+        type: string
+    required:
+    - label
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.StaffBoardResponse:
     properties:
@@ -1089,6 +1316,15 @@ definitions:
       payment_id:
         type: string
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketQRResponse:
+    properties:
+      code:
+        type: string
+      qr_base64:
+        type: string
+      ticket_id:
+        type: string
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse:
     properties:
       code:
@@ -1119,6 +1355,39 @@ definitions:
         example: Bearer
         type: string
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TransactionResponse:
+    properties:
+      amount:
+        type: integer
+      booking_id:
+        type: string
+      created_at:
+        type: string
+      hall_name:
+        type: string
+      movie_title:
+        type: string
+      paid_amount:
+        type: integer
+      paid_at:
+        type: string
+      payment_id:
+        type: string
+      provider:
+        type: string
+      refunded_at:
+        type: string
+      showtime_id:
+        type: string
+      start_at:
+        type: string
+      status:
+        type: string
+      status_reason:
+        type: string
+      txn_ref:
+        type: string
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest:
     properties:
       active:
@@ -1137,6 +1406,13 @@ definitions:
         - front
         - back
         type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateNotificationPreferenceRequest:
+    properties:
+      booking_reminders:
+        type: boolean
+      promo_offers:
+        type: boolean
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateProfileRequest:
     properties:
@@ -1942,6 +2218,206 @@ paths:
       summary: Change a seat's type or gap flag
       tags:
       - halls
+  /admin/halls/{id}/seats/merge:
+    post:
+      consumes:
+      - application/json
+      description: The right seat is deleted entirely; the left seat becomes col_span=2,
+        seat_type=couple. Refused (409) if either seat has booking history.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Left/right seat labels
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MergeSeatsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Merge two adjacent standard seats into one couple seat
+      tags:
+      - halls
+  /admin/halls/{id}/seats/rows:
+    post:
+      description: Never touches an existing seat - safe while the hall has a live
+        booking (409 only on an actual conflict), unlike regenerating the whole layout.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Append one new row of standard seats to a hall
+      tags:
+      - halls
+  /admin/halls/{id}/seats/rows/{rowLabel}:
+    delete:
+      description: Any row can be removed, not just the last - rows after it shift
+        down by one so numbering stays 1..N with no gap. Refused (409) if any seat
+        in the removed row has booking history.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Row label, e.g. C
+        in: path
+        name: rowLabel
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Remove one row and renumber every row after it
+      tags:
+      - halls
+  /admin/halls/{id}/seats/split:
+    post:
+      consumes:
+      - application/json
+      description: The seat becomes col_span=1, and a new standard seat is created
+        at the next column. Refused (409) if the seat has booking history.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Couple seat label
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SplitSeatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Split one couple seat back into two standard seats
+      tags:
+      - halls
   /admin/orders:
     get:
       description: 'The operator counterpart of GET /orders: not scoped to the caller.
@@ -2070,6 +2546,46 @@ paths:
       - BearerAuth: []
       summary: 'Admin dashboard: today (live), the last 7 days, upcoming showtimes
         and operational alerts, in one call'
+      tags:
+      - reports
+  /admin/reports/breakdown:
+    get:
+      description: 'Live aggregation over paid money in [from, to]: daily line, top
+        movies/halls and the payment-method split. Same money rule as closeDay (confirmed
+        bookings by payment time). Default range: last 7 days. Staff and customers
+        get 403.'
+      parameters:
+      - description: YYYY-MM-DD
+        in: query
+        name: from
+        type: string
+      - description: YYYY-MM-DD (default today)
+        in: query
+        name: to
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BreakdownResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Revenue analytics breakdown (admin)
       tags:
       - reports
   /admin/reports/daily:
@@ -2356,6 +2872,46 @@ paths:
       security:
       - BearerAuth: []
       summary: Reschedule a showtime
+      tags:
+      - showtimes
+  /admin/showtimes/{id}/cancel:
+    post:
+      description: Unlike DELETE (refused once a showtime has any booking), this cancels
+        the showtime and refunds every booking that already paid for it through the
+        normal refund pipeline. Voids issued tickets of confirmed bookings.
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ShowtimeCancelResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: showtime is already cancelled
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Cancel an already-sold showtime and refund its bookings
       tags:
       - showtimes
   /admin/stats:
@@ -2799,6 +3355,108 @@ paths:
       summary: Accept the current terms and sign in
       tags:
       - auth
+  /combo-orders:
+    post:
+      consumes:
+      - application/json
+      description: Independent of the ticket booking flow; booking_id is an optional
+        correlation only.
+      parameters:
+      - description: Combo order
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: booking_id does not belong to the caller
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Place a combo/concession order
+      tags:
+      - combos
+  /combo-orders/me:
+    get:
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboOrderResponse'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List the current user's combo orders
+      tags:
+      - combos
+  /combos:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse'
+                  type: array
+              type: object
+      summary: List active combo/concession products
+      tags:
+      - combos
   /events/shows/{id}:
     get:
       description: 'No JWT: the realtime token is the credential. Events: connected,
@@ -3335,6 +3993,50 @@ paths:
       summary: Start payment for a booking with a chosen provider
       tags:
       - orders
+  /orders/{id}/refresh:
+    post:
+      description: 'Silent heartbeat: pushes expiry forward by one TTL, never past
+        created_at + booking.hold_max_lifetime_minutes. Refused for paid, closed or
+        seat-lost bookings.'
+      parameters:
+      - description: Booking ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RefreshResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Extend a pending booking for the heartbeat
+      tags:
+      - orders
   /orders/{id}/status:
     get:
       parameters:
@@ -3416,6 +4118,53 @@ paths:
       security:
       - BearerAuth: []
       summary: Hold seats for a showtime
+      tags:
+      - orders
+  /orders/init:
+    post:
+      consumes:
+      - application/json
+      description: Creates a seatless PENDING booking so the client can count down
+        from entry; seats attach later with POST /orders/hold (replace path). Re-entering
+        with a still-valid pending booking returns it.
+      parameters:
+      - description: Showtime to open a booking for
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.InitResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Open an empty booking for a showtime
       tags:
       - orders
   /payments/{provider}/ipn:
@@ -3906,6 +4655,42 @@ paths:
       summary: 'Tickets of a showtime (status=issued: still waiting at the gate)'
       tags:
       - staff
+  /tickets/{id}/qr:
+    get:
+      description: Base64 PNG, same encoding the ticket email embeds inline. Works
+        whether or not the showtime has started; only the ticket's own buyer or staff/admin
+        may fetch it.
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketQRResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get a ticket's QR code
+      tags:
+      - tickets
   /tickets/{id}/redeem:
     post:
       consumes:
@@ -4045,6 +4830,67 @@ paths:
       summary: Update own full name and phone
       tags:
       - users
+  /users/me/notification-preferences:
+    get:
+      description: Creates the row with the default flags (both on) on first read.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.NotificationPreferenceResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Current notification opt-in flags
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Both flags may be sent false at once; nothing forces a category
+        to stay on.
+      parameters:
+      - description: New flags
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateNotificationPreferenceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.NotificationPreferenceResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Replace notification opt-in flags
+      tags:
+      - users
   /users/me/password:
     put:
       consumes:
@@ -4083,6 +4929,111 @@ paths:
       summary: Change the current password
       tags:
       - users
+  /users/me/sessions:
+    get:
+      description: Pass device_id (the caller's own, if known) to flag it as is_current.
+      parameters:
+      - description: Caller's own device id
+        in: query
+        name: device_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SessionResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List signed-in devices
+      tags:
+      - users
+  /users/me/sessions/{id}:
+    delete:
+      description: Revokes exactly one session; the account's other devices stay signed
+        in.
+      parameters:
+      - description: Session (refresh token) id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: session does not belong to the caller
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Sign out one device
+      tags:
+      - users
+  /users/me/transactions:
+    get:
+      description: Financial history (amount, provider, status, refunds) with just
+        enough booking/showtime context to place each one — distinct from GET /orders,
+        which is the booking/ticket history.
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TransactionResponse'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List the current user's payment transactions
+      tags:
+      - orders
 securityDefinitions:
   BearerAuth:
     description: 'Header format: Bearer <access_token>'

@@ -47,6 +47,56 @@ func TestHTTP_DailyReportExcludesPending(t *testing.T) {
 	}
 }
 
+// Breakdown aggregates paid money live for the Analytics tab: one confirmed
+// sale shows up in the daily line, top movie/hall rows and the provider
+// split without waiting for closeDay. Two seats on purpose: revenue must not
+// fan out per ticket row.
+func TestHTTP_BreakdownLiveAggregates(t *testing.T) {
+	h := newHTTPEnv(t)
+	admin, _ := h.login(models.RoleAdmin)
+
+	bookingID := h.confirmed(h.users[0], "A1", "A2")
+	day := (*h.booking(bookingID).PaidAt).UTC().Format(dto.DateLayout)
+
+	status, _, body := h.call(http.MethodGet, "/api/v1/admin/reports/breakdown?from="+day+"&to="+day, admin, nil)
+	if status != http.StatusOK {
+		t.Fatalf("HTTP %d %v", status, body["message"])
+	}
+	data := dataMap(body)
+	if revenue := int64(data["total_revenue"].(float64)); revenue != 2*priceStandard {
+		t.Fatalf("total_revenue = %d, want %d", revenue, 2*priceStandard)
+	}
+	if sold := int64(data["tickets_sold"].(float64)); sold != 2 {
+		t.Fatalf("tickets_sold = %d, want 2", sold)
+	}
+	movies, _ := data["movies"].([]any)
+	if len(movies) != 1 {
+		t.Fatalf("movies = %d rows, want 1", len(movies))
+	}
+	movie, _ := movies[0].(map[string]any)
+	if revenue := int64(movie["revenue"].(float64)); revenue != 2*priceStandard {
+		t.Fatalf("movie revenue = %d, want %d", revenue, 2*priceStandard)
+	}
+	if tickets := int64(movie["tickets"].(float64)); tickets != 2 {
+		t.Fatalf("movie tickets = %d, want 2", tickets)
+	}
+	halls, _ := data["halls"].([]any)
+	if len(halls) != 1 {
+		t.Fatalf("halls = %d rows, want 1", len(halls))
+	}
+	providers, _ := data["providers"].([]any)
+	if len(providers) != 1 {
+		t.Fatalf("providers = %d rows, want 1", len(providers))
+	}
+	provider, _ := providers[0].(map[string]any)
+	if provider["provider"] != "mock" {
+		t.Fatalf("provider = %v, want mock", provider["provider"])
+	}
+	if revenue := int64(provider["revenue"].(float64)); revenue != 2*priceStandard {
+		t.Fatalf("provider revenue = %d, want %d", revenue, 2*priceStandard)
+	}
+}
+
 // T24 / E-B2 / E-D4: closing a day twice keeps one row with the same numbers; only confirmed money counts.
 func TestCloseDay_IdempotentAndConfirmedOnly(t *testing.T) {
 	e := newEnv(t)
