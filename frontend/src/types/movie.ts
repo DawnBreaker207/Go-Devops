@@ -1,4 +1,4 @@
-export type MovieStatus = 'draft' | 'showing' | 'ended';
+export type MovieStatus = 'draft' | 'coming_soon' | 'showing' | 'ended';
 
 /** Phan loai do tuoi cua Viet Nam. Backend mac dinh 'P' khi gui rong. */
 export type MovieAgeRating = 'P' | 'K' | 'T13' | 'T16' | 'T18';

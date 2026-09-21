@@ -7,6 +7,7 @@ import './MovieCard.css';
 
 const STATUS_COLOR: Record<MovieStatus, string> = {
   draft: 'default',
+  coming_soon: 'blue',
   showing: 'green',
   ended: 'red',
 };
@@ -35,9 +36,11 @@ export const MovieCard = ({ movie, onBook, onTrailer }: MovieCardProps) => {
       <div className="movie-card__media">
         {movie.poster_url ? <img src={movie.poster_url} alt="" loading="lazy" /> : null}
         <div className="movie-card__overlay">
-          <Button type="primary" size="small" onClick={() => onBook?.(movie)}>
-            {t('movie.book')}
-          </Button>
+          {onBook ? (
+            <Button type="primary" size="small" onClick={() => onBook(movie)}>
+              {t('movie.book')}
+            </Button>
+          ) : null}
           {movie.trailer_url ? (
             <Button
               size="small"

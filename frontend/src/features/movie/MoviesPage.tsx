@@ -14,6 +14,7 @@ import { useListQuery } from '@/hooks/useListQuery';
 
 const STATUS_COLOR: Record<MovieStatus, string> = {
   draft: 'default',
+  coming_soon: 'blue',
   showing: 'green',
   ended: 'red',
 };

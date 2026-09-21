@@ -27,12 +27,15 @@ const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
 const SelectSeatPage = lazy(() => import('@/features/booking-flow/SelectSeatPage'));
 const CheckoutPage = lazy(() => import('@/features/booking-flow/CheckoutPage'));
 const OrderSuccessPage = lazy(() => import('@/features/booking-flow/OrderSuccessPage'));
+const FilmsPage = lazy(() => import('@/features/browse/FilmsPage'));
+const PricingPage = lazy(() => import('@/features/browse/PricingPage'));
+const CinemaInfoPage = lazy(() => import('@/features/browse/CinemaInfoPage'));
+const OffersPage = lazy(() => import('@/features/browse/OffersPage'));
 const AccountPage = lazy(() => import('@/features/browse/AccountPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const router = createBrowserRouter([
-  // Khu khach hang. Duyet phim va chon suat la CONG KHAI (nhom `public` +
-  // OptionalAuth ben backend), nen khong boc trong ProtectedRoute.
+  // Customer zone. Browsing movies/picking showtimes is public (backend OptionalAuth), no ProtectedRoute wrapper.
   {
     element: <CustomerLayout />,
     children: [
@@ -44,6 +47,10 @@ export const router = createBrowserRouter([
       // van hanh, va moi man da tu xu ly loi cua no.
       { path: PATHS.checkout, element: <CheckoutPage /> },
       { path: PATHS.orderSuccess, element: <OrderSuccessPage /> },
+      { path: PATHS.films, element: <FilmsPage /> },
+      { path: PATHS.pricing, element: <PricingPage /> },
+      { path: PATHS.cinemaInfo, element: <CinemaInfoPage /> },
+      { path: PATHS.offers, element: <OffersPage /> },
       { path: PATHS.account, element: <AccountPage /> },
       // Legacy /my-tickets route: tickets now live in Account, redirect keeps old bookmarks working.
       { path: '/my-tickets', element: <Navigate to={accountTicketsPath()} replace /> },

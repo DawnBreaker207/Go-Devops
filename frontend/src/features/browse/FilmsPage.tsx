@@ -1,35 +1,34 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 import PosterCard from './components/PosterCard';
 import PosterGridSkeleton from './components/PosterGridSkeleton';
-import BannerCarousel from './components/BannerCarousel';
 import BrowseTabs, { type BrowseTab } from './components/BrowseTabs';
 import BookingModal from './components/BookingModal';
 import { useNowShowing } from './hooks/useBrowse';
 import { errorMessage } from '@/utils/error';
-import { PATHS } from '@/routes/paths';
 import type { Movie } from '@/types';
 import Notice from '@/components/ui/Notice';
 import EmptyState from '@/components/ui/EmptyState';
 import Panel from '@/components/ui/Panel';
-import { BROWSE_GRID, INK_65, INK_BORDER_20, TRANSITION_FAST } from '@/theme/customerTw';
+import SectionHead from '@/components/ui/SectionHead';
+import { BROWSE_GRID } from '@/theme/customerTw';
 
-/** Customer home: banner + Now/Coming tabs + poster grid (Figma Home 77-855). */
-
-/** Backend max is 100; this cinema never has that many movies. */
 const PAGE_SIZE = 100;
 
-/** Max movies per tab before "View more". */
-const HOME_LIMIT = 8;
+const isBrowseTab = (value: string | null): value is BrowseTab =>
+  value === 'showing' || value === 'coming_soon' || value === 'special';
 
-export const HomePage = () => {
+/** Full "Movies" page: same 3 tabs as home but unlimited (home caps at 8/tab). Linked from header nav and home "View more". */
+export const FilmsPage = () => {
   const { t } = useTranslation();
-  const { data, isLoading, error } = useNowShowing({ page: 1, page_size: PAGE_SIZE });
-  const [tab, setTab] = useState<BrowseTab>('showing');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab');
+  const [tab, setTab] = useState<BrowseTab>(isBrowseTab(initialTab) ? initialTab : 'showing');
   const [bookingMovie, setBookingMovie] = useState<Movie | null>(null);
 
-  // GET /movies returns everything incl. draft/ended; customers see only showing + coming_soon.
+  const { data, isLoading, error } = useNowShowing({ page: 1, page_size: PAGE_SIZE });
+
   const showing = useMemo(
     () => (data?.items ?? []).filter((movie) => movie.status === 'showing'),
     [data]
@@ -38,18 +37,19 @@ export const HomePage = () => {
     () => (data?.items ?? []).filter((movie) => movie.status === 'coming_soon'),
     [data]
   );
-  // "Special" is an empty placeholder tab (no such backend concept; UI first, unwired).
-  const allForTab = tab === 'showing' ? showing : tab === 'coming_soon' ? comingSoon : [];
-  const visible = allForTab.slice(0, HOME_LIMIT);
-  const hasMore = allForTab.length > HOME_LIMIT;
+  const visible = tab === 'showing' ? showing : tab === 'coming_soon' ? comingSoon : [];
+
+  const changeTab = (next: BrowseTab) => {
+    setTab(next);
+    setSearchParams(next === 'showing' ? {} : { tab: next }, { replace: true });
+  };
 
   return (
     <>
-      <BannerCarousel movies={showing} onBook={setBookingMovie} />
+      <SectionHead title={t('customer.navMovies')} />
 
-      {/* Straight into the tab+grid card, no centered title block (duplicates the tab) and no cinema pill (single cinema). Search lives in the header, shared by all pages. */}
       <Panel>
-        <BrowseTabs tab={tab} onChange={setTab} />
+        <BrowseTabs tab={tab} onChange={changeTab} />
 
         {error ? (
           <Notice variant="error">{errorMessage(error, t('common.somethingWrong'))}</Notice>
@@ -72,18 +72,6 @@ export const HomePage = () => {
             {visible.map((movie) => (
               <PosterCard key={movie.id} movie={movie} onBook={setBookingMovie} />
             ))}
-
-            {hasMore ? (
-              <Link
-                to={`${PATHS.films}?tab=${tab}`}
-                className={`flex h-full min-h-40 flex-col items-center justify-center gap-1 rounded-xl border border-dashed p-4 text-center text-sm font-semibold no-underline ${INK_BORDER_20} ${INK_65} ${TRANSITION_FAST} hover-fine:border-brand hover-fine:text-brand`}
-              >
-                <span aria-hidden="true" className="text-2xl">
-                  →
-                </span>
-                {t('customer.viewMore')}
-              </Link>
-            ) : null}
           </div>
         ) : null}
       </Panel>
@@ -99,4 +87,4 @@ export const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default FilmsPage;
