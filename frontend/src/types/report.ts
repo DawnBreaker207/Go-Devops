@@ -1,48 +1,11 @@
-/**
- * GET /api/v1/admin/stats -> dto.AdminStatsResponse. CHI admin (staff nhan 403).
- *
- * Y nghia tung so, theo dung query o backend:
- * - movies / showtimes / users: dem ban ghi chua bi soft-delete. Tai khoan bi
- *   khoa (active=false) VAN duoc dem, giong het meta.total cua GET /admin/users.
- * - bookings: chi dem don `confirmed`. Bang bookings dong thoi la bang giu cho,
- *   nen dem tat ca se toan la hold khong ai tra tien.
- *
- * Day KHONG phai GET /admin/overview: overview tra doanh thu/lap day cua hom nay
- * va canh bao van hanh, con day la kich thuoc catalogue. Hai so "showtimes" cua
- * hai endpoint khong bang nhau va khong nen so sanh.
- */
-export interface AdminStats {
-  movies: number;
-  showtimes: number;
-  bookings: number;
-  users: number;
-}
+import type { StaffShowtime } from './staff';
 
-/**
- * GET /api/v1/admin/reports/daily -> dto.DailyReportResponse. CHI admin.
- *
- * Doc ky truoc khi dung, vi ba dieu duoi day quyet dinh ca man hinh:
- *
- * 1. `days` KHONG phai la moi ngay trong khoang. No la nhung ngay ma job
- *    `closeDay` da chot so (bang `daily_aggregates`), nen mot ngay chua chot
- *    thi VANG MAT hoan toan. "Vang mat" khac han "co dong nhung toan so 0":
- *    ngay khong ban duoc gi van duoc chot va van co dong day du so 0.
- *    Bang rong nghia la job chua chay, khong phai rap khong ban duoc ve nao.
- *
- * 2. Doanh thu va do lap day dem theo HAI TRUC KHAC NHAU. `total_revenue` va
- *    `tickets_sold` dem don `confirmed` co `paid_at` roi vao ngay do; con
- *    `seats_sold` / `capacity` dem cac SUAT CHIEU bat dau trong ngay do. Mot ve
- *    mua hom nay cho suat ngay mai lam tang doanh thu hom nay va do lap day
- *    ngay mai. Hai con so nay khong bao gio phai khop nhau.
- *
- * 3. `occupancy_rate` DA la phan tram (backend lam `ROUND(100.0 * ...)`), khong
- *    phai ty le 0..1. Nhan them 100 se ra 333% thay vi 3.33%.
- */
+/** Admin only. Read carefully: (1) `days` holds only closeDay-closed dates (daily_aggregates); absent != zero day (zero-business days ARE closed with zeros; absent means the job hasn't run). (2) Revenue/occupancy use different axes: total_revenue/tickets_sold count `confirmed` orders by paid_at day, seats_sold/capacity count shows starting that day (a ticket bought today for tomorrow lifts today's revenue and tomorrow's occupancy). (3) occupancy_rate is already percent (ROUND(100.0 * ...)); never *100. */
 export interface DailyReport {
-  /** YYYY-MM-DD theo gio rap, KHONG phai RFC3339. */
+  /** YYYY-MM-DD in cinema time, not RFC3339. */
   from: string;
   to: string;
-  /** int64 VND nguyen. Tong cua ca khoang, khong phai cua rieng `days`. */
+  /** int64 whole VND. Whole-range total, not per `days`. */
   total_revenue: number;
   tickets_sold: number;
   days: DailyAggregate[];
@@ -54,27 +17,21 @@ export interface DailyAggregate {
   tickets_sold: number;
   seats_sold: number;
   capacity: number;
-  /** Da la phan tram - xem ghi chu 3 o tren. */
+  /** Already percent; see note above. */
   occupancy_rate: number;
   breakdown: DailyBreakdown;
   /** Lan cuoi job chot so ngay nay. RFC3339. */
   updated_at: string;
 }
 
-/**
- * Cot `breakdown` la jsonb tu do, khong phai mot struct co rang buoc. Backend
- * hien ghi dung mot khoa `showtimes` (COALESCE ve `[]` nen luon co mat), nhung
- * khong co gi trong schema ep no phai nhu vay mai mai - vi the field nay duoc
- * khai bao tuy chon va moi cho doc deu phai chiu duoc truong hop thieu.
- */
+/** `breakdown` is free-form jsonb, not a constrained struct. Backend currently writes exactly one key `showtimes` (COALESCE to `[]`, always present), but nothing in the schema pins that, so the field is optional and every reader must tolerate absence. */
 export interface DailyBreakdown {
   showtimes?: DailyBreakdownShowtime[];
 }
 
 export interface DailyBreakdownShowtime {
   showtime_id: string;
-  /** Ten phim va ten phong duoc CHUP lai luc chot so, nen doi ten phim sau do
-   *  khong lam bao cao cu doi theo - va do la dung. */
+  /** Movie/hall names snapshotted at close; later renames don't rewrite old reports, by design. */
   movie: string;
   hall: string;
   start_at: string;
@@ -84,10 +41,90 @@ export interface DailyBreakdownShowtime {
   revenue: number;
 }
 
-/** Tham so cua GET /admin/reports/daily. Bo trong ca hai = 7 ngay gan nhat. */
+/** Empty both = last 7 days. */
 export interface DailyReportQuery {
-  /** YYYY-MM-DD. Mac dinh la `to` - 6 ngay. */
+  /** Defaults to `to` - 6 days. */
   from?: string;
-  /** YYYY-MM-DD. Mac dinh la hom nay theo gio rap. */
+  /** Defaults to today in cinema time. */
   to?: string;
 }
+
+/** Paid-money analytics over [from, to]: daily line, top movies/halls, payment split. Same money rule as closeDay, aggregated live for any range. */
+export interface BreakdownQuery {
+  from?: string;
+  to?: string;
+}
+
+export interface BreakdownDay {
+  date: string;
+  revenue: number;
+  tickets: number;
+}
+
+export interface BreakdownMovie {
+  movie_id: string;
+  title: string;
+  revenue: number;
+  tickets: number;
+}
+
+export interface BreakdownHall {
+  hall_id: string;
+  name: string;
+  revenue: number;
+  tickets: number;
+}
+
+export interface BreakdownProvider {
+  provider: string;
+  revenue: number;
+  count: number;
+}
+
+export interface Breakdown {
+  from: string;
+  to: string;
+  total_revenue: number;
+  tickets_sold: number;
+  days: BreakdownDay[];
+  movies: BreakdownMovie[];
+  halls: BreakdownHall[];
+  providers: BreakdownProvider[];
+}
+
+/** One call for the whole dashboard: today (live, not closeDay), last 7 closed days for trend, today's remaining shows, ops alerts. */
+export interface StuckRefundAlert {
+  payment_id: string;
+  booking_id: string;
+  attempts: number;
+  amount: number;
+  last_error?: string;
+}
+
+export interface FailedJobAlert {
+  id: string;
+  job_name: string;
+  error_message?: string;
+  started_at: string;
+}
+
+export interface GivenUpEmailAlert {
+  booking_id: string;
+  attempts: number;
+  created_at: string;
+}
+
+export interface AdminAlerts {
+  stuck_refunds: StuckRefundAlert[];
+  failed_jobs: FailedJobAlert[];
+  given_up_emails: GivenUpEmailAlert[];
+}
+
+export interface AdminOverview {
+  today: DailyAggregate;
+  last_7_days: DailyAggregate[];
+  upcoming_showtimes: StaffShowtime[];
+  alerts: AdminAlerts;
+}
+
+/** Seat/check-in shape of one show; the staff board shares it. */
