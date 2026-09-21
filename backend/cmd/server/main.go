@@ -156,6 +156,8 @@ func run() error {
 	reportService := service.NewReportService(repository.NewReportRepository(db), showtimeRepo,
 		paymentRepo, batchRepo, bookingRepo, location)
 
+	comboService := service.NewComboService(repository.NewComboRepository(db), repository.NewComboOrderRepository(db), bookingRepo)
+
 	imageStore, mediaDir := buildImageStore(cfg)
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
 	mediaService := service.NewMediaService(imageStore, maxUpload)
@@ -197,6 +199,7 @@ func run() error {
 		Report:   handlers.NewReportHandler(reportService),
 		Media:    handlers.NewMediaHandler(mediaService, mediaDir, maxUpload),
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
+		Combo:    handlers.NewComboHandler(comboService),
 	})
 
 	server := &http.Server{
