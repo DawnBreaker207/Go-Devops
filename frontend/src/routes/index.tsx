@@ -24,14 +24,15 @@ const UsersPage = lazy(() => import('@/features/user/UsersPage'));
 const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
 const HomePage = lazy(() => import('@/features/browse/HomePage'));
 const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
-const SelectSeatPage = lazy(() => import('@/features/booking-flow/SelectSeatPage'));
-const CheckoutPage = lazy(() => import('@/features/booking-flow/CheckoutPage'));
-const OrderSuccessPage = lazy(() => import('@/features/booking-flow/OrderSuccessPage'));
 const FilmsPage = lazy(() => import('@/features/browse/FilmsPage'));
 const PricingPage = lazy(() => import('@/features/browse/PricingPage'));
 const CinemaInfoPage = lazy(() => import('@/features/browse/CinemaInfoPage'));
 const OffersPage = lazy(() => import('@/features/browse/OffersPage'));
 const AccountPage = lazy(() => import('@/features/browse/AccountPage'));
+// See BookingFlowPage.tsx / BookingSuccessPage.tsx.
+const BookingFlowPage = lazy(() => import('@/features/booking-flow/BookingFlowPage'));
+const BookingSuccessPage = lazy(() => import('@/features/booking-flow/BookingSuccessPage'));
+const PaymentResultPage = lazy(() => import('@/features/booking-flow/PaymentResultPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const router = createBrowserRouter([
@@ -41,17 +42,17 @@ export const router = createBrowserRouter([
     children: [
       { path: PATHS.home, element: <HomePage /> },
       { path: PATHS.film, element: <FilmPage /> },
-      { path: PATHS.selectSeat, element: <SelectSeatPage /> },
-      // Ba man duoi deu goi /orders/* (RequireRoles(customer) ben backend).
-      // Khong boc them RequireRole o day: khu khach khong dung man 403 cua khu
-      // van hanh, va moi man da tu xu ly loi cua no.
-      { path: PATHS.checkout, element: <CheckoutPage /> },
-      { path: PATHS.orderSuccess, element: <OrderSuccessPage /> },
       { path: PATHS.films, element: <FilmsPage /> },
       { path: PATHS.pricing, element: <PricingPage /> },
       { path: PATHS.cinemaInfo, element: <CinemaInfoPage /> },
       { path: PATHS.offers, element: <OffersPage /> },
       { path: PATHS.account, element: <AccountPage /> },
+      // Single `/select-seat/:showtimeId` route, internal step state.
+      { path: PATHS.selectSeat, element: <BookingFlowPage /> },
+      // Post-payment landing: separate page outside the flow; clears stale flow store on mount.
+      { path: PATHS.bookingSuccess, element: <BookingSuccessPage /> },
+      // 303 redirect from the gateway: verify, then confirm.
+      { path: PATHS.paymentResult, element: <PaymentResultPage /> },
       // Legacy /my-tickets route: tickets now live in Account, redirect keeps old bookmarks working.
       { path: '/my-tickets', element: <Navigate to={accountTicketsPath()} replace /> },
       // Customer account screen (Figma 77-626) sits in CustomerLayout to share

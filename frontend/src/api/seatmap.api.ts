@@ -1,15 +1,11 @@
 import { apiClient, unwrap } from './client';
 import type { ApiResponse, SeatMap } from '@/types';
 
+/** Shared cache key for every seat-map reader. */
+export const SEATMAP_QUERY_KEY = 'seatmap';
+
 export const seatMapApi = {
-  /**
-   * GET /shows/:id/seats - :id la id SUAT CHIEU, khong phai id phong.
-   * JWT thuan (moi role da dang nhap). Tra ve MOT object, khong phan trang.
-   *
-   * 404/40400 co HAI nghia khac nhau chi phan biet duoc bang message:
-   * "showtime not found" va "showtime is not open" (suat da dong / da bat dau /
-   * phim khong con chieu).
-   */
+  /** :id is the SHOWTIME id, not the hall. Any authenticated role. Single object, unpaginated. 404/40400 has two meanings distinguished by message only: "showtime not found" vs "showtime is not open". */
   forShowtime: (showtimeId: string) =>
     apiClient.get<ApiResponse<SeatMap>>(`/shows/${showtimeId}/seats`).then(unwrap),
 };

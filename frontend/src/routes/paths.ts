@@ -4,8 +4,6 @@ export const PATHS = {
   film: '/film/:id',
   // Booking flow is a single route with internal step state; success is a separate page outside it.
   selectSeat: '/select-seat/:showtimeId',
-  checkout: '/checkout/:bookingId',
-  orderSuccess: '/checkout/:bookingId/success',
   myTickets: '/my-tickets',
   bookingSuccess: '/booking-success/:bookingId',
   // 303 redirect from the gateway (with ?booking_id&status&payment_status): verify the order, then confirm.
@@ -45,8 +43,6 @@ export const hallSeatsPath = (id: string): string => `/halls/${id}/seats`;
 /* Parameterized customer-zone paths. Never concatenate path strings elsewhere. */
 export const filmPath = (id: string): string => `/film/${id}`;
 export const selectSeatPath = (showtimeId: string): string => `/select-seat/${showtimeId}`;
-export const checkoutPath = (bookingId: string): string => `/checkout/${bookingId}`;
-export const orderSuccessPath = (bookingId: string): string => `/checkout/${bookingId}/success`;
 export const bookingSuccessPath = (bookingId: string): string => `/booking-success/${bookingId}`;
 export const ACCOUNT_TICKETS_TAB = 'tickets';
 /** "My tickets" lives inside Account: opens /account with the tickets tab preselected. */

@@ -8,15 +8,12 @@ import { formatDateTime, formatVND } from '@/utils/format';
 import { BOOKING_STATUS_COLOR, PAYMENT_STATUS_COLOR } from '../constants';
 
 interface OrderDetailDrawerProps {
-  /** Dong trong bang da mo drawer, null nghia la drawer dang dong. */
+  /** Table row that opened the drawer; null means the drawer is closed. */
   order: AdminOrder | null;
   onClose: () => void;
 }
 
-/**
- * GET /staff/orders/:id KHONG tra customer / sold_via / seats - do la hinh dang
- * ve dien tu cua khach. Ba thu do lay tu chinh dong trong bang da mo drawer nay.
- */
+/** Order detail drawer combining live detail with the opening row. */
 export const OrderDetailDrawer = ({ order, onClose }: OrderDetailDrawerProps) => {
   const { t } = useTranslation();
   const { data, isFetching, error } = useOrderDetail(order?.id ?? null);
@@ -102,7 +99,7 @@ export const OrderDetailDrawer = ({ order, onClose }: OrderDetailDrawerProps) =>
                   {customer.phone ? (
                     <Typography.Text type="secondary">{customer.phone}</Typography.Text>
                   ) : null}
-                  {/* Ban tai quay khong co tai khoan, noi ro thay vi de trong. */}
+                  {/* Counter sales have no account; say so instead of leaving it blank. */}
                   {!customer.user_id ? (
                     <Typography.Text type="secondary">{t('booking.walkIn')}</Typography.Text>
                   ) : null}

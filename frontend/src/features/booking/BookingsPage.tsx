@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import type dayjs from 'dayjs';
 import PageHeader from '@/components/PageHeader';
+import TableCard from '@/components/TableCard';
 import OrderDetailDrawer from './components/OrderDetailDrawer';
 import { useAdminOrderList } from './hooks/useBookings';
 import { BOOKING_STATUS_COLOR, PAYMENT_STATUS_COLOR } from './constants';
@@ -47,7 +48,7 @@ export const BookingsPage = () => {
           <Space direction="vertical" size={0}>
             <span>{c.full_name || c.email || '-'}</span>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {/* Ban tai quay khong co tai khoan nen khong co email. */}
+              {/* Counter sales have no account, hence no email. */}
               {c.email || c.phone || t('booking.walkIn')}
             </Typography.Text>
           </Space>
@@ -111,8 +112,7 @@ export const BookingsPage = () => {
       title: t('booking.payment'),
       key: 'payment',
       width: 130,
-      // payment la attempt ma don DANG GIU tien. Hold chua tra tien khong co,
-      // va do la trang thai binh thuong chu khong phai thieu du lieu.
+      // payment is the attempt HOLDING money. Holds without payment are normal, not missing data.
       render: (_, record) =>
         record.payment ? (
           <Tag color={PAYMENT_STATUS_COLOR[record.payment.status]} bordered={false}>
@@ -220,21 +220,23 @@ export const BookingsPage = () => {
         />
       ) : null}
 
-      <Table<AdminOrder>
-        rowKey="id"
-        columns={columns}
-        dataSource={data?.items ?? []}
-        loading={isFetching}
-        scroll={{ x: 1200 }}
-        pagination={{
-          current: data?.meta.page ?? page,
-          pageSize: data?.meta.page_size ?? pageSize,
-          total: data?.meta.total ?? 0,
-          showSizeChanger: true,
-          showTotal: (total) => t('common.totalItems', { total }),
-          onChange: setPage,
-        }}
-      />
+      <TableCard>
+        <Table<AdminOrder>
+          rowKey="id"
+          columns={columns}
+          dataSource={data?.items ?? []}
+          loading={isFetching}
+          scroll={{ x: 1200 }}
+          pagination={{
+            current: data?.meta.page ?? page,
+            pageSize: data?.meta.page_size ?? pageSize,
+            total: data?.meta.total ?? 0,
+            showSizeChanger: true,
+            showTotal: (total) => t('common.totalItems', { total }),
+            onChange: setPage,
+          }}
+        />
+      </TableCard>
 
       <OrderDetailDrawer order={selected} onClose={() => setSelected(null)} />
     </>

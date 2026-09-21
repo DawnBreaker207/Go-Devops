@@ -5,6 +5,7 @@ import PosterCard from './components/PosterCard';
 import PosterGridSkeleton from './components/PosterGridSkeleton';
 import BannerCarousel from './components/BannerCarousel';
 import BrowseTabs, { type BrowseTab } from './components/BrowseTabs';
+import UpcomingTicketTeaser from './components/UpcomingTicketTeaser';
 import BookingModal from './components/BookingModal';
 import { useNowShowing } from './hooks/useBrowse';
 import { errorMessage } from '@/utils/error';
@@ -47,6 +48,7 @@ export const HomePage = () => {
     <>
       <BannerCarousel movies={showing} onBook={setBookingMovie} />
 
+      <UpcomingTicketTeaser />
       {/* Straight into the tab+grid card, no centered title block (duplicates the tab) and no cinema pill (single cinema). Search lives in the header, shared by all pages. */}
       <Panel>
         <BrowseTabs tab={tab} onChange={setTab} />

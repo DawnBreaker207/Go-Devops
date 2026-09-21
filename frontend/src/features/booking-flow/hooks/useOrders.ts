@@ -4,11 +4,12 @@ import type { HoldPayload, PageQuery, PayPayload } from '@/types';
 
 export const ORDER_QUERY_KEY = 'orders';
 
-export const useMyOrders = (query: PageQuery) =>
+export const useMyOrders = (query: PageQuery, enabled = true) =>
   useQuery({
     queryKey: [ORDER_QUERY_KEY, query],
     queryFn: () => orderApi.list(query),
     placeholderData: (previous) => previous,
+    enabled,
   });
 
 export const useOrderDetail = (bookingId: string | undefined) =>
@@ -18,13 +19,7 @@ export const useOrderDetail = (bookingId: string | undefined) =>
     enabled: Boolean(bookingId),
   });
 
-/**
- * Do trang thai don trong luc cho cong thanh toan bao ve.
- *
- * Backend khong day gi ve phia client cho viec nay (SSE chi phat trang thai
- * GHE cua mot suat chieu, khong phat trang thai DON), nen phai hoi lai. Chi
- * bat khi don con `pending`: don da chot hoac da het han thi khong doi nua.
- */
+/** Order status while awaiting the gateway. No server push for orders (SSE covers seats only), so poll - pending only. */
 export const useOrderStatus = (bookingId: string | undefined, polling: boolean) =>
   useQuery({
     queryKey: [ORDER_QUERY_KEY, 'status', bookingId],
@@ -42,6 +37,27 @@ export const usePaymentProviders = () =>
 
 export const useHoldSeats = () =>
   useMutation({ mutationFn: (payload: HoldPayload) => orderApi.hold(payload) });
+
+/** Open an empty order at entry + silent refresh heartbeat (auto-refetches the extended order). */
+export const useInitOrder = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (showId: string) => orderApi.init(showId),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: [ORDER_QUERY_KEY, 'detail', res.booking_id] });
+    },
+  });
+};
+
+export const useRefreshOrder = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId: string) => orderApi.refresh(bookingId),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: [ORDER_QUERY_KEY, 'detail', res.booking_id] });
+    },
+  });
+};
 
 export const usePayOrder = () =>
   useMutation({

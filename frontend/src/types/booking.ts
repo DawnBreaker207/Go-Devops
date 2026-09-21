@@ -1,6 +1,5 @@
 import type { PageQuery } from './api';
-// SeatType thuoc domain hall (models.AllSeatTypes); booking chi muon dung lai.
-// Dinh nghia nam o './hall' de barrel khong export trung mot ten hai lan.
+// SeatType belongs to the hall domain; defined in './hall' so the barrel doesn't export one name twice.
 import type { SeatType } from './hall';
 
 export type BookingStatus = 'pending' | 'confirmed' | 'expired' | 'refunded';
@@ -18,7 +17,7 @@ export const PAYMENT_STATUSES: PaymentStatus[] = [
 ];
 export const SOLD_VIA: SoldVia[] = ['online', 'counter'];
 
-/** models.Reason* - ly do mot don roi khoi trang thai binh thuong. */
+/** Why an order left its normal state. */
 export type BookingStatusReason =
   | 'replaced'
   | 'hold_expired'
@@ -52,12 +51,12 @@ export interface OrderShowtime {
   hall_name: string;
   start_at: string;
   end_at: string;
-  /** Backend tinh theo time.Now() luc tra loi, khong phai cot trong DB. */
+  /** Computed at response time via time.Now(), not a DB column. */
   started: boolean;
   ended: boolean;
 }
 
-/** dto.OrderStatusResponse - phan chung cua mot don. */
+/** Shared core of an order. */
 export interface OrderStatus {
   id: string;
   showtime_id: string;
@@ -67,16 +66,12 @@ export interface OrderStatus {
   created_at: string;
   expires_at?: string;
   paid_at?: string;
-  /** Attempt ma don DANG GIU tien. Hold chua tra tien thi khong co. */
+  /** The attempt currently holding money. Absent for unpaid holds (normal). */
   payment?: PaymentSummary;
   showtime?: OrderShowtime;
 }
 
-/**
- * Don online co tai khoan: { user_id, email, full_name, phone? }.
- * Ban tai quay KHONG co tai khoan: chi { full_name?, phone? }.
- * Ban tai quay khong ghi ca ten lan sdt thi khong co object nay luon.
- */
+/** Online with account: { user_id, email, full_name, phone? }. Counter without account: { full_name?, phone? } only. Counter with neither has no object at all. */
 export interface OrderCustomer {
   user_id?: string;
   email?: string;
@@ -84,7 +79,7 @@ export interface OrderCustomer {
   phone?: string;
 }
 
-/** Mot dong cua GET /admin/orders. */
+/** One row of GET /admin/orders. */
 export interface AdminOrder extends OrderStatus {
   sold_via: SoldVia;
   seats: number;
@@ -101,27 +96,51 @@ export interface Ticket {
   status: TicketStatus;
 }
 
-/**
- * GET /staff/orders/:id. KHONG co customer / sold_via / seats - day la hinh
- * dang ve dien tu cua khach. Drawer cua admin phai mang ba thu do sang tu dong
- * trong bang ma no duoc mo ra.
- */
+/** GET /tickets/:id/qr. `qr_base64` is PNG without the `data:image/...` prefix; prepend for `src`. Works after showtime. */
+export interface TicketQR {
+  ticket_id: string;
+  code: string;
+  qr_base64: string;
+}
+
+/** GET /staff/orders/:id. No customer/sold_via/seats (customer e-ticket shape); the admin drawer joins those from the opening table row. */
 export interface OrderDetail extends OrderStatus {
   tickets: Ticket[];
 }
 
 export interface AdminOrderListQuery extends PageQuery {
   status?: BookingStatus;
-  /** Chi khop don DA GIU tien; hold con checkout mo thi khong bao gio khop. */
+  /** Matches held-payment orders only; open-checkout holds never match. */
   payment_status?: PaymentStatus;
   sold_via?: SoldVia;
   showtime_id?: string;
   movie_id?: string;
   user_id?: string;
-  /** YYYY-MM-DD tren created_at. Uu tien hon from/to. */
+  /** YYYY-MM-DD on created_at. Wins over from/to. */
   date?: string;
   from?: string;
   to?: string;
   sort?: 'created_at' | 'paid_at' | 'total_amount' | 'start_at';
   order?: 'asc' | 'desc';
+}
+
+/** POST /tickets/:id/redeem. `id` is a ticket id OR a QR code. */
+export interface RedeemPayload {
+  showtime_id: string;
+}
+
+/** Outside check-in window; see checkin_opens_at/checkin_closes_at. */
+export type RedeemStatus = 'ok' | 'used' | 'wrong_show' | 'not_found' | 'too_early' | 'closed';
+
+export interface RedeemResult {
+  status: RedeemStatus;
+  ticket_id?: string;
+  showtime_id?: string;
+  movie_title?: string;
+  age_rating?: string;
+  hall_name?: string;
+  seat_label?: string;
+  start_at?: string;
+  checkin_opens_at?: string;
+  checkin_closes_at?: string;
 }

@@ -2,23 +2,13 @@ import { useEffect, useState } from 'react';
 
 const remaining = (deadline: string | undefined): number => {
   if (!deadline) return 0;
-  // Khong cat chuoi, khong so sanh chuoi: cung mot thoi diem tu backend nay ve
-  // voi hai offset khac nhau (+07:00 o endpoint nay, Z o endpoint kia).
-  // Date.parse xu ly dung ca hai.
+  // Never slice or compare strings: one instant arrives with two offsets
+  // (+07:00 here, Z there). Date.parse handles both.
   const ms = Date.parse(deadline) - Date.now();
   return ms > 0 ? Math.floor(ms / 1000) : 0;
 };
 
-/**
- * So GIAY con lai toi mot moc thoi gian, dem lui moi giay. Tra ve 0 khi da qua
- * moc va khong dem am.
- *
- * Gia tri duoc TINH LAI MOI LAN RENDER thay vi giu trong state: nhip dap chi
- * lam component render lai. Nho vay doi `deadline` la co gia tri moi ngay lap
- * tuc, khong phai doi het mot giay - va khong phai goi setState dong bo trong
- * effect, thu ma react-hooks/set-state-in-effect chan (dung: no gay chuoi
- * render thua).
- */
+/** Seconds left to a deadline (0 past it, never negative). Recomputed every render, so deadline changes apply instantly with no setState-in-effect. */
 export const useCountdown = (deadline: string | undefined): number => {
   const [, setTick] = useState(0);
 

@@ -1,29 +1,14 @@
 import type { SeatType } from './hall';
 
-// PaymentSummary / OrderShowtime / OrderStatus / OrderDetail / Ticket deu da
-// duoc khai bao o './booking' cho man van hanh - cung DTO Go, nen dung lai chu
-// khong khai lan hai.
+// PaymentSummary/OrderShowtime/OrderStatus/OrderDetail/Ticket are declared in './booking' (same Go DTOs); reuse, don't redeclare.
 
-/**
- * Luong dat ve cua KHACH - mirror cua internal/dto/booking.go.
- *
- * Quyen: ca nhanh /orders/* la RequireRoles(customer) TRU `GET /orders` (khong
- * co RequireRoles - moi role da dang nhap goi duoc, va no tra don CUA CHINH
- * nguoi goi). Admin/staff xem duoc so do ghe nhung khong dat ve duoc.
- *
- * Vong doi: hold -> pay -> (cong thanh toan) -> confirm.
- * - `hold` giu ghe trong `booking.hold_ttl_minutes` phut (mac dinh 10, tran 60).
- * - `pay` tra ve `redirect_url` cua cong thanh toan; so tien LUON lay tu don,
- *   khong bao gio tu client.
- * - `confirm` goi `finalize`: chua tra tien thi loi ErrBookingNotPaid, da tra
- *   thi don thanh `confirmed` va tra ve ca danh sach ve.
- */
+/** Customer booking flow. Auth: /orders/* requires customer EXCEPT GET /orders (any authenticated role, returns caller's own orders). Admin/staff can view seat maps but cannot book. Lifecycle: hold -> pay -> (gateway) -> confirm. hold keeps seats for booking.hold_ttl_minutes (default 10, max 60); pay returns redirect_url with the amount always from the order, never the client; confirm finalizes (unpaid is ErrBookingNotPaid, paid becomes `confirmed` with tickets). */
 
 export interface HoldPayload {
   show_id: string;
-  /** PHAI la showtime_seat_id, khong phai seats.id. Toi thieu 1. */
+  /** Must be showtime_seat_id, not seats.id. At least 1. */
   seat_ids: string[];
-  /** Tuy chon, toi da 128 ky tu. Gui lai cung khoa de tranh giu cho trung. */
+  /** Optional, max 128 chars. Resend the same key to avoid duplicate holds. */
   idempotency_key?: string;
 }
 
@@ -40,14 +25,33 @@ export interface HoldResult {
   booking_id: string;
   showtime_id: string;
   total_amount: number;
-  /** RFC3339. Het han thi ghe duoc nha ra va don chuyen sang `expired`. */
+  /** RFC3339. Expiry frees the seats and flips the order to `expired`. */
   expires_at: string;
   seats: HeldSeat[];
-  /** omitempty: chi co khi lan giu nay THAY THE mot lan giu truoc do. */
+  /** omitempty: present only when this hold REPLACED a previous one. */
   replaced_booking_id?: string;
 }
 
-/** Bo trong `provider` thi backend dung cong mac dinh (xem GET /payments/providers). */
+/** Opens an empty PENDING order to count down from entry. */
+export interface InitResult {
+  booking_id: string;
+  showtime_id: string;
+  /** RFC3339. */
+  expires_at: string;
+  /** Seconds for the client ticker; no time math needed. */
+  ttl_seconds: number;
+  /** True when returning an existing valid pending order instead of creating one. */
+  reused?: boolean;
+}
+
+/** POST /orders/:id/refresh - heartbeat gian han trong tran lifetime. */
+export interface RefreshResult {
+  booking_id: string;
+  /** RFC3339. */
+  expires_at: string;
+}
+
+/** Empty `provider` uses the default gateway (see GET /payments/providers). */
 export interface PayPayload {
   provider?: string;
 }
@@ -56,8 +60,7 @@ export interface PayResult {
   payment_id: string;
   provider: string;
   txn_ref: string;
-  /** Dua trinh duyet toi day. Voi cong `mock` day la trang gia lap trong
-   *  chinh backend (engine.Any(sim.SimulatorPath())). */
+  /** Send the browser here. For the `mock` provider this is the in-backend simulator page. */
   redirect_url: string;
   expires_at?: string;
 }
