@@ -4,10 +4,7 @@ import { brand, brandAlpha, semantic, surface, textOnBrand } from './tokens';
 
 export * from './tokens';
 
-/**
- * Do token cua du an sang token cua antd. Day la cho DUY NHAT antd duoc cau hinh
- * mau; component khong tu viet ma mau.
- */
+/** Map project tokens onto antd. Only place where antd colors are configured. */
 export const buildTheme = (mode: ThemeMode): ThemeConfig => {
   const dark = mode === 'dark';
   const s = dark ? surface.dark : surface.light;
@@ -20,7 +17,7 @@ export const buildTheme = (mode: ThemeMode): ThemeConfig => {
       colorError: semantic.danger,
       colorWarning: semantic.warning,
       colorSuccess: semantic.success,
-      // Chu tren nen primary. Xem ghi chu textOnBrand trong tokens.ts.
+      // Text on primary. See textOnBrand in tokens.ts.
       colorTextLightSolid: textOnBrand,
       colorBgLayout: dark ? surface.dark.sunken : surface.light.sunken,
       borderRadius: 6,
@@ -30,16 +27,21 @@ export const buildTheme = (mode: ThemeMode): ThemeConfig => {
     },
     components: {
       Layout: {
-        // Figma de sider mau trang, khong phai navy #001529 mac dinh cua antd.
+        // Sider is white per Figma, not antd's default navy #001529.
         siderBg: dark ? surface.dark.base : surface.light.base,
         headerHeight: 56,
       },
       Menu: {
         itemMarginInline: 8,
-        // Sider luon chay Menu theme="light": darkAlgorithm da dao bang mau roi.
-        // Menu theme="dark" la dien mao navy cu, dat tren nen toi thi chu chim.
+        itemHeight: 42,
+        itemBorderRadius: 8,
+        // Sider always runs Menu theme="light": darkAlgorithm already inverts the palette.
         itemSelectedBg: dark ? brandAlpha(0.16) : brand.soft,
-        itemSelectedColor: dark ? brand.base : textOnBrand,
+        // White on brand.soft is unreadable; selected item uses brand.base in both modes.
+        itemSelectedColor: brand.base,
+        // No antd hover token exists; declare explicitly instead of gray default.
+        itemHoverBg: dark ? brandAlpha(0.1) : brand.softer,
+        itemHoverColor: brand.base,
       },
       Table: {
         headerBg: s.sunken,

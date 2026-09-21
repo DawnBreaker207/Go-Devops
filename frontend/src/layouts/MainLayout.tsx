@@ -1,196 +1,192 @@
 import { Suspense, useMemo } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import {
-  Avatar,
-  Breadcrumb,
-  Button,
-  Dropdown,
-  Layout,
-  Menu,
-  Select,
-  Space,
-  Typography,
-  theme as antdTheme,
-} from 'antd';
-import {
-  BulbOutlined,
-  LogoutOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  MoonOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
+import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Breadcrumb, Layout, Menu, theme as antdTheme, type MenuProps } from 'antd';
+import { HomeOutlined, RightOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/stores/appStore';
-import { useAuthStore } from '@/stores/authStore';
 import { PATHS } from '@/routes/paths';
-import { useNavItems } from '@/routes/navigation';
+import { useNavItems, type NavGroup } from '@/routes/navigation';
 import Loading from '@/components/Loading';
-import type { AppLanguage } from '@/locales/i18n';
+import AvatarSwitcher from './AvatarSwitcher';
 import { brand, textOnBrand } from '@/theme';
 
-const { Header, Sider, Content } = Layout;
+const { Header, Sider, Content, Footer } = Layout;
+
+/** 'overview' (Dashboard) stands alone with no group title. */
+const GROUP_ORDER: NavGroup[] = ['operations', 'management'];
 
 export const MainLayout = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const location = useLocation();
   const { token } = antdTheme.useToken();
 
   const collapsed = useAppStore((s) => s.siderCollapsed);
   const toggleSider = useAppStore((s) => s.toggleSider);
   const themeMode = useAppStore((s) => s.theme);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
-  const language = useAppStore((s) => s.language);
-  const setLanguage = useAppStore((s) => s.setLanguage);
 
-  const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
-
-  // Chi nhung muc role hien tai vao duoc; nguon la routes/navigation.tsx, cung
-  // hang so roles ma router dung, nen menu khong the bay ra link 403.
+  // Filter by role with the same router constants so the menu never shows a 403 link.
   const navItems = useNavItems();
 
-  const menuItems = useMemo(
-    () =>
-      navItems.map((item) => ({
+  // Grouped sider: overview stands alone first, empty groups dropped.
+  const menuItems = useMemo<MenuProps['items']>(() => {
+    const overviewItems = navItems
+      .filter((item) => item.group === 'overview')
+      .map((item) => ({
         key: item.path,
         icon: item.icon,
         label: <Link to={item.path}>{t(`menu.${item.i18nKey}`)}</Link>,
-      })),
-    [navItems, t]
-  );
+      }));
+
+    const groupedItems = GROUP_ORDER.map((group) => {
+      const items = navItems.filter((item) => item.group === group);
+      if (items.length === 0) return null;
+      const groupLabel = `${group.charAt(0).toUpperCase()}${group.slice(1)}`;
+      return {
+        key: group,
+        type: 'group' as const,
+        label: t(`menu.group${groupLabel}`),
+        children: items.map((item) => ({
+          key: item.path,
+          icon: item.icon,
+          label: <Link to={item.path}>{t(`menu.${item.i18nKey}`)}</Link>,
+        })),
+      };
+    }).filter((group) => group !== null);
+
+    return [...overviewItems, ...groupedItems];
+  }, [navItems, t]);
 
   const current = navItems.find((item) => location.pathname.startsWith(item.path));
 
   const breadcrumbItems = useMemo(
     () => [
-      { title: t('common.appName') },
+      {
+        title: (
+          <Link to={PATHS.dashboard} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <HomeOutlined />
+          </Link>
+        ),
+      },
       ...(current ? [{ title: t(`menu.${current.i18nKey}`) }] : []),
     ],
     [current, t]
   );
 
-  const handleLogout = () => {
-    logout();
-    navigate(PATHS.login, { replace: true });
-  };
-
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* Figma de sider mau trang, ngan voi noi dung bang mot duong vien mong. */}
+      {/* 280px sider with the built-in bottom trigger. */}
       <Sider
-        trigger={null}
+        // Sider `theme` is independent of the ConfigProvider light/dark algorithm (dark by default),
+        // so set "light" explicitly.
+        theme="light"
         collapsible
         collapsed={collapsed}
-        width={230}
-        style={{ borderInlineEnd: `1px solid ${token.colorBorderSecondary}` }}
+        // `toggleSider` only flips state: compare before calling because antd fires
+        // onCollapse(true, 'responsive') even when already collapsed, which would reopen it.
+        onCollapse={(value) => {
+          if (value !== collapsed) toggleSider();
+        }}
+        breakpoint="lg"
+        width={280}
+        className="sticky top-0 h-screen overflow-auto"
+        style={{
+          borderInlineEnd: `1px solid ${token.colorBorderSecondary}`,
+          boxShadow: token.boxShadowTertiary,
+        }}
       >
         <div
+          className="sticky top-0 z-10 flex h-20 items-center gap-3 overflow-hidden px-4 whitespace-nowrap"
           style={{
-            height: 56,
-            margin: 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: token.colorText,
-            fontWeight: 700,
-            fontSize: collapsed ? 16 : 18,
-            letterSpacing: 0.5,
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            background: token.colorBgContainer,
           }}
         >
-          {collapsed ? 'CP' : t('common.appName')}
+          <span
+            aria-hidden="true"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand shadow-lg shadow-brand/30"
+            style={{ color: textOnBrand }}
+          >
+            <VideoCameraOutlined style={{ fontSize: 20 }} />
+          </span>
+          {collapsed ? null : (
+            <span style={{ fontWeight: 900, fontSize: 18 }}>
+              {(() => {
+                const [first, ...rest] = t('common.appName').split(' ');
+                return (
+                  <>
+                    <span style={{ color: token.colorText }}>{first}</span>
+                    {rest.length > 0 ? (
+                      <span style={{ color: brand.base }}> {rest.join(' ')}</span>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </span>
+          )}
         </div>
-        {/* Luon de theme="light": darkAlgorithm da tu dao bang mau roi. Menu
-         * theme="dark" cua antd la dien mao navy #001529 cu, dat tren nen
-         * #141414 thi chu muc chua chon gan nhu khong doc duoc. */}
-        <Menu mode="inline" selectedKeys={current ? [current.path] : []} items={menuItems} />
+        {/* Keep light: the dark antd menu (#001529) is unreadable on a #141414 background. */}
+        <div className="p-2">
+          {/* Without `inlineCollapsed` the Menu never enters icon-only mode: item labels and group
+              titles get clipped by width instead of hiding. */}
+          <Menu
+            theme="light"
+            mode="inline"
+            inlineCollapsed={collapsed}
+            selectedKeys={current ? [current.path] : []}
+            items={menuItems}
+          />
+        </div>
       </Sider>
 
       <Layout>
+        {/* Header only exposes background/border; real sizing lives in the inner div (index.css reset). */}
         <Header
+          className="sticky top-0 z-10 backdrop-blur-md"
           style={{
-            padding: '0 16px',
-            background: token.colorBgContainer,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            // Translucent background per light/dark token (theme switches via antd algorithm, no .dark class).
+            background:
+              themeMode === 'dark' ? 'rgba(20, 20, 20, 0.75)' : 'rgba(255, 255, 255, 0.8)',
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            boxShadow: token.boxShadowTertiary,
           }}
         >
-          <Button
-            type="text"
-            aria-label="toggle-sider"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={toggleSider}
-          />
+          <div className="flex h-20 items-center justify-between gap-4 px-6">
+            <Breadcrumb
+              items={breadcrumbItems}
+              separator={<RightOutlined style={{ fontSize: 10 }} />}
+            />
 
-          <Space size="middle">
-            <Select<AppLanguage>
-              size="small"
-              value={language}
-              onChange={setLanguage}
-              style={{ width: 88 }}
-              options={[
-                { value: 'vi', label: 'Tiếng Việt' },
-                { value: 'en', label: 'English' },
-              ]}
-            />
-            <Button
-              type="text"
-              aria-label="toggle-theme"
-              icon={themeMode === 'light' ? <MoonOutlined /> : <BulbOutlined />}
-              onClick={toggleTheme}
-            />
-            <Dropdown
-              menu={{
-                items: [
-                  { key: 'profile', icon: <UserOutlined />, label: t('common.profile') },
-                  { type: 'divider' },
-                  {
-                    key: 'logout',
-                    icon: <LogoutOutlined />,
-                    danger: true,
-                    label: t('common.logout'),
-                    onClick: handleLogout,
-                  },
-                ],
-              }}
+            {/* Shared customer dropdown; wrapped in `.cp-customer` so INK classes can read `--cp-ink-rgb`. */}
+            <div
+              className={themeMode === 'light' ? 'cp-customer cp-customer--light' : 'cp-customer'}
             >
-              <Space style={{ cursor: 'pointer' }}>
-                {/* Figma: tron mau primary mang chu cai dau, khong phai icon xam. */}
-                <Avatar
-                  size="small"
-                  style={{
-                    backgroundColor: brand.base,
-                    color: textOnBrand,
-                    fontWeight: 600,
-                  }}
-                >
-                  {(user?.full_name ?? user?.email ?? 'U').charAt(0).toUpperCase()}
-                </Avatar>
-                <Typography.Text>{user?.full_name ?? user?.email ?? 'User'}</Typography.Text>
-              </Space>
-            </Dropdown>
-          </Space>
+              <AvatarSwitcher variant="operator" />
+            </div>
+          </div>
         </Header>
 
-        <Content style={{ margin: 16 }}>
-          <Breadcrumb items={breadcrumbItems} style={{ marginBottom: 12 }} />
+        <Content className="m-4">
           <div
+            className="min-h-[calc(100vh-160px)] p-5"
             style={{
-              padding: 16,
               background: token.colorBgContainer,
               borderRadius: token.borderRadiusLG,
-              minHeight: 'calc(100vh - 160px)',
+              boxShadow: token.boxShadowTertiary,
             }}
           >
             <Suspense fallback={<Loading />}>
               <Outlet />
             </Suspense>
           </div>
+
+          {/* Copyright line closing the content frame. */}
+          <Footer
+            className="text-center"
+            style={{ background: 'transparent', color: token.colorTextTertiary, padding: '24px 0' }}
+          >
+            {t('common.appName')} © {new Date().getFullYear()}
+          </Footer>
         </Content>
       </Layout>
     </Layout>

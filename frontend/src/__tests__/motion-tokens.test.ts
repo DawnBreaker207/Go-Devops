@@ -3,17 +3,17 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Doc thang file CSS tu dia. Khong dung `@/index.css?raw` vi vite.config.ts dat
-// test.css = false, nen moi import CSS (ke ca ?raw) deu bi stub thanh rong.
-// Triple-slash reference o tren de @types/node co hieu luc rieng cho file nay,
-// khong phai them "node" vao types cua tsconfig.app.json (se ro ri Node global
-// vao code chay tren browser). vitest chay voi cwd = goc repo.
+// Read the CSS file straight from disk. No `@/index.css?raw`: vite.config sets
+// test.css = false, so every CSS import (even ?raw) is stubbed empty.
+// Triple-slash reference above scopes @types/node to this file only instead of
+// adding "node" to tsconfig.app.json (would leak Node globals into browser
+// code). Vitest runs with cwd = repo root.
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
 import { distance, duration, easingCss, scale, stagger } from '@/motion';
 
-// Motion token duoc khai bao hai noi: src/motion.ts (cho TS) va :root trong
-// src/index.css (cho CSS). Test nay la thu ep hai ben khong lech nhau - neu ai do
-// sua mot ben, test do se fail thay vi de UI chay hai toc do khac nhau.
+// Motion tokens live twice: src/motion.ts (TS) and :root in src/index.css
+// (CSS). This test forces both sides to agree - edit one side and the test
+// fails instead of the UI running two speeds.
 const cssVar = (name: string): string | undefined => {
   // Chi doc khoi :root dau tien; khoi trong @media reduced-motion co gia tri khac.
   const root = css.slice(css.indexOf(':root'), css.indexOf('@media'));

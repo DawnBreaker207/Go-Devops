@@ -1,116 +1,83 @@
-/**
- * Design token cua CinemaProject.
- *
- * NGUON: file Figma "Movie Ticket Booking Website (Community)" - xem
- * `.claude/context/figma.md` de biet node-id tung frame va cach mo lai.
- * Moi gia tri danh dau MEASURED duoc doc truc tiep tu pixel cua anh chup frame
- * (mau troi cua mot vung), khong phai uoc luong bang mat. Gia tri danh dau
- * DERIVED la do file nay tu suy ra vi thiet ke khong dinh nghia - moi cho deu
- * noi ro suy ra tu dau.
- *
- * File nay KHONG import antd va khong phu thuoc React: no la nguon su that duy
- * nhat. `src/theme/index.ts` do no sang token cua antd, `src/index.css` mirror
- * phan ma CSS can, va `src/__tests__/design-tokens.test.ts` fail neu hai ben lech.
- */
+/** Design tokens. MEASURED = frame pixels; DERIVED = inferred (formula noted). Single source of truth mirrored by theme CSS (parity test fails on drift). No antd/React imports. */
 
 /* -------------------------------------------------------------------------- */
 /* 1. Brand                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/** Brand red (deliberate detour from the source Figma) - one color for admin and customer. Variants below mix per the old formula (20% white / 15% black / 85% / 93% white). */
 export const brand = {
-  /** MEASURED - nut "+ Create new" cua Admin Movie, avatar, nut "Proceed Payment",
-   *  ghe dang chon cua Select Seat. Mot mau duy nhat cho ca admin lan khach. */
-  base: '#1DE782',
-  /** DERIVED - #1DE782 pha 20% ve trang, dung cho hover. */
-  hover: '#4AEC9B',
-  /** DERIVED - #1DE782 pha 15% ve den, dung cho :active va vien nhan. */
-  active: '#19C46E',
-  /** MEASURED - nen muc menu dang chon trong sider cua Admin Movie. */
-  soft: '#BDF0C1',
-  /** DERIVED - ban nhat hon `soft`, cho nen cua tag va vung duoc chon nhe. */
-  softer: '#E3FCEF',
+  /** Brand red. */
+  base: '#E4002B',
+  /** DERIVED - #E4002B + 20% white, for hover. */
+  hover: '#E93355',
+  /** DERIVED - #E4002B + 15% black, for :active and badge borders. */
+  active: '#C20025',
+  /** DERIVED - #E4002B + 85% white, selected-menu background in sider. */
+  soft: '#FBD9DF',
+  /** DERIVED - #E4002B + 93% white, paler than `soft` for tags/light selections. */
+  softer: '#FDEDF0',
 } as const;
 
-/**
- * Chu nam TREN nen brand.base.
- *
- * SAI LECH CO Y so voi Figma: thiet ke de chu TRANG tren #1DE782, ty le tuong
- * phan chi ~1.4:1 - duoi nguong doc duoc cua WCAG rat xa. Doi sang mau toi cho
- * ty le ~9:1. Muon giong het thiet ke thi doi mot dong nay thanh '#FFFFFF'.
- */
-export const textOnBrand = '#052E1B';
+/** White text on brand.base (~4.85:1, passes WCAG 4.5:1 - see design-tokens.test.ts). */
+export const textOnBrand = '#FFFFFF';
 
-/**
- * `brand.base` o mot do trong suot cho truoc.
- *
- * Ton tai de khong ai phai viet `rgba(29, 231, 130, ...)` bang tay o cho khac:
- * mot chuoi rgba nhu the la mot ban sao cua brand.base ma test parity TS<->CSS
- * khong nhin thay, nen no lang le lech di khi brand doi mau. Tinh tu chinh
- * brand.base nen khong the lech duoc.
- */
+/** brand.base at a given alpha - computed from source so it can't drift (parity test can't see hand-written rgba strings). */
 export const brandAlpha = (alpha: number): string => {
   const n = Number.parseInt(brand.base.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 };
 
 /* -------------------------------------------------------------------------- */
-/* 2. Nen toi cua khu khach hang                                               */
+/* 2. Customer dark backdrop                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Khu khach hang la mot nen den nga xanh phu anh sang xanh la toa tu mot goc.
- * Ba diem dung nay MEASURED tu Home, Select Seat va Order detail - dung chung
- * mot dai mau tren ca ba frame.
- */
+/** Dark customer backdrop: brand.base toward black (DERIVED, base -> glow). */
 export const cinemaBackdrop = {
-  /** Diem toi nhat, gan nhu den. */
-  base: '#020700',
-  /** Diem giua cua vung sang. */
-  mid: '#083D1F',
-  /** Diem sang nhat cua vung sang, va la nen thanh cong cu duoi Select Seat. */
-  glow: '#0C582F',
+  /** DERIVED - brand.base + 97% black. Darkest point, near-black. */
+  base: '#070001',
+  /** DERIVED - brand.base + 85% black. Mid glow. */
+  mid: '#220006',
+  /** DERIVED - brand.base + 65% black. Brightest glow, and toolbar bg under Select Seat. */
+  glow: '#50000F',
 } as const;
 
+/** Customer light canvas (detour: #f7f6f4). Browse screens + header/nav/footer only; seats/payment/tickets are ALWAYS dark since white seats only read on dark. */
+export const customerLightCanvas = '#F7F6F4';
+
 /* -------------------------------------------------------------------------- */
-/* 3. Mau ngu nghia                                                            */
+/* 3. Semantic colors                                                            */
 /* -------------------------------------------------------------------------- */
 
 export const semantic = {
-  /** MEASURED - nut xoa trong bang cua Admin Movie.
-   *  Thiet ke con mot do thu hai (#DC0000 o nut Logout phia khach); hai mau qua
-   *  gan nhau de tao thanh hai y nghia khac nhau, nen gop ve mot. */
+  /** MEASURED - Admin Movie delete button (merged with customer Logout red). */
   danger: '#D22F27',
-  /** DERIVED - thiet ke khong co trang thai canh bao. Lay ho phach du tuong phan
-   *  tren ca nen sang lan nen toi. */
+  /** DERIVED - no warning state in design; amber readable on light and dark. */
   warning: '#D97706',
-  /** DERIVED - dung chinh brand.base: trong ngu canh nay "thanh cong" va "hanh
-   *  dong chinh" la cung mot mau, va thiet ke khong tach hai thu do. */
-  success: brand.base,
-  /** DERIVED - xanh duong trung tinh cho thong bao khong mang tin xau. */
+  /** Old brand green - split from brand.base so "success" orders never share color with "failed" ones. */
+  success: '#1DE782',
+  /** DERIVED - neutral blue for non-bad news. */
   info: '#2563EB',
 } as const;
 
 /* -------------------------------------------------------------------------- */
-/* 4. Be mat va vien                                                           */
+/* 4. Surfaces and borders                                                       */
 /* -------------------------------------------------------------------------- */
 
 export const surface = {
   light: {
-    /** MEASURED - nen cua moi frame admin. */
+    /** MEASURED - every admin frame. */
     base: '#FFFFFF',
-    /** DERIVED - lech mot chut khoi trang de the noi dung con thay duoc canh;
-     *  Figma de trang tron va dua vao vien dam hon. */
+    /** DERIVED - off-white so content cards still read; Figma uses full white + stronger border. */
     sunken: '#FAFAFA',
-    /** MEASURED - vien bang trong Admin Movie. */
+    /** MEASURED - Admin Movie table borders. */
     border: '#BFBFBF',
-    /** DERIVED - vien nhat hon cho the va o nhap, vi #BFBFBF qua dam o day. */
+    /** DERIVED - lighter border for cards/inputs (#BFBFBF too heavy there). */
     borderSubtle: '#EBEBEB',
-    /** MEASURED - icon va vien cua nut phu (xem/sua) trong Admin Movie. */
+    /** MEASURED - ghost-button icons/borders in Admin Movie. */
     iconMuted: '#767676',
   },
   dark: {
-    /** DERIVED - nen cua antd darkAlgorithm. Khu admin o che do toi KHONG dung
-     *  nen nga xanh cua khu khach; hai khu la hai khong gian khac nhau. */
+    /** DERIVED - antd darkAlgorithm base; admin dark never uses customer blue-black. */
     base: '#141414',
     sunken: '#0F0F0F',
     raised: '#1F1F1F',
@@ -120,98 +87,101 @@ export const surface = {
 } as const;
 
 /* -------------------------------------------------------------------------- */
-/* 5. Ghe ngoi                                                                 */
+/* 5. Seats                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Figma CHI dinh nghia hai trang thai: con trong (trang) va dang chon (xanh).
- * Backend co nhieu hon the - available / held / sold, cong them ghe `is_gap` la
- * cho trong khong phai ghe. Nhung trang thai con lai la DERIVED:
- *
- * - `sold`: xam toi, ro rang la khong bam duoc.
- * - `held`: nguoi khac dang giu, con co the nha ra - ho phach de phan biet voi
- *   sold, vi hai cai nay khac nhau ve hanh vi chu khong chi ve ve ngoai.
- * - `gap`: khong ve gi ca, chi chiem cho trong luoi.
- */
+/** Seat states beyond free/selecting: sold = dark grey (unclickable); held = amber (may release); gap = transparent cell. */
+/** Grey seat-type label for "standard" - SEPARATE from `seat.sold` (type vs status axes; sharing broke when sold turned red). */
+const neutralLabelGrey = '#3A3F3C';
+
 export const seat = {
-  /** MEASURED - ghe con trong trong Select Seat. */
-  available: '#FFFFFF',
-  availableText: '#020700',
-  /** MEASURED - ghe C8/C9/C10 dang duoc chon. */
-  selected: brand.base,
-  selectedText: textOnBrand,
-  /** DERIVED */
-  sold: '#3A3F3C',
-  soldText: '#8A8F8B',
+  /** Pale grey per new seat-picker spec. */
+  available: '#D1D5DB',
+  availableText: '#1F2937',
+  /** Free-seat hover - green, distinct from selected. */
+  availableHover: '#22C55E',
+  /** Blue (spec: free=grey, SELECTING=blue, held=orange, sold=red). */
+  selected: '#2563EB',
+  selectedText: '#FFFFFF',
+  /** Red (new spec). */
+  sold: '#DC2626',
+  soldText: '#FFFFFF',
   /** DERIVED */
   held: '#D97706',
   heldText: '#1A1200',
-  /** DERIVED - o trong luoi khong phai ghe. */
+  /** DERIVED - grid holes, not seats. */
   gap: 'transparent',
-  /** MEASURED - thanh "X" dai dien man chieu trong Select Seat. */
+  /** MEASURED - the "X" bar for the cinema screen in Select Seat. */
   screen: '#FFFFFF',
 } as const;
 
 /* -------------------------------------------------------------------------- */
-/* 6. Loai ghe - dung trong trinh sua so do cua admin                          */
+/* 6. Seat kinds - admin grid editor                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Backend co DUNG 4 loai ghe (models.AllSeatTypes: standard, vip, couple,
- * recliner) va KHONG co endpoint nao tra ve danh sach do, nen FE phai tu giu.
- *
- * Figma khong ve man sua so do ghe, cung khong phan biet loai ghe o dau ca -
- * man Select Seat chi co "con trong" va "dang chon". Toan bo nhom nay vi vay la
- * DERIVED, tru nen cua `vip` dung lai brand.soft (MEASURED) de khong de ra mot
- * mau xanh thu hai.
- *
- * Day la nen SANG (khu admin), khac han nhom `seat` o tren - nhom do ve tren
- * nen toi cua khu khach va noi ve TINH TRANG ghe (trong/giu/da ban), con nhom
- * nay noi ve LOAI ghe. Hai truc khac nhau, dung tron.
- */
+/** Exactly 4 seat kinds, no listing endpoint, so FE keeps its own. All DERIVED. LIGHT admin surfaces about KIND (vs `seat`: dark customer STATUS) - never mix. */
 export const seatType = {
-  /** DERIVED - xam trung tinh, la loai mac dinh nen phai lang nhat. Chu dung lai
-   *  `seat.sold` chu khong phai surface.light.iconMuted: #767676 tren nen nay chi
-   *  duoc 3.96:1, duoi nguong 4.5:1 ma test chan. */
-  standard: { bg: '#EDF0EE', fg: seat.sold },
-  /** bg MEASURED (brand.soft), fg DERIVED - vip la hang cao nen deo mau brand. */
-  vip: { bg: brand.soft, fg: '#0B3D22' },
-  /** DERIVED - tint cua semantic.warning, du tuong phan voi chu nau dam. */
+  /** DERIVED - neutral grey, the default kind. Text uses `neutralLabelGrey` (>= 4.5:1; #767676 is 3.96:1, `seat.sold` is red now). */
+  standard: { bg: '#EDF0EE', fg: neutralLabelGrey },
+  /** bg = brand.soft; dark-red fg (~9.3:1). */
+  vip: { bg: brand.soft, fg: '#720016' },
+  /** DERIVED - semantic.warning tint, readable with dark-brown text. */
   couple: { bg: '#FDE8CE', fg: '#7A4405' },
-  /** DERIVED - tint cua semantic.info. */
+  /** DERIVED - semantic.info tint. */
   recliner: { bg: '#DDE7FE', fg: '#1E3A8A' },
 } as const;
 
 /* -------------------------------------------------------------------------- */
-/* 7. Gom lai                                                                  */
+/* 7. Typefaces                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/** "Two-Family Rule": `display` for big titles, `body` for content - customer zone only (admin keeps Inter). Unrelated to `--font-mono` (figures only). */
+export const fontFamily = {
+  display: "'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system, sans-serif",
+  body: "'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif",
+} as const;
+
+/* -------------------------------------------------------------------------- */
+/* 8. Movie age-rating badges (age_rating)                                       */
+/* -------------------------------------------------------------------------- */
+
+/** Per-level age-rating colors (enum untouched): rising-restriction ramp P..T18, never brand red. Every pair >= 4.5:1 light and dark. */
+export const ratingColor = {
+  /** P - all ages. */
+  p: { bg: '#2E7D32', fg: '#FFFFFF' },
+  /** K - under 13 with an adult. */
+  k: { bg: '#1D4ED8', fg: '#FFFFFF' },
+  /** T13 - 13+. */
+  t13: { bg: '#FDB813', fg: '#402D00' },
+  /** T16 - 16+. */
+  t16: { bg: '#C2410C', fg: '#FFFFFF' },
+  /** T18 - 18+, most restricted. */
+  t18: { bg: '#8B0000', fg: '#FFFFFF' },
+} as const;
+
+/* -------------------------------------------------------------------------- */
+/* 9. Bundle                                                                     */
 /* -------------------------------------------------------------------------- */
 
 export const tokens = {
   brand,
   textOnBrand,
   cinemaBackdrop,
+  customerLightCanvas,
   semantic,
   surface,
   seat,
   seatType,
+  fontFamily,
+  ratingColor,
 } as const;
 
-/**
- * Nen chuyen sac cua khu khach hang. Dung cho <CustomerLayout>; khong dung cho
- * khu admin, vi Figma de khu admin nen trang tron.
- */
+/** Customer-zone gradient for <CustomerLayout>; never admin (Figma gives admin flat white). */
 export const cinemaGradient =
   `radial-gradient(120% 90% at 8% 40%, ${cinemaBackdrop.glow} 0%, ` +
   `${cinemaBackdrop.mid} 35%, ${cinemaBackdrop.base} 75%)`;
 
-/**
- * Bien the doc, dung cho nua trai cua man dang nhap / dang ky.
- *
- * Do tu frame Sign In (`77-626`): cung mot dai mau nhung sang o DAY chu khong
- * toa tu ben trai - goc tren trai gan nhu den (#020901), giua dam dan
- * (#051F0E), day sang nhat (#094122). Ba diem dung la cua `cinemaBackdrop`
- * san co; chi HUONG la DERIVED, khong de ra mau moi.
- */
+/** Portrait variant for the sign-in/up split screen: same ramp as backdrop, bright at the bottom; only direction is DERIVED. */
 export const cinemaGradientPanel =
   `linear-gradient(160deg, ${cinemaBackdrop.base} 0%, ` +
   `${cinemaBackdrop.mid} 70%, ${cinemaBackdrop.glow} 100%)`;

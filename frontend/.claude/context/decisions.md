@@ -167,6 +167,20 @@ ticket cards) get plain CSS with the `src/motion.ts` tokens, the way `MovieCard`
 **If this is ever revisited:** Tailwind CAN coexist with antd, but only with `preflight` disabled — its reset
 otherwise overrides antd's styles and breaks every admin screen.
 
+**Revisited 2026-09-19 — owner asked to add Tailwind after all**, specifically to reuse layout/chrome patterns
+studied from a reference project (CinePlex, Angular + ng-zorro-antd + Tailwind v4). Added `tailwindcss` +
+`@tailwindcss/vite` (v4), wired via the Vite plugin in `vite.config.ts`. `src/index.css` imports only
+`tailwindcss/theme.css` + `tailwindcss/utilities.css` (skips `preflight.css` on purpose — the exact coexistence
+recipe this entry already named). A `@theme inline { --color-brand: var(--cp-brand); ... }` block bridges the
+existing `--cp-*` tokens into Tailwind's color namespace, so `bg-brand`/`text-on-brand`/etc. read from the SAME
+single source of truth (`src/theme/tokens.ts`) rather than duplicating a color. Scope of use: Tailwind utility
+classes for layout/spacing/effects (flex, gap, rounded corners, shadow, backdrop-blur) in `MainLayout` and
+`CustomerLayout`; color that must react to the app's light/dark toggle still goes through `antdTheme.useToken()`
+or `var(--cp-*)`, NOT Tailwind's `dark:` variant — the app has no `.dark` class on the DOM (dark mode is antd's
+`darkAlgorithm` token swap only), so `dark:` would silently key off the OS preference instead of the app's own
+toggle. Existing plain-CSS files (`CustomerLayout.css`, `TicketCard.css`, etc.) are untouched and still valid;
+Tailwind is additive, not a replacement.
+
 ## 16. Realtime (SSE) ownership — no precedent at all
 
 **Today** nothing in the app consumes SSE, so there is no pattern for where an `EventSource` lives, who owns its

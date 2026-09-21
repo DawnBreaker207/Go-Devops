@@ -6,6 +6,8 @@ import {
   brand,
   brandAlpha,
   cinemaBackdrop,
+  customerLightCanvas,
+  ratingColor,
   seat,
   seatType,
   semantic,
@@ -13,8 +15,8 @@ import {
   textOnBrand,
 } from '@/theme/tokens';
 
-// Doc thang file CSS tu dia. Khong dung `@/index.css?raw` vi vite.config.ts dat
-// test.css = false, nen moi import CSS (ke ca ?raw) deu bi stub thanh rong.
+// Read the CSS file straight from disk. No `@/index.css?raw`: vite.config sets
+// test.css = false, so every CSS import (even ?raw) is stubbed empty.
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
 
 const cssVar = (name: string): string => {
@@ -39,11 +41,13 @@ describe('design token: TS va CSS phai trung nhau', () => {
     ['backdrop-base', cinemaBackdrop.base],
     ['backdrop-mid', cinemaBackdrop.mid],
     ['backdrop-glow', cinemaBackdrop.glow],
+    ['light-canvas', customerLightCanvas],
     ['danger', semantic.danger],
     ['warning', semantic.warning],
     ['info', semantic.info],
     ['seat-available', seat.available],
     ['seat-available-text', seat.availableText],
+    ['seat-available-hover', seat.availableHover],
     ['seat-selected', seat.selected],
     ['seat-selected-text', seat.selectedText],
     ['seat-sold', seat.sold],
@@ -61,6 +65,16 @@ describe('design token: TS va CSS phai trung nhau', () => {
     ['seat-type-recliner-text', seatType.recliner.fg],
     ['surface-base', surface.light.base],
     ['surface-border', surface.light.border],
+    ['rating-p', ratingColor.p.bg],
+    ['rating-p-text', ratingColor.p.fg],
+    ['rating-k', ratingColor.k.bg],
+    ['rating-k-text', ratingColor.k.fg],
+    ['rating-t13', ratingColor.t13.bg],
+    ['rating-t13-text', ratingColor.t13.fg],
+    ['rating-t16', ratingColor.t16.bg],
+    ['rating-t16-text', ratingColor.t16.fg],
+    ['rating-t18', ratingColor.t18.bg],
+    ['rating-t18-text', ratingColor.t18.fg],
   ];
 
   it.each(pairs)('--cp-%s khop tokens.ts', (name, value) => {
@@ -85,26 +99,30 @@ const contrast = (a: string, b: string) => {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 };
 
-describe('design token: cac rang buoc phai giu', () => {
-  it('mau thanh cong dung chung voi brand, dung mot mau thu hai', () => {
-    expect(semantic.success).toBe(brand.base);
+describe('design tokens: invariants to keep', () => {
+  it('success color differs from brand and danger', () => {
+    // Red brand would otherwise share danger's meaning - "success" and "failed" must never share a color.
+    expect(semantic.success).not.toBe(brand.base);
+    expect(semantic.success).not.toBe(semantic.danger);
   });
 
-  it('ghe dang chon dung dung mau brand', () => {
-    expect(seat.selected).toBe(brand.base);
+  it('four seat states (free/selecting/held/sold) all differ', () => {
+    // Spec redefined states by color (free=grey, selecting=blue, held=amber, sold=red): assert 4 distinct colors instead of pinning one value.
+    const values = [seat.available, seat.selected, seat.held, seat.sold];
+    expect(new Set(values).size).toBe(values.length);
   });
 
-  it('chu tren nen brand du tuong phan de doc', () => {
-    // Figma de chu trang tren #1DE782 (~1.4:1). Test nay chan viec quay lai do.
+  it('text on brand passes contrast', () => {
+    // Figma paired white with #1DE782 (~1.4:1). This test blocks going back.
     expect(contrast(brand.base, textOnBrand)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(Object.entries(seatType))('nhan ghe %s doc duoc tren nen cua no', (_name, pair) => {
+  it.each(Object.entries(seatType))('seat label %s reads on its background', (_name, pair) => {
     expect(contrast(pair.bg, pair.fg)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('brandAlpha sinh dung mau brand, khong phai mot ban sao viet tay', () => {
-    // Chan viec quay lai viet 'rgba(29, 231, 130, ...)' bang tay o theme/index.ts.
+  it('brandAlpha derives from brand, never a hand-written copy', () => {
+    // Blocks hand-written 'rgba(29, 231, 130, ...)' in theme/index.ts.
     const n = Number.parseInt(brand.base.slice(1), 16);
     const rgb = `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
     expect(brandAlpha(0.16)).toBe(`rgba(${rgb}, 0.16)`);
@@ -114,5 +132,24 @@ describe('design token: cac rang buoc phai giu', () => {
   it('bon loai ghe co bon mau nen khac nhau', () => {
     const backgrounds = Object.values(seatType).map((pair) => pair.bg);
     expect(new Set(backgrounds).size).toBe(backgrounds.length);
+  });
+
+  it.each(Object.entries(ratingColor))(
+    'nhan do tuoi %s doc duoc tren nen cua no',
+    (_name, pair) => {
+      expect(contrast(pair.bg, pair.fg)).toBeGreaterThanOrEqual(4.5);
+    }
+  );
+
+  it('nam muc do tuoi co nam mau nen khac nhau', () => {
+    const backgrounds = Object.values(ratingColor).map((pair) => pair.bg);
+    expect(new Set(backgrounds).size).toBe(backgrounds.length);
+  });
+
+  it('age-rating colors differ from brand', () => {
+    // All 5 levels once shared brand.base - this test blocks going back.
+    for (const pair of Object.values(ratingColor)) {
+      expect(pair.bg.toLowerCase()).not.toBe(brand.base.toLowerCase());
+    }
   });
 });
