@@ -2,17 +2,14 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import CustomerAuthShell from './CustomerAuthShell';
+import FieldInput from '@/components/ui/FieldInput';
+import Button from '@/components/ui/Button';
+import Notice from '@/components/ui/Notice';
 import { authApi } from '@/api/auth.api';
 import { PATHS } from '@/routes/paths';
 import { errorMessage } from '@/utils/error';
 
-/**
- * Quen mat khau - buoc 1: xin link dat lai.
- *
- * Backend tra 200 DU email co ton tai hay khong, de khong lo ra email nao da
- * dang ky. Vi vay man nay KHONG duoc noi "da gui" theo kieu khang dinh email
- * ton tai; cau chu phai trung tinh.
- */
+/** Step 1: request reset link. Backend is always 200 (no email enumeration), so copy must stay neutral about whether the email exists. */
 export const ForgotPasswordPage = () => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
@@ -38,40 +35,37 @@ export const ForgotPasswordPage = () => {
     <CustomerAuthShell
       title={t('customer.forgotTitle')}
       foot={
-        <Link to={PATHS.login} className="cp-auth__link">
+        <Link to={PATHS.customerLogin} className="font-semibold text-brand-active no-underline">
           {t('customer.backToLogin')}
         </Link>
       }
     >
       {sent ? (
-        <div className="cp-auth__notice cp-auth__notice--ok">{t('customer.forgotSent')}</div>
+        <Notice variant="success" role="status">
+          {t('customer.forgotSent')}
+        </Notice>
       ) : (
         <form onSubmit={submit} noValidate>
           {error ? (
-            <div className="cp-auth__notice cp-auth__notice--error" role="alert">
+            <Notice variant="error" className="mb-3.5">
               {error}
-            </div>
+            </Notice>
           ) : null}
 
-          <p style={{ fontSize: 13, color: '#666', marginTop: 0 }}>{t('customer.forgotHint')}</p>
+          <p className="mt-0 mb-3.5 text-[13px] text-[#666]">{t('customer.forgotHint')}</p>
 
-          <div className="cp-field">
-            <label className="cp-field__label" htmlFor="email">
-              {t('user.email')}
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              className="cp-field__input"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
+          <FieldInput
+            id="email"
+            label={t('user.email')}
+            type="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
 
-          <button type="submit" className="cp-btn cp-btn--primary cp-auth__submit" disabled={busy}>
+          <Button type="submit" variant="primary" block className="mt-2" disabled={busy}>
             {busy ? t('common.loading') : t('customer.sendResetLink')}
-          </button>
+          </Button>
         </form>
       )}
     </CustomerAuthShell>

@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cinemaGradientPanel } from '@/theme';
 import { PATHS } from '@/routes/paths';
-import './CustomerAuthPage.css';
 
 interface CustomerAuthShellProps {
   title: string;
@@ -11,33 +10,34 @@ interface CustomerAuthShellProps {
   foot?: ReactNode;
 }
 
-/**
- * Vo chia doi cua cac man tai khoan phia KHACH. Figma frame Sign In (77-626).
- *
- * Khac han `AuthLayout` cua khu van hanh (mot the can giua): khu khach co nua
- * trai la gradient toi mang loi chao, nua phai la form tren nen trang.
- */
+/** Customer split-panel auth shell (Figma Sign In 77-626). Fixed dark-greeting/light-form halves regardless of customer light/dark; unlike AuthLayout's centered card. */
 export const CustomerAuthShell = ({ title, children, foot }: CustomerAuthShellProps) => {
   const { t } = useTranslation();
 
   return (
-    <div className="cp-auth">
-      <aside className="cp-auth__side" style={{ backgroundImage: cinemaGradientPanel }}>
-        <Link to={PATHS.home} className="cp-auth__brand">
-          <span className="cp-auth__brand-mark" aria-hidden="true">
+    <div className="grid min-h-[calc(100svh_-_5rem)] flex-1 grid-cols-2 max-[820px]:grid-cols-1">
+      {/* Viewport minus header (5rem) so both halves stretch evenly and the footer scrolls below. */}
+      <aside
+        className="flex flex-col justify-between px-10 py-9 text-white max-[820px]:hidden"
+        style={{ backgroundColor: 'var(--cp-backdrop-base)', backgroundImage: cinemaGradientPanel }}
+      >
+        <Link
+          to={PATHS.home}
+          className="inline-flex items-center gap-2 text-xl font-bold text-white no-underline"
+        >
+          <span className="text-[22px] leading-none text-brand" aria-hidden="true">
             ◗
           </span>
           {t('customer.brand')}
         </Link>
-        <p className="cp-auth__welcome">{t('customer.welcome')}</p>
-        <span />
+        <p className="m-0 text-[40px] leading-[1.25] font-light italic">{t('customer.welcome')}</p>
       </aside>
 
-      <main className="cp-auth__panel">
-        <div className="cp-auth__form">
-          <h1 className="cp-auth__title">{title}</h1>
+      <main className="flex items-center justify-center bg-(--cp-surface-base) px-8 py-10">
+        <div className="w-full max-w-[400px] text-[#141414]">
+          <h1 className="mt-0 mb-5.5 text-[26px] font-bold">{title}</h1>
           {children}
-          {foot ? <p className="cp-auth__foot">{foot}</p> : null}
+          {foot ? <p className="mt-4 text-center text-[13px] text-[#666]">{foot}</p> : null}
         </div>
       </main>
     </div>

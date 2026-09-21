@@ -1,15 +1,11 @@
-/**
- * dto.UserResponse - dung chung cho `GET /users/me`, `POST /auth/login` va
- * `GET /admin/users`. Chi `phone` co omitempty.
- */
+/** dto.UserResponse, shared by GET /users/me, POST /auth/login, GET /admin/users. Only `phone` is omitempty. */
 export interface User {
   id: string;
   email: string;
   full_name: string;
   phone?: string;
   role: 'admin' | 'staff' | 'customer';
-  /** false = tai khoan bi khoa. KHAC voi xoa mem: tai khoan da xoa bien mat han
-   *  khoi danh sach vi GORM loc deleted_at, khong the mo khoa lai duoc. */
+  /** false = locked. Unlike soft-delete: deleted accounts vanish from lists (GORM filters deleted_at) and can't be unlocked. */
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -18,6 +14,8 @@ export interface User {
 export interface LoginRequest {
   email: string;
   password: string;
+  /** Backend omitempty (max=255). Auto-attached in authApi.login; never pass by hand. */
+  device_id?: string;
 }
 
 export interface RegisterRequest {

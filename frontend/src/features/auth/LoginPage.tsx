@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Form, Input, Typography } from 'antd';
-import { LockOutlined, MailOutlined } from '@ant-design/icons';
+import { LockOutlined, MailOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '@/stores/authStore';
-import { useLandingPath } from '@/routes/navigation';
-import type { ApiError, LoginRequest } from '@/types';
+import { performLogin } from './loginFlow';
+import { brand, textOnBrand } from '@/theme';
+import type { LoginRequest } from '@/types';
 
 interface LocationState {
   from?: string;
@@ -14,9 +14,7 @@ interface LocationState {
 export const LoginPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const landing = useLandingPath();
   const location = useLocation();
-  const login = useAuthStore((s) => s.login);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -24,65 +22,92 @@ export const LoginPage = () => {
   const handleSubmit = async (values: LoginRequest) => {
     setSubmitting(true);
     setErrorMessage(null);
-    try {
-      await login(values);
+    // Login logic (API call, fresh role read, landing path) is shared with CustomerLoginForm/sheet.
+    const result = await performLogin(values, t('auth.loginFailed'));
+    setSubmitting(false);
+    if (result.ok) {
       const from = (location.state as LocationState | null)?.from;
-      // Khong co dinh /dashboard: khach khong vao duoc trang van hanh nao va
-      // se roi thang vao man 403. useLandingPath tra ve dung noi role do vao duoc.
-      navigate(from ?? landing, { replace: true });
-    } catch (error) {
-      setErrorMessage((error as ApiError).message || t('auth.loginFailed'));
-    } finally {
-      setSubmitting(false);
+      // Never hardcode /dashboard: customers can't enter any operator page and would land on 403. landingPath returns somewhere the role can enter.
+      navigate(from ?? result.landingPath, { replace: true });
+    } else {
+      setErrorMessage(result.message);
     }
   };
 
   return (
-    <Card style={{ width: 400, maxWidth: '92vw' }} variant="borderless">
-      <Typography.Title level={3} style={{ marginBottom: 4, textAlign: 'center' }}>
-        {t('auth.loginTitle')}
-      </Typography.Title>
-      <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
-        {t('auth.loginSubtitle')}
-      </Typography.Paragraph>
-
-      {errorMessage ? (
-        <Alert type="error" showIcon message={errorMessage} style={{ marginBottom: 16 }} />
-      ) : null}
-
-      <Form<LoginRequest>
-        layout="vertical"
-        onFinish={handleSubmit}
-        autoComplete="off"
-        requiredMark={false}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+      {/* Brand tile matching the sider logo so the page reads as one system. */}
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'flex',
+          height: 56,
+          width: 56,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 16,
+          background: brand.base,
+          color: textOnBrand,
+          boxShadow: `0 12px 24px -8px ${brand.base}66`,
+        }}
       >
-        <Form.Item
-          name="email"
-          label={t('auth.email')}
-          rules={[
-            { required: true, message: t('auth.emailRequired') },
-            { type: 'email', message: t('auth.emailInvalid') },
-          ]}
-        >
-          <Input prefix={<MailOutlined />} placeholder="admin@cinema.local" size="large" />
-        </Form.Item>
+        <VideoCameraOutlined style={{ fontSize: 26 }} />
+      </span>
 
-        <Form.Item
-          name="password"
-          label={t('auth.password')}
-          rules={[
-            { required: true, message: t('auth.passwordRequired') },
-            { min: 6, message: t('auth.passwordMin') },
-          ]}
-        >
-          <Input.Password prefix={<LockOutlined />} placeholder="••••••" size="large" />
-        </Form.Item>
+      <Card style={{ width: 400, maxWidth: '92vw' }} variant="borderless">
+        <Typography.Title level={3} style={{ marginBottom: 4, textAlign: 'center' }}>
+          {t('auth.loginTitle')}
+        </Typography.Title>
+        <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
+          {t('auth.loginSubtitle')}
+        </Typography.Paragraph>
 
-        <Button type="primary" htmlType="submit" size="large" block loading={submitting}>
-          {t('auth.login')}
-        </Button>
-      </Form>
-    </Card>
+        {errorMessage ? (
+          <Alert type="error" showIcon message={errorMessage} style={{ marginBottom: 16 }} />
+        ) : null}
+
+        <Form<LoginRequest>
+          layout="vertical"
+          onFinish={handleSubmit}
+          autoComplete="off"
+          requiredMark={false}
+        >
+          <Form.Item
+            name="email"
+            label={t('auth.email')}
+            rules={[
+              { required: true, message: t('auth.emailRequired') },
+              { type: 'email', message: t('auth.emailInvalid') },
+            ]}
+          >
+            <Input prefix={<MailOutlined />} placeholder="admin@cinema.local" size="large" />
+          </Form.Item>
+
+          <Form.Item
+            name="password"
+            label={t('auth.password')}
+            rules={[
+              { required: true, message: t('auth.passwordRequired') },
+              { min: 6, message: t('auth.passwordMin') },
+            ]}
+          >
+            <Input.Password prefix={<LockOutlined />} placeholder="••••••" size="large" />
+          </Form.Item>
+
+          <Button type="primary" htmlType="submit" size="large" block loading={submitting}>
+            {t('auth.login')}
+          </Button>
+        </Form>
+
+        {/* No staff self-recovery flow exists; at least one guidance line so locked-out staff aren't met with silence. */}
+        <Typography.Paragraph
+          type="secondary"
+          style={{ marginTop: 16, marginBottom: 0, textAlign: 'center', fontSize: 13 }}
+        >
+          {t('auth.loginHint')}
+        </Typography.Paragraph>
+      </Card>
+    </div>
   );
 };
 

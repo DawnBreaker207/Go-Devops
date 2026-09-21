@@ -44,7 +44,8 @@
     "passwordRequired": "Please enter your password",
     "passwordMin": "Password must be at least 6 characters",
     "loginSuccess": "Signed in successfully",
-    "loginFailed": "Sign in failed"
+    "loginFailed": "Sign in failed",
+    "loginHint": "Accounts are provisioned by an administrator. If you're a new staff member or forgot your password, please contact your administrator."
   },
   "movie": {
     "ageRating": "Age rating",
@@ -303,8 +304,10 @@
     "holdHint": "Your seats are only held for the time on the counter above. When it runs out they are released to someone else and the order is cancelled.",
     "holdLeft": "Seats held for",
     "login": "Log in",
+    "loginToSelectSeat": "Log in to select seats for the {{time}} showtime at {{hall}}",
     "myTickets": "My tickets",
     "newPassword": "New password",
+    "noAccount": "Don't have an account?",
     "noMovies": "No films are showing right now.",
     "noSeatPicked": "No seats picked yet",
     "noShowtimes": "No showtimes on this day.",
@@ -330,8 +333,10 @@
     "proceed": "Proceed to payment",
     "refundNotice": "This transaction is {{status}}. The refund is handled automatically; there is nothing for you to do.",
     "register": "Sign up",
+    "registerSuccessNotice": "Account created. Sign in to continue.",
     "resetNoToken": "This link is missing its reset code. Open the link from the email you were sent.",
     "resetSubmit": "Reset password",
+    "resetSuccessNotice": "Password reset. Sign in with your new password.",
     "resetTitle": "Reset password",
     "schedule": "Schedule",
     "screen": "SCREEN",

@@ -9,6 +9,7 @@ import { ROLES_ADMIN, ROLES_OPERATOR } from './navigation';
 import { PATHS } from './paths';
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
+const CustomerLoginPage = lazy(() => import('@/features/auth/CustomerLoginPage'));
 const RegisterPage = lazy(() => import('@/features/auth/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
@@ -43,17 +44,30 @@ export const router = createBrowserRouter([
       { path: PATHS.checkout, element: <CheckoutPage /> },
       { path: PATHS.orderSuccess, element: <OrderSuccessPage /> },
       { path: PATHS.myTickets, element: <MyTicketsPage /> },
+      // Customer account screen (Figma 77-626) sits in CustomerLayout to share
+      // header/footer. `handle.fullBleed` drops <main> max-width/padding for the split panel.
+      {
+        path: PATHS.customerLogin,
+        element: <CustomerLoginPage />,
+        handle: { fullBleed: true },
+      },
+      { path: PATHS.register, element: <RegisterPage />, handle: { fullBleed: true } },
+      {
+        path: PATHS.forgotPassword,
+        element: <ForgotPasswordPage />,
+        handle: { fullBleed: true },
+      },
+      {
+        path: PATHS.resetPassword,
+        element: <ResetPasswordPage />,
+        handle: { fullBleed: true },
+      },
     ],
   },
   {
     element: <AuthLayout />,
     children: [{ path: PATHS.login, element: <LoginPage /> }],
   },
-  // Man tai khoan cua KHACH mang vo chia doi rieng (Figma 77-626), khong dung
-  // AuthLayout cua khu van hanh, nen dung o muc goc chu khong boc layout nao.
-  { path: PATHS.register, element: <RegisterPage /> },
-  { path: PATHS.forgotPassword, element: <ForgotPasswordPage /> },
-  { path: PATHS.resetPassword, element: <ResetPasswordPage /> },
   {
     element: <ProtectedRoute />,
     children: [

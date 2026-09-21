@@ -44,7 +44,8 @@
     "passwordRequired": "Vui lòng nhập mật khẩu",
     "passwordMin": "Mật khẩu tối thiểu 6 ký tự",
     "loginSuccess": "Đăng nhập thành công",
-    "loginFailed": "Đăng nhập thất bại"
+    "loginFailed": "Đăng nhập thất bại",
+    "loginHint": "Tài khoản do quản trị viên cấp phát. Nếu bạn là nhân viên mới hoặc quên mật khẩu, hãy liên hệ quản trị viên để được hỗ trợ."
   },
   "movie": {
     "ageRating": "Phân loại",
@@ -303,8 +304,10 @@
     "holdHint": "Ghế chỉ được giữ trong thời gian đếm ngược ở trên. Hết giờ thì ghế được nhả ra cho người khác và đơn tự huỷ.",
     "holdLeft": "Còn giữ chỗ trong",
     "login": "Đăng nhập",
+    "loginToSelectSeat": "Đăng nhập để chọn ghế cho suất {{time}} tại {{hall}}",
     "myTickets": "Vé của tôi",
     "newPassword": "Mật khẩu mới",
+    "noAccount": "Chưa có tài khoản?",
     "noMovies": "Hiện chưa có phim nào đang chiếu.",
     "noSeatPicked": "Chưa chọn ghế nào",
     "noShowtimes": "Không có suất chiếu nào trong ngày này.",
@@ -330,8 +333,10 @@
     "proceed": "Tiếp tục thanh toán",
     "refundNotice": "Giao dịch này đang ở trạng thái {{status}}. Hệ thống tự xử lý hoàn tiền, bạn không cần làm gì thêm.",
     "register": "Đăng ký",
+    "registerSuccessNotice": "Tạo tài khoản thành công. Đăng nhập để tiếp tục.",
     "resetNoToken": "Link không hợp lệ: thiếu mã đặt lại. Mở lại link trong email bạn nhận được.",
     "resetSubmit": "Đặt lại mật khẩu",
+    "resetSuccessNotice": "Đặt lại mật khẩu thành công. Đăng nhập bằng mật khẩu mới.",
     "resetTitle": "Đặt lại mật khẩu",
     "schedule": "Suất chiếu",
     "screen": "MÀN CHIẾU",
