@@ -17,8 +17,6 @@ func NewAuthHandler(authService service.AuthService) *AuthHandler {
 	return &AuthHandler{authService: authService}
 }
 
-// Register godoc
-//
 //	@Summary		Register account
 //	@Tags			auth
 //	@Accept			json
@@ -44,8 +42,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	response.Created(c, user)
 }
 
-// Login godoc
-//
 //	@Summary		Login
 //	@Tags			auth
 //	@Accept			json
@@ -64,6 +60,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	req.ClientIP = c.ClientIP()
+	req.UserAgent = c.Request.UserAgent()
 
 	result, err := h.authService.Login(c.Request.Context(), req)
 	if err != nil {
@@ -74,8 +71,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.OK(c, result)
 }
 
-// AcceptTerms godoc
-//
 //	@Summary		Accept the current terms and sign in
 //	@Description	Verifies the credentials, records the accepted terms revision and issues a token pair. Needed when login answers 428.
 //	@Tags			auth
@@ -94,6 +89,7 @@ func (h *AuthHandler) AcceptTerms(c *gin.Context) {
 		return
 	}
 	req.ClientIP = c.ClientIP()
+	req.UserAgent = c.Request.UserAgent()
 
 	result, err := h.authService.AcceptTerms(c.Request.Context(), req)
 	if err != nil {
@@ -104,8 +100,6 @@ func (h *AuthHandler) AcceptTerms(c *gin.Context) {
 	response.OK(c, result)
 }
 
-// Refresh godoc
-//
 //	@Summary		Refresh access token
 //	@Tags			auth
 //	@Accept			json
@@ -131,8 +125,6 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	response.OK(c, tokens)
 }
 
-// Logout godoc
-//
 //	@Summary		Sign out: revokes the whole session family
 //	@Tags			auth
 //	@Accept			json
@@ -155,8 +147,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// ForgotPassword godoc
-//
 //	@Summary		Request a password reset email
 //	@Description	Always answers 200 so the existence of an account is never leaked.
 //	@Tags			auth
@@ -179,8 +169,6 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// ResetPassword godoc
-//
 //	@Summary		Redeem a password reset token
 //	@Tags			auth
 //	@Accept			json
@@ -202,8 +190,6 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// ChangePassword godoc
-//
 //	@Summary		Change the current password
 //	@Description	Revokes all other sessions; the current one gets a fresh token pair.
 //	@Tags			users
@@ -227,4 +213,45 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 	response.OK(c, tokens)
+}
+
+//	@Summary		List signed-in devices
+//	@Description	Pass device_id (the caller's own, if known) to flag it as is_current.
+//	@Tags			users
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			device_id	query	string	false	"Caller's own device id"
+//	@Success		200	{object}	response.Body{data=[]dto.SessionResponse}
+//	@Failure		401	{object}	response.Body
+//	@Router			/users/me/sessions [get]
+func (h *AuthHandler) ListSessions(c *gin.Context) {
+	var query dto.SessionListQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		response.Error(c, err)
+		return
+	}
+	sessions, err := h.authService.ListSessions(c.Request.Context(), middleware.CurrentUserID(c), query.DeviceID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, sessions)
+}
+
+//	@Summary		Sign out one device
+//	@Description	Revokes exactly one session; the account's other devices stay signed in.
+//	@Tags			users
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	string	true	"Session (refresh token) id"
+//	@Success		200	{object}	response.Body
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body	"session does not belong to the caller"
+//	@Router			/users/me/sessions/{id} [delete]
+func (h *AuthHandler) RevokeSession(c *gin.Context) {
+	if err := h.authService.RevokeSession(c.Request.Context(), middleware.CurrentUserID(c), c.Param("id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, nil)
 }

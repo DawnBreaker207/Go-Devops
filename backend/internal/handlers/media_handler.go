@@ -25,8 +25,6 @@ func NewMediaHandler(media service.MediaService, localDir string, maxBytes int64
 // LocalDir is empty for remote stores.
 func (h *MediaHandler) LocalDir() string { return h.localDir }
 
-// UploadPoster godoc
-//
 //	@Summary		Upload a movie poster (admin/staff)
 //	@Description	multipart/form-data field "file": JPEG, PNG or WebP. Returns the URL to put in poster_url.
 //	@Tags			media
@@ -53,9 +51,7 @@ func (h *MediaHandler) UploadPoster(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Typed explicitly so this file imports internal/dto: swag resolves the `dto.` prefix
-	// in the @Success annotation from the file's own imports, and without the import the
-	// whole `make swag` run aborts with "cannot find type definition: dto.UploadResponse".
+	// Keep the dto import load-bearing: swag resolves the `dto.` prefix from this file's imports.
 	var res *dto.UploadResponse
 	res, err = h.media.UploadPoster(c.Request.Context(), header.Filename, file)
 	if err != nil {

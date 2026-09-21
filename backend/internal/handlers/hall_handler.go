@@ -18,8 +18,6 @@ func NewHallHandler(hallService service.HallService) *HallHandler {
 	return &HallHandler{hallService: hallService}
 }
 
-// List godoc
-//
 //	@Summary		List halls (paginated)
 //	@Tags			halls
 //	@Produce		json
@@ -46,8 +44,6 @@ func (h *HallHandler) List(c *gin.Context) {
 	response.List(c, halls, query.Page, query.PageSize, total)
 }
 
-// Show godoc
-//
 //	@Summary		Get hall details
 //	@Tags			halls
 //	@Produce		json
@@ -66,8 +62,6 @@ func (h *HallHandler) Show(c *gin.Context) {
 	response.OK(c, hall)
 }
 
-// Create godoc
-//
 //	@Summary		Create a hall and generate its seat grid
 //	@Tags			halls
 //	@Accept			json
@@ -94,8 +88,6 @@ func (h *HallHandler) Create(c *gin.Context) {
 	response.Created(c, hall)
 }
 
-// Seats godoc
-//
 //	@Summary		Get the seat grid of a hall
 //	@Tags			halls
 //	@Produce		json
@@ -114,8 +106,6 @@ func (h *HallHandler) Seats(c *gin.Context) {
 	response.OK(c, dto.NewSeatResponses(seats))
 }
 
-// UpdateSeat godoc
-//
 //	@Summary		Change a seat's type or gap flag
 //	@Tags			halls
 //	@Accept			json
@@ -145,8 +135,6 @@ func (h *HallHandler) UpdateSeat(c *gin.Context) {
 	response.OK(c, seat)
 }
 
-// SetPrices godoc
-//
 //	@Summary		Set prices for all seat types of a hall
 //	@Tags			halls
 //	@Accept			json
@@ -174,8 +162,6 @@ func (h *HallHandler) SetPrices(c *gin.Context) {
 	response.OK(c, prices)
 }
 
-// Templates godoc
-//
 //	@Summary		Preview the built-in hall templates
 //	@Tags			halls
 //	@Produce		json
@@ -187,8 +173,6 @@ func (h *HallHandler) Templates(c *gin.Context) {
 	response.OK(c, h.hallService.Templates())
 }
 
-// Clone godoc
-//
 //	@Summary		Clone a hall's current seat grid under a new name
 //	@Tags			halls
 //	@Accept			json
@@ -216,8 +200,6 @@ func (h *HallHandler) Clone(c *gin.Context) {
 	response.Created(c, hall)
 }
 
-// BulkUpdateSeats godoc
-//
 //	@Summary		Change many seats at once (labels, rows, columns or a range)
 //	@Tags			halls
 //	@Accept			json
@@ -245,8 +227,6 @@ func (h *HallHandler) BulkUpdateSeats(c *gin.Context) {
 	response.OK(c, seats)
 }
 
-// UpdateHall godoc
-//
 //	@Summary		Rename a hall, change its screen/aisle display, or (de)activate it
 //	@Description	Deactivating is refused (409) while an open showtime is still to come; once inactive the hall takes no new showtimes.
 //	@Tags			halls
@@ -275,8 +255,6 @@ func (h *HallHandler) UpdateHall(c *gin.Context) {
 	response.OK(c, hall)
 }
 
-// RegenerateLayout godoc
-//
 //	@Summary		Regenerate a hall's whole seat grid
 //	@Description	Only while the hall has never had a single booking (409 otherwise).
 //	@Tags			halls
@@ -305,8 +283,105 @@ func (h *HallHandler) RegenerateLayout(c *gin.Context) {
 	response.OK(c, hall)
 }
 
-// DeleteHall godoc
-//
+//	@Summary		Append one new row of standard seats to a hall
+//	@Description	Never touches an existing seat - safe while the hall has a live booking (409 only on an actual conflict), unlike regenerating the whole layout.
+//	@Tags			halls
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Hall ID"
+//	@Success		201	{object}	response.Body{data=[]dto.SeatResponse}
+//	@Failure		400	{object}	response.Body
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Failure		409	{object}	response.Body
+//	@Router			/admin/halls/{id}/seats/rows [post]
+func (h *HallHandler) AddRow(c *gin.Context) {
+	seats, err := h.hallService.AddRow(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, seats)
+}
+
+//	@Summary		Remove one row and renumber every row after it
+//	@Description	Any row can be removed, not just the last - rows after it shift down by one so numbering stays 1..N with no gap. Refused (409) if any seat in the removed row has booking history.
+//	@Tags			halls
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id			path		string	true	"Hall ID"
+//	@Param			rowLabel	path		string	true	"Row label, e.g. C"
+//	@Success		200			{object}	response.Body{data=[]dto.SeatResponse}
+//	@Failure		400			{object}	response.Body
+//	@Failure		401			{object}	response.Body
+//	@Failure		404			{object}	response.Body
+//	@Failure		409			{object}	response.Body
+//	@Router			/admin/halls/{id}/seats/rows/{rowLabel} [delete]
+func (h *HallHandler) DeleteRow(c *gin.Context) {
+	seats, err := h.hallService.DeleteRow(c.Request.Context(), c.Param("id"), c.Param("rowLabel"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, seats)
+}
+
+//	@Summary		Merge two adjacent standard seats into one couple seat
+//	@Description	The right seat is deleted entirely; the left seat becomes col_span=2, seat_type=couple. Refused (409) if either seat has booking history.
+//	@Tags			halls
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string					true	"Hall ID"
+//	@Param			payload	body		dto.MergeSeatsRequest	true	"Left/right seat labels"
+//	@Success		200		{object}	response.Body{data=dto.SeatResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/admin/halls/{id}/seats/merge [post]
+func (h *HallHandler) MergeSeats(c *gin.Context) {
+	var req dto.MergeSeatsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	seat, err := h.hallService.MergeSeats(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, seat)
+}
+
+//	@Summary		Split one couple seat back into two standard seats
+//	@Description	The seat becomes col_span=1, and a new standard seat is created at the next column. Refused (409) if the seat has booking history.
+//	@Tags			halls
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string					true	"Hall ID"
+//	@Param			payload	body		dto.SplitSeatRequest	true	"Couple seat label"
+//	@Success		200		{object}	response.Body{data=[]dto.SeatResponse}
+//	@Failure		400		{object}	response.Body
+//	@Failure		401		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Failure		409		{object}	response.Body
+//	@Router			/admin/halls/{id}/seats/split [post]
+func (h *HallHandler) SplitSeat(c *gin.Context) {
+	var req dto.SplitSeatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	seats, err := h.hallService.SplitSeat(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, seats)
+}
+
 //	@Summary		Delete a hall (soft delete)
 //	@Description	Refused (409) while it has a showtime not yet ended.
 //	@Tags			halls
@@ -326,8 +401,6 @@ func (h *HallHandler) DeleteHall(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// Prices godoc
-//
 //	@Summary		Get the prices of a hall
 //	@Tags			halls
 //	@Produce		json

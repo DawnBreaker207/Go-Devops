@@ -20,8 +20,6 @@ func NewStaffHandler(reports service.ReportService, bookings service.BookingServ
 	return &StaffHandler{reports: reports, bookings: bookings, users: users}
 }
 
-// Dashboard godoc
-//
 //	@Summary		Staff board: showtimes of a day with seats sold / held / checked in
 //	@Tags			staff
 //	@Produce		json
@@ -40,8 +38,6 @@ func (h *StaffHandler) Dashboard(c *gin.Context) {
 	response.OK(c, board)
 }
 
-// Tickets godoc
-//
 //	@Summary		Tickets of a showtime (status=issued: still waiting at the gate)
 //	@Tags			staff
 //	@Produce		json
@@ -62,8 +58,6 @@ func (h *StaffHandler) Tickets(c *gin.Context) {
 	response.OK(c, tickets)
 }
 
-// CounterSell godoc
-//
 //	@Summary		Walk-in sale at the counter
 //	@Description	Sells tickets for cash to someone without an account: booking is confirmed immediately, no email.
 //	@Tags			staff
@@ -90,8 +84,6 @@ func (h *StaffHandler) CounterSell(c *gin.Context) {
 	response.OK(c, order)
 }
 
-// BoxOfficeDay godoc
-//
 //	@Summary		Counter sales of a day (close-day report)
 //	@Tags			staff
 //	@Produce		json
@@ -109,8 +101,6 @@ func (h *StaffHandler) BoxOfficeDay(c *gin.Context) {
 	response.OK(c, day)
 }
 
-// Overview godoc
-//
 //	@Summary		Staff dashboard: today's showtime board + counter sales + tickets awaiting check-in, in one call
 //	@Tags			staff
 //	@Produce		json
@@ -129,8 +119,6 @@ func (h *StaffHandler) Overview(c *gin.Context) {
 	response.OK(c, res)
 }
 
-// SearchCustomers godoc
-//
 //	@Summary		Search customer accounts (support lookup)
 //	@Description	Only role=customer accounts ever show here; staff/admin accounts stay only in /admin/users.
 //	@Tags			staff
@@ -157,8 +145,6 @@ func (h *StaffHandler) SearchCustomers(c *gin.Context) {
 	response.List(c, users, q.Page, q.PageSize, total)
 }
 
-// CustomerProfile godoc
-//
 //	@Summary		A customer's profile (support lookup)
 //	@Description	404 if the id isn't a customer account — this route never confirms a staff/admin account exists.
 //	@Tags			staff
@@ -182,8 +168,6 @@ func (h *StaffHandler) CustomerProfile(c *gin.Context) {
 	response.OK(c, user)
 }
 
-// CustomerOrders godoc
-//
 //	@Summary		A customer's booking history (support lookup)
 //	@Tags			staff
 //	@Produce		json
@@ -219,8 +203,6 @@ func (h *StaffHandler) CustomerOrders(c *gin.Context) {
 	response.List(c, orders, q.Page, q.PageSize, total)
 }
 
-// OrderDetail godoc
-//
 //	@Summary		Any order's e-ticket detail, by id (support lookup)
 //	@Tags			staff
 //	@Produce		json

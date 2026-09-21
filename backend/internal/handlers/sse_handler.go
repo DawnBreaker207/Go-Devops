@@ -50,8 +50,6 @@ type seatsPayload struct {
 	Seats      []sse.SeatUpdate `json:"seats"`
 }
 
-// IssueToken godoc
-//
 //	@Summary		Create a short-lived realtime token for one showtime
 //	@Description	The token (not the JWT) goes into the EventSource URL. Valid 30s, reusable for reconnects, bound to the showtime.
 //	@Tags			events
@@ -81,8 +79,6 @@ func (h *SSEHandler) IssueToken(c *gin.Context) {
 	})
 }
 
-// Stream godoc
-//
 //	@Summary		SSE stream of seat changes for a showtime
 //	@Description	No JWT: the realtime token is the credential. Events: connected, seats (debounced ~100ms); ": ping" every 15s.
 //	@Tags			events

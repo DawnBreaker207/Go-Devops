@@ -25,8 +25,6 @@ func NewBatchHandler(manager *batch.Manager, repo repository.BatchJobRepository,
 	return &BatchHandler{manager: manager, repo: repo, db: db}
 }
 
-// List godoc
-//
 //	@Summary		Batch job run history
 //	@Tags			batch
 //	@Produce		json
@@ -53,8 +51,6 @@ func (h *BatchHandler) List(c *gin.Context) {
 	response.List(c, jobs, q.Page, q.PageSize, total)
 }
 
-// Run godoc
-//
 //	@Summary		Start a job now, in the background
 //	@Description	Answers 202 once the run is registered; follow its status in /admin/batch/jobs.
 //	@Tags			batch

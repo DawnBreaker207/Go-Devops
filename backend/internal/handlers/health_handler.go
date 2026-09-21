@@ -26,8 +26,6 @@ type HealthStatus struct {
 	Database string `json:"database" example:"up"`
 }
 
-// Check godoc
-//
 //	@Summary		Health check
 //	@Description	Service and database status
 //	@Tags			health
@@ -52,8 +50,6 @@ func (h *HealthHandler) Check(c *gin.Context) {
 	response.OK(c, status)
 }
 
-// Healthz godoc
-//
 //	@Summary		Infrastructure probe
 //	@Description	200 when the DB pings, 503 otherwise; no complex payload.
 //	@Tags			health

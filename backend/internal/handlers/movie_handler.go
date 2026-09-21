@@ -23,8 +23,6 @@ func NewMovieHandler(movieService service.MovieService) *MovieHandler {
 	return &MovieHandler{movieService: movieService}
 }
 
-// List godoc
-//
 //	@Summary		List movies (paginated)
 //	@Tags			movies
 //	@Produce		json
@@ -54,8 +52,6 @@ func (h *MovieHandler) List(c *gin.Context) {
 	response.List(c, movies, query.Page, query.PageSize, total)
 }
 
-// Detail godoc
-//
 //	@Summary		Get movie details
 //	@Tags			movies
 //	@Produce		json
@@ -75,8 +71,6 @@ func (h *MovieHandler) Detail(c *gin.Context) {
 	response.OK(c, movie)
 }
 
-// Create godoc
-//
 //	@Summary		Create a new movie
 //	@Tags			movies
 //	@Accept			json
@@ -103,8 +97,6 @@ func (h *MovieHandler) Create(c *gin.Context) {
 	response.Created(c, movie)
 }
 
-// Update godoc
-//
 //	@Summary		Update a movie
 //	@Tags			movies
 //	@Accept			json
@@ -133,8 +125,6 @@ func (h *MovieHandler) Update(c *gin.Context) {
 	response.OK(c, movie)
 }
 
-// Delete godoc
-//
 //	@Summary		Delete a movie
 //	@Tags			movies
 //	@Produce		json

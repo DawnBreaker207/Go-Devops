@@ -10,14 +10,13 @@ import (
 
 type ShowtimeHandler struct {
 	showtimeService service.ShowtimeService
+	bookingService  service.BookingService
 }
 
-func NewShowtimeHandler(showtimeService service.ShowtimeService) *ShowtimeHandler {
-	return &ShowtimeHandler{showtimeService: showtimeService}
+func NewShowtimeHandler(showtimeService service.ShowtimeService, bookingService service.BookingService) *ShowtimeHandler {
+	return &ShowtimeHandler{showtimeService: showtimeService, bookingService: bookingService}
 }
 
-// Create godoc
-//
 //	@Summary		Schedule a showtime in a hall
 //	@Tags			showtimes
 //	@Accept			json
@@ -45,8 +44,6 @@ func (h *ShowtimeHandler) Create(c *gin.Context) {
 	response.Created(c, showtime)
 }
 
-// Update godoc
-//
 //	@Summary		Reschedule a showtime
 //	@Tags			showtimes
 //	@Accept			json
@@ -75,8 +72,6 @@ func (h *ShowtimeHandler) Update(c *gin.Context) {
 	response.OK(c, showtime)
 }
 
-// Delete godoc
-//
 //	@Summary		Delete a showtime
 //	@Tags			showtimes
 //	@Produce		json
@@ -96,8 +91,26 @@ func (h *ShowtimeHandler) Delete(c *gin.Context) {
 	response.NoContentOK(c, "deleted")
 }
 
-// ListForMovie godoc
-//
+//	@Summary		Cancel an already-sold showtime and refund its bookings
+//	@Description	Unlike DELETE (refused once a showtime has any booking), this cancels the showtime and refunds every booking that already paid for it through the normal refund pipeline. Voids issued tickets of confirmed bookings.
+//	@Tags			showtimes
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Showtime ID"
+//	@Success		200	{object}	response.Body{data=dto.ShowtimeCancelResponse}
+//	@Failure		401	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Failure		409	{object}	response.Body	"showtime is already cancelled"
+//	@Router			/admin/showtimes/{id}/cancel [post]
+func (h *ShowtimeHandler) Cancel(c *gin.Context) {
+	result, err := h.bookingService.CancelShowtime(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, result)
+}
+
 //	@Summary		List showtimes of a movie for a date
 //	@Tags			showtimes
 //	@Produce		json
@@ -117,8 +130,6 @@ func (h *ShowtimeHandler) ListForMovie(c *gin.Context) {
 	response.OK(c, items)
 }
 
-// List godoc
-//
 //	@Summary		Showtimes on sale for a date, all movies
 //	@Description	Hides draft/ended movies, started showtimes and halls without full prices. A day without showtimes returns an empty list.
 //	@Tags			showtimes
@@ -138,8 +149,6 @@ func (h *ShowtimeHandler) List(c *gin.Context) {
 	response.OK(c, items)
 }
 
-// AdminList godoc
-//
 //	@Summary		List showtimes for operators, paged and filterable
 //	@Description	Shows everything the public picker hides: closed showtimes, draft or ended movies, past dates and halls without a full price set.
 //	@Tags			showtimes
@@ -177,8 +186,6 @@ func (h *ShowtimeHandler) AdminList(c *gin.Context) {
 	response.List(c, items, query.Page, query.PageSize, total)
 }
 
-// Detail godoc
-//
 //	@Summary		Get one showtime for operators
 //	@Description	Unlike the booking endpoints this does not require the showtime to be on sale.
 //	@Tags			showtimes
@@ -199,8 +206,6 @@ func (h *ShowtimeHandler) Detail(c *gin.Context) {
 	response.OK(c, showtime)
 }
 
-// SeatMap godoc
-//
 //	@Summary		Get the seat grid of a showtime with prices
 //	@Tags			showtimes
 //	@Produce		json

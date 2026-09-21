@@ -16,8 +16,6 @@ func NewAuditHandler(audit service.AuditService) *AuditHandler {
 	return &AuditHandler{audit: audit}
 }
 
-// List godoc
-//
 //	@Summary		List audit log entries (admin)
 //	@Description	Every audited event, newest first. booking_id ties together the
 //	@Description	whole lifecycle of one order (hold/pay/webhook/refund/redeem)

@@ -25,8 +25,6 @@ func NewPaymentHandler(providers *payment.Registry, bookings service.BookingServ
 	return &PaymentHandler{providers: providers, bookings: bookings, returnRedirectURL: returnRedirectURL}
 }
 
-// Providers godoc
-//
 //	@Summary		List the payment providers a customer can choose
 //	@Tags			payments
 //	@Produce		json
@@ -46,8 +44,6 @@ func (h *PaymentHandler) Providers(c *gin.Context) {
 	response.OK(c, items)
 }
 
-// Notify godoc
-//
 //	@Summary		Provider IPN callback
 //	@Description	Outside JWT: the provider signature is the credential. GET or POST depending on the gateway; the answer follows the gateway's own contract.
 //	@Tags			payments
@@ -68,8 +64,6 @@ func (h *PaymentHandler) Notify(c *gin.Context) {
 	provider.AckNotification(c.Writer, ack)
 }
 
-// Return godoc
-//
 //	@Summary		Browser return from a provider checkout
 //	@Description	Verifies the redirect, reconciles with the provider, then redirects to payment.return_redirect_url (or answers JSON when unset).
 //	@Tags			payments
