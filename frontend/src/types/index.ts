@@ -9,4 +9,5 @@ export * from './seatmap';
 export * from './order';
 export * from './booking';
 export * from './combo';
+export * from './staff';
 export * from './account';

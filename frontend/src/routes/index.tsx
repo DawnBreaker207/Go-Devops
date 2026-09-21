@@ -22,6 +22,8 @@ const HallSeatsPage = lazy(() => import('@/features/hall/HallSeatsPage'));
 const BookingsPage = lazy(() => import('@/features/booking/BookingsPage'));
 const UsersPage = lazy(() => import('@/features/user/UsersPage'));
 const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
+const BoxOfficePage = lazy(() => import('@/features/staff/BoxOfficePage'));
+const CustomerLookupPage = lazy(() => import('@/features/staff/CustomerLookupPage'));
 const HomePage = lazy(() => import('@/features/browse/HomePage'));
 const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
 const FilmsPage = lazy(() => import('@/features/browse/FilmsPage'));
@@ -96,6 +98,8 @@ export const router = createBrowserRouter([
               { path: PATHS.showtimes, element: <ShowtimesPage /> },
               { path: PATHS.halls, element: <HallsPage /> },
               { path: PATHS.hallSeats, element: <HallSeatsPage /> },
+              { path: PATHS.boxOffice, element: <BoxOfficePage /> },
+              { path: PATHS.customerLookup, element: <CustomerLookupPage /> },
             ],
           },
           {
