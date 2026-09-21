@@ -1,4 +1,4 @@
-/** Response chuan tu BackEnd-CP: { code, message, data } */
+/** Standard BackEnd-CP envelope: { code, message, data }. */
 export interface ApiResponse<T> {
   code: number;
   message: string;

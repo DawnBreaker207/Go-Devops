@@ -2,22 +2,20 @@ import dayjs from 'dayjs';
 import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
 
-// Backend tra ve RFC3339 nhung offset KHONG dong nhat: GET /showtimes tra +07:00,
-// POST /admin/showtimes tra cung thoi diem duoi dang Z. Neu format bang dayjs tran
-// thi gio hien thi theo may nguoi xem (may UTC se thay suat 19:00 thanh 12:00).
-// Vi vay moi thoi diem deu duoc quy ve gio rap truoc khi format.
+// Backend offsets are inconsistent (same instant as +07:00 vs Z), and plain dayjs
+// formats in the viewer's zone, so every timestamp is pinned to cinema time first.
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-/** Mui gio cua rap, trung voi DATABASE_TIMEZONE cua backend. */
+/** Cinema zone; matches backend DATABASE_TIMEZONE. */
 export const CINEMA_TZ = 'Asia/Ho_Chi_Minh';
 
 export const DATE_FORMAT = 'DD/MM/YYYY';
 export const DATETIME_FORMAT = 'DD/MM/YYYY HH:mm';
-/** Dinh dang ngay ma backend nhan qua query param va binding datetime=2006-01-02. */
+/** Backend date format for query params and datetime=2006-01-02 binding. */
 export const API_DATE_FORMAT = 'YYYY-MM-DD';
 
-/** Doc mot thoi diem tu API ve gio rap. Dung cho moi timestamp truoc khi hien thi. */
+/** Parse an API timestamp into cinema time. Apply before any display formatting. */
 export const toCinemaTime = (value: string | number | Date) => dayjs(value).tz(CINEMA_TZ);
 
 export const formatDate = (value?: string | null) =>
@@ -26,7 +24,7 @@ export const formatDate = (value?: string | null) =>
 export const formatDateTime = (value?: string | null) =>
   value ? toCinemaTime(value).format(DATETIME_FORMAT) : '-';
 
-/** Chuyen mot thoi diem thanh tham so `date` cho API (YYYY-MM-DD theo gio rap). */
+/** Format an instant as the API `date` param (YYYY-MM-DD in cinema time). */
 export const toApiDate = (value?: string | number | Date | null) =>
   value ? toCinemaTime(value).format(API_DATE_FORMAT) : '';
 
@@ -37,28 +35,21 @@ export const formatDuration = (minutes?: number | null) => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 };
 
-// Tien la int64 VND NGUYEN - khong co don vi phu, khong co field currency.
+// Money is int64 whole VND: no subunits, no currency field.
 const vndFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 
-/** 120000 -> "120.000 ₫". Dung cho moi so tien hien thi tren UI. */
+/** 120000 -> "120.000 ₫". Use for every displayed money value. */
 export const formatVND = (amount?: number | null) =>
   amount === null || amount === undefined ? '-' : `${vndFormatter.format(amount)} ₫`;
 
-/** 120000 -> "120.000" khi da co nhan don vi o cho khac. */
+/** 120000 -> "120.000" when the unit label lives elsewhere. */
 export const formatNumber = (value?: number | null) =>
   value === null || value === undefined ? '-' : vndFormatter.format(value);
 
-/**
- * Chuyen doi giua o chon ngay gio cua form va thoi diem gui len API.
- *
- * DatePicker lam viec theo gio CUA MAY nguoi dung, con nguoi van hanh thi nghi
- * theo gio RAP. Tren may dat mui gio khac +07:00, hai thu nay lech nhau va suat
- * chieu se bi tao sai gio. Hai ham duoi day doc gio nguoi dung go duoc nhu la
- * gio rap, va nguoc lai.
- */
+/** Bridge form date-pickers (user-zone) and API instants (cinema-zone). DatePicker works in the user's zone while operators think in cinema time; on other-zone machines the two drift and shows get created at the wrong hour. Read input as cinema time and back. */
 export const toApiInstant = (value: dayjs.Dayjs): string =>
   dayjs.tz(value.format('YYYY-MM-DDTHH:mm:ss'), CINEMA_TZ).format();
 
-/** Nghich dao cua toApiInstant: thoi diem tu API -> gio rap de hien trong form. */
+/** Inverse of toApiInstant: API instant -> cinema time for form display. */
 export const fromApiInstant = (value: string): dayjs.Dayjs =>
   dayjs(toCinemaTime(value).format('YYYY-MM-DDTHH:mm:ss'));

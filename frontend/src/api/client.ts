@@ -7,7 +7,7 @@ import axios, {
 import type { ApiError, ApiResponse, TokenPair } from '@/types';
 import { tokenStorage } from '@/utils/storage';
 
-/** Event duoc ban ra khi phien dang nhap het han, App lang nghe de dieu huong ve /login */
+/** Fired on expired session; App listens and routes to /login. */
 export const UNAUTHORIZED_EVENT = 'cp:unauthorized';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
@@ -23,7 +23,7 @@ export const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-/** Client rieng cho refresh token de khong bi interceptor bat lai (tranh vong lap vo han) */
+/** Separate client so refresh never re-enters the interceptor loop. */
 const refreshClient = axios.create({ baseURL: API_BASE_URL, timeout: 30_000 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -114,12 +114,12 @@ apiClient.interceptors.response.use(
   }
 );
 
-/** Bóc lop { code, message, data } de service chi tra ve payload */
+/** Unwrap { code, message, data } to the payload. */
 export const unwrap = <T>(response: AxiosResponse<ApiResponse<T>>): T => response.data.data;
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
-    /** Bo qua co che tu dong refresh token cho request nay */
+    /** Skip auto refresh for this request. */
     skipAuthRefresh?: boolean;
   }
 }

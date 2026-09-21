@@ -1,10 +1,11 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
@@ -24,5 +25,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/setupTests.ts',
     css: false,
+    // Playwright e2e specs (`*.spec.ts` in e2e/) never run under vitest.
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
   },
 });

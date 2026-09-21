@@ -4,13 +4,7 @@ import { App as AntdApp, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 
-/**
- * Cung chuoi provider voi App.tsx, tru RouterProvider: test dung MemoryRouter de
- * chon san URL. Man hinh nao tu dung data router thi tu tao createMemoryRouter.
- *
- * QueryClient tao moi cho tung lan render va TAT retry - retry:1 cua app se lam
- * mot test loi phai cho het lan thu hai roi moi fail.
- */
+/** Test providers mirroring the app with isolated routing and no query retry. */
 export const createTestQueryClient = (): QueryClient =>
   new QueryClient({
     defaultOptions: {

@@ -5,7 +5,7 @@ import type { FormInstance } from 'antd';
 import { applyApiFieldErrors } from '../form';
 import { errorMessage, fieldErrorsOf, isApiError, VALIDATION_ERROR_CODE } from '../error';
 
-/** Dung Form that de kiem tra loi co HIEN RA canh o nhap, khong chi nam trong store. */
+/** Real Form asserting errors RENDER next to inputs, not just sit in the store. */
 const renderForm = () => {
   let form!: FormInstance;
   const Harness = () => {
@@ -33,14 +33,14 @@ describe('applyApiFieldErrors', () => {
     const form = renderForm();
 
     let applied = false;
-    // setFields chay ngoai vong render cua React nen phai act() de loi duoc ve ra.
+    // setFields runs outside React render, so act() to flush errors to paint.
     act(() => {
       applied = applyApiFieldErrors(form, validationError({ title: 'must not be blank' }));
     });
 
     expect(applied).toBe(true);
     expect(form.getFieldError('title')).toEqual(['must not be blank']);
-    // antd ve dong loi qua CSSMotion nen no xuat hien o tick sau, phai cho.
+    // antd paints error rows via CSSMotion a tick later; wait for it.
     expect(await screen.findByText('must not be blank')).toBeInTheDocument();
   });
 

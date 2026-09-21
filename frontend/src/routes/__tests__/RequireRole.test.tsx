@@ -73,10 +73,10 @@ describe('RequireRole', () => {
     expect(screen.getByText('noi dung bi khoa')).toBeInTheDocument();
   });
 
-  it('khach bi chan khoi man van hanh nhung van co loi ve trang chu cua ho', () => {
-    // Truoc khi co khu khach, khach khong co trang nao de ve nen nut nay bi an.
-    // Gio `useLandingPath` tra ve PATHS.home, va do la ly do LoginPage khong
-    // con dua khach thang vao /dashboard roi ra 403.
+  it('customers blocked from ops screens still get their own home link', () => {
+    // Before the customer zone existed, customers had nowhere to go so the button hid.
+    // Now `useLandingPath` returns PATHS.home, which is why LoginPage no longer
+    // drops customers straight into /dashboard and a 403.
     asRole('customer');
     renderGuard(ROLES_OPERATOR);
 

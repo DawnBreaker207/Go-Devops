@@ -4,10 +4,10 @@ import type { PageQuery } from '@/types';
 
 export const DEFAULT_PAGE_SIZE = 10;
 
-/** Backend tu choi page_size > 100 bang 400/40001, no khong tu cat bot gium. */
+/** Backend rejects page_size > 100 with 400/40001 instead of clamping. */
 export const MAX_PAGE_SIZE = 100;
 
-/** Ten param giong het ten query cua API, de doc URL la biet request gui gi. */
+/** Param names mirror the API query so the URL reads as the request. */
 const PAGE = 'page';
 const PAGE_SIZE = 'page_size';
 const SEARCH = 'search';
@@ -19,7 +19,7 @@ const toInt = (raw: string | null, fallback: number, min: number, max: number): 
 };
 
 export interface ListQueryState {
-  /** Truyen thang vao api.list(...) va vao queryKey cua react-query. */
+  /** Pass straight into api.list(...) and the react-query key. */
   query: PageQuery;
   page: number;
   pageSize: number;
@@ -29,14 +29,7 @@ export interface ListQueryState {
   reset: () => void;
 }
 
-/**
- * Trang / kich thuoc trang / tu khoa nam trong URL chu khong trong useState, nen
- * F5 hay gui link cho nguoi khac deu ra dung mot man hinh.
- *
- * Gia tri mac dinh KHONG duoc ghi vao URL: /movies sach hon /movies?page=1&page_size=10
- * va hai dia chi do phai la cung mot trang. Moi thay doi dung replace: mot bang
- * admin bam qua 5 trang khong nen chen 5 muc vao lich su trinh duyet.
- */
+/** Page/size/search live in the URL (survives F5, linkable). Defaults stay out of the URL; every change uses replace so paging doesn't pollute history. */
 export const useListQuery = (defaultPageSize: number = DEFAULT_PAGE_SIZE): ListQueryState => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -44,8 +37,7 @@ export const useListQuery = (defaultPageSize: number = DEFAULT_PAGE_SIZE): ListQ
   const pageSize = toInt(searchParams.get(PAGE_SIZE), defaultPageSize, 1, MAX_PAGE_SIZE);
   const search = searchParams.get(SEARCH)?.trim() ?? '';
 
-  // search rong thi bo han khoi query: khong gui search= thua, va queryKey cua
-  // react-query cung khong doi chi vi nguoi dung xoa o tim kiem.
+  // Empty search is dropped from the query and the key alike.
   const query = useMemo<PageQuery>(
     () => ({ page, page_size: pageSize, ...(search ? { search } : {}) }),
     [page, pageSize, search]
@@ -79,7 +71,7 @@ export const useListQuery = (defaultPageSize: number = DEFAULT_PAGE_SIZE): ListQ
     [patch, pageSize, defaultPageSize]
   );
 
-  // Doi tu khoa thi ve trang 1: trang 7 cua ket qua cu gan nhu chac chan rong.
+  // New search resets to page 1: page 7 of the old result is almost surely empty.
   const setSearch = useCallback(
     (nextSearch: string) => {
       patch({ [SEARCH]: nextSearch.trim() || undefined, [PAGE]: undefined });

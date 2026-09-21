@@ -6,7 +6,7 @@ import { useListQuery, MAX_PAGE_SIZE } from '../useListQuery';
 
 let currentSearch = '';
 
-// Ghi ra bien ngoai trong effect chu khong trong luc render: render phai thuan.
+// Write to the outer variable in the effect, never during render: renders must stay pure.
 const LocationProbe = () => {
   const { search } = useLocation();
   useEffect(() => {

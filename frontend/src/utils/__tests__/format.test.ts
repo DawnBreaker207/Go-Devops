@@ -66,9 +66,8 @@ describe('format tien va thoi luong', () => {
 });
 
 describe('toApiInstant / fromApiInstant', () => {
-  it('gio go trong form duoc gui di nhu gio rap, khong phai gio may', () => {
-    // Khong phu thuoc mui gio cua may chay test: 19:30 go vao form phai thanh
-    // 19:30+07:00, du may dang o UTC hay o dau.
+  it('form-typed hours go out as cinema time, not machine time', () => {
+    // Machine-timezone independent: 19:30 typed in a form becomes 19:30+07:00 on UTC machines too.
     const picked = dayjs('2026-09-22T19:30:00');
     expect(toApiInstant(picked)).toBe('2026-09-22T19:30:00+07:00');
   });

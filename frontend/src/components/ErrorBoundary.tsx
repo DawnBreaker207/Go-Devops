@@ -17,7 +17,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Diem cam de gan Sentry / log service sau nay
+    // Hook point for Sentry / log service later.
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 

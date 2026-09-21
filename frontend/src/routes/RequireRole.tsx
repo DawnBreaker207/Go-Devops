@@ -11,14 +11,7 @@ interface RequireRoleProps {
   roles: UserRole[];
 }
 
-/**
- * Chan theo role o muc route, soi guong dung cach backend chan: RequireRoles la
- * map lookup chinh xac, khong thu bac. Dung lam layout route boc nhom man hinh
- * cung quyen (xem routes/index.tsx).
- *
- * Bao 403 that su chu khong am tham dieu huong: dieu huong ngam se giau mat mot
- * link sai quyen va bien no thanh "app tu nhay lung tung".
- */
+/** Route-level role gate: exact-map lookup, no hierarchy. Reports a real 403 instead of silently redirecting (silent redirects disguise wrong-role links as random jumps). */
 export const RequireRole = ({ roles }: RequireRoleProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -28,8 +21,8 @@ export const RequireRole = ({ roles }: RequireRoleProps) => {
   const allowed = useHasRole(...roles);
   const landing = useLandingPath();
 
-  // Ton tai de RequireRole dung duoc mot minh; trong router no nam trong
-  // ProtectedRoute nen hai nhanh nay gan nhu khong chay.
+  // Exists so RequireRole works standalone; inside the router it nests under
+  // ProtectedRoute, so these branches barely run.
   if (isBootstrapping) return <Loading fullscreen />;
   if (!isAuthenticated) return <Navigate to={PATHS.login} replace />;
 
@@ -41,12 +34,11 @@ export const RequireRole = ({ roles }: RequireRoleProps) => {
         subTitle={t('error.forbiddenSubtitle')}
         extra={
           <Space>
-            {/* landing luon co gia tri: khach khong co muc menu van hanh nao thi
-                ve trang chu khu khach. */}
+            {/* landing always resolves: role-less customers fall back to the customer home. */}
             <Button type="primary" onClick={() => navigate(landing, { replace: true })}>
               {t('error.backHome')}
             </Button>
-            {/* ProtectedRoute se tu day ve /login ngay khi isAuthenticated tat. */}
+            {/* ProtectedRoute pushes back to /login the moment auth drops. */}
             <Button onClick={logout}>{t('common.logout')}</Button>
           </Space>
         }
