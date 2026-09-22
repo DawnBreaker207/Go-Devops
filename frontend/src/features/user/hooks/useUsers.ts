@@ -12,8 +12,8 @@ export const useUserList = (query: UserListQuery) =>
     placeholderData: (previous) => previous,
   });
 
-/** GET /admin/stats dem ca tai khoan bi khoa, nen chi TAO moi lam no doi -
- *  khoa hay doi role thi tong so khong thay doi. */
+/** GET /admin/stats counts locked accounts too, so only CREATING changes it -
+ *  locking or re-roling leaves the total untouched. */
 const invalidateStats = (queryClient: ReturnType<typeof useQueryClient>) =>
   queryClient.invalidateQueries({ queryKey: [DASHBOARD_QUERY_KEY] });
 

@@ -5,6 +5,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import type dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '@/components/PageHeader';
+import TableCard from '@/components/TableCard';
 import ShowtimeFormModal from './components/ShowtimeFormModal';
 import {
   useCreateShowtime,
@@ -32,8 +33,7 @@ export const ShowtimesPage = () => {
   const { message } = App.useApp();
 
   const { query, page, pageSize, setPage } = useListQuery();
-  // Bo loc rieng cua man nay: khong nhet vao useListQuery vi helper do chi lo
-  // page/page_size/search dung chung cho moi bang.
+  // Screen-specific filters stay local; useListQuery owns only shared page/page_size/search.
   const [movieId, setMovieId] = useState<string>();
   const [hallId, setHallId] = useState<string>();
   const [status, setStatus] = useState<ShowtimeStatus>();
@@ -52,8 +52,7 @@ export const ShowtimesPage = () => {
     status,
     from: range?.[0]?.format(API_DATE_FORMAT),
     to: range?.[1]?.format(API_DATE_FORMAT),
-    // Suat chieu doc theo thoi gian nen sap tang dan de gan nhat len truoc;
-    // mac dinh cua backend la start_at DESC.
+    // Time-ordered, so ascending with nearest first; backend default is start_at DESC.
     sort: 'start_at',
     order: 'asc',
   });
@@ -72,7 +71,7 @@ export const ShowtimesPage = () => {
     setModalOpen(true);
   };
 
-  // Khong bat loi o day: modal can chinh loi de gan details vao dung o nhap.
+  // Don't catch here: the modal needs the raw error for input binding.
   const handleSubmit = async (payload: ShowtimePayload) => {
     if (editing) {
       await updateShowtime.mutateAsync({ id: editing.id, payload });
@@ -90,8 +89,7 @@ export const ShowtimesPage = () => {
       await deleteShowtime.mutateAsync(id);
       message.success(t('common.deleteSuccess'));
     } catch (err) {
-      // Moi xung dot cua suat chieu deu la 40900, phan biet bang message cua
-      // backend - no da la cau tieng Anh doc duoc, dung nuot di.
+      // Every showtime conflict shares 40900; tell apart by the backend message (already readable English), never swallow it.
       message.error(errorMessage(err, t('common.somethingWrong')));
     }
   };
@@ -115,8 +113,7 @@ export const ShowtimesPage = () => {
       dataIndex: 'start_at',
       key: 'start_at',
       width: 170,
-      // Suat da chieu xong van phai hien (day la danh sach van hanh), nhung lam
-      // mo di de nguoi truc doc luot la biet cai nao con ban duoc.
+      // Past shows stay visible (operator list) but dimmed so sellable ones scan first.
       render: (value: string) => (
         <span style={toCinemaTime(value).isBefore(Date.now()) ? pastStyle : undefined}>
           {formatDateTime(value)}
@@ -236,7 +233,7 @@ export const ShowtimesPage = () => {
         />
       </Space>
 
-      {/* Loi cua chinh danh sach chan ca man hinh nen dung Alert, khong dung toast. */}
+      {/* List-level failure blocks the screen: inline Alert, not a toast. */}
       {error ? (
         <Alert
           type="error"
@@ -246,21 +243,23 @@ export const ShowtimesPage = () => {
         />
       ) : null}
 
-      <Table<Showtime>
-        rowKey="id"
-        columns={columns}
-        dataSource={data?.items ?? []}
-        loading={isFetching}
-        scroll={{ x: 900 }}
-        pagination={{
-          current: data?.meta.page ?? page,
-          pageSize: data?.meta.page_size ?? pageSize,
-          total: data?.meta.total ?? 0,
-          showSizeChanger: true,
-          showTotal: (total) => t('common.totalItems', { total }),
-          onChange: setPage,
-        }}
-      />
+      <TableCard>
+        <Table<Showtime>
+          rowKey="id"
+          columns={columns}
+          dataSource={data?.items ?? []}
+          loading={isFetching}
+          scroll={{ x: 900 }}
+          pagination={{
+            current: data?.meta.page ?? page,
+            pageSize: data?.meta.page_size ?? pageSize,
+            total: data?.meta.total ?? 0,
+            showSizeChanger: true,
+            showTotal: (total) => t('common.totalItems', { total }),
+            onChange: setPage,
+          }}
+        />
+      </TableCard>
 
       <ShowtimeFormModal
         open={modalOpen}

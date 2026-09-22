@@ -1,6 +1,6 @@
 export type MovieStatus = 'draft' | 'coming_soon' | 'showing' | 'ended';
 
-/** Phan loai do tuoi cua Viet Nam. Backend mac dinh 'P' khi gui rong. */
+/** Vietnam age ratings. Backend defaults to 'P' on empty. */
 export type MovieAgeRating = 'P' | 'K' | 'T13' | 'T16' | 'T18';
 
 export const MOVIE_AGE_RATINGS: MovieAgeRating[] = ['P', 'K', 'T13', 'T16', 'T18'];
@@ -22,11 +22,7 @@ export interface Movie {
   updated_at: string;
 }
 
-/**
- * PUT /movies/:id la FULL REPLACE: service gan tat ca cac field tu request, va
- * age_rating rong se bi doi ve 'P'. Form nao sua phim ma bo qua trailer_url /
- * cast / age_rating se xoa sach ba field do. Luon gui du.
- */
+/** PUT /movies/:id is FULL REPLACE (empty age_rating resets to 'P'); omitted trailer_url/cast/age_rating are wiped. Always send complete. */
 export interface MoviePayload {
   title: string;
   genre: string;

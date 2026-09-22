@@ -16,6 +16,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '@/components/PageHeader';
+import TableCard from '@/components/TableCard';
 import UserFormModal from './components/UserFormModal';
 import { useCreateUser, useUpdateUser, useUserList } from './hooks/useUsers';
 import type { CreateUserPayload, User, UserRole } from '@/types';
@@ -25,8 +26,7 @@ import { useListQuery } from '@/hooks/useListQuery';
 import { errorMessage } from '@/utils/error';
 import { formatDateTime } from '@/utils/format';
 
-/** Bo loc `active`: backend nhan con tro, nen "khong loc" phai la KHONG gui
- *  field, khac han voi gui false. */
+/** `active` filter: backend takes a pointer, so "no filter" must OMIT the field, unlike false. */
 type ActiveFilter = 'all' | 'active' | 'locked';
 
 export const UsersPage = () => {
@@ -39,7 +39,7 @@ export const UsersPage = () => {
   const [role, setRole] = useState<UserRole>();
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
   const [formOpen, setFormOpen] = useState(false);
-  /** Id dong dang cho server tra loi, de chi khoa dung dong do. */
+  /** Row awaiting the server, so only that row locks. */
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data, isFetching, error } = useUserList({
@@ -51,7 +51,7 @@ export const UsersPage = () => {
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
 
-  // Khong bat loi o day: modal can chinh loi de gan details vao dung o nhap.
+  // Don't catch here: the modal needs the raw error for input binding.
   const handleCreate = async (payload: CreateUserPayload) => {
     await createUser.mutateAsync(payload);
     message.success(t('user.createSuccess'));
@@ -64,9 +64,7 @@ export const UsersPage = () => {
       await updateUser.mutateAsync({ id: user.id, payload: patch });
       message.success(t('common.updateSuccess'));
     } catch (err) {
-      // Bon rao chan cua backend deu la 409/40900 va chi phan biet duoc bang
-      // cau chu: khoa chinh minh, ha quyen chinh minh, va admin dang hoat dong
-      // cuoi cung. Giu nguyen cau cua server thay vi doan xem la cai nao.
+      // All four backend guards share 409/40900 and differ by sentence only (self-lock, self-demote, last active admin). Keep the server sentence instead of guessing which.
       message.error(errorMessage(err, t('common.somethingWrong')));
     } finally {
       setPendingId(null);
@@ -99,8 +97,7 @@ export const UsersPage = () => {
       key: 'role',
       width: 190,
       render: (value: UserRole, record) => {
-        // Backend tu choi 409 khi ai do doi role cua chinh minh, nen khoa san
-        // thay vi de nguoi dung bam roi an mot loi.
+        // Backend 409s self role changes; disable upfront instead of serving an error.
         const isSelf = record.id === currentUserId;
         const select = (
           <Select<UserRole>
@@ -122,8 +119,7 @@ export const UsersPage = () => {
       key: 'active',
       width: 150,
       render: (value: boolean, record) => {
-        // Chi chan khoa CHINH MINH; mo khoa chinh minh thi khong bao gio xay ra
-        // vi tai khoan bi khoa khong dang nhap duoc.
+        // Only self-lock is blocked; self-unlock can't happen (locked accounts can't sign in).
         const isSelf = record.id === currentUserId;
         const control = (
           <Space size={8}>
@@ -219,21 +215,23 @@ export const UsersPage = () => {
         />
       ) : null}
 
-      <Table<User>
-        rowKey="id"
-        columns={columns}
-        dataSource={data?.items ?? []}
-        loading={isFetching}
-        scroll={{ x: 900 }}
-        pagination={{
-          current: data?.meta.page ?? page,
-          pageSize: data?.meta.page_size ?? pageSize,
-          total: data?.meta.total ?? 0,
-          showSizeChanger: true,
-          showTotal: (total) => t('common.totalItems', { total }),
-          onChange: setPage,
-        }}
-      />
+      <TableCard>
+        <Table<User>
+          rowKey="id"
+          columns={columns}
+          dataSource={data?.items ?? []}
+          loading={isFetching}
+          scroll={{ x: 900 }}
+          pagination={{
+            current: data?.meta.page ?? page,
+            pageSize: data?.meta.page_size ?? pageSize,
+            total: data?.meta.total ?? 0,
+            showSizeChanger: true,
+            showTotal: (total) => t('common.totalItems', { total }),
+            onChange: setPage,
+          }}
+        />
+      </TableCard>
 
       <UserFormModal
         open={formOpen}

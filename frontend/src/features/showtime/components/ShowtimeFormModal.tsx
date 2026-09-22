@@ -19,7 +19,7 @@ interface ShowtimeFormModalProps {
   showtime: Showtime | null;
   confirmLoading: boolean;
   onCancel: () => void;
-  /** Nem loi ra thi modal giu nguyen va tu hien thi. */
+  /** Throw on failure so the modal stays open and surfaces it. */
   onSubmit: (payload: ShowtimePayload) => Promise<void>;
 }
 
@@ -40,8 +40,7 @@ export const ShowtimeFormModal = ({
   const movies = useMovieOptions();
   const halls = useHallOptions();
 
-  // Nap bang initialValues chu khong bang setFieldsValue trong useEffect - xem
-  // .claude/rules/pages-components.md, StrictMode se xoa mat gia tri.
+  // Seed via initialValues, never via setFieldsValue in a useEffect (StrictMode would wipe the values).
   const initialValues: Partial<FormValues> = showtime
     ? {
         movie_id: showtime.movie_id,
@@ -54,7 +53,7 @@ export const ShowtimeFormModal = ({
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
-      // PUT doi du movie_id + hall_id + start_at ke ca khi chi doi trang thai.
+      // PUT requires the full movie_id + hall_id + start_at even for a status-only change.
       await onSubmit({
         movie_id: values.movie_id,
         hall_id: values.hall_id,
@@ -94,7 +93,17 @@ export const ShowtimeFormModal = ({
             optionFilterProp="label"
             loading={movies.isFetching}
             placeholder={t('showtime.moviePlaceholder')}
-            options={(movies.data?.items ?? []).map((m) => ({ value: m.id, label: m.title }))}
+            options={(movies.data?.items ?? []).map((m) => ({
+              value: m.id,
+              // The backend only accepts `showing` movies (400 `movie must be showing`
+              // otherwise) - lock it right in the dropdown like the inactive-hall
+              // handling below, instead of failing only after Save.
+              label:
+                m.status === 'showing'
+                  ? m.title
+                  : `${m.title} (${t(`movie.status${m.status.charAt(0).toUpperCase()}${m.status.slice(1)}`)})`,
+              disabled: m.status !== 'showing',
+            }))}
           />
         </Form.Item>
 
@@ -112,7 +121,7 @@ export const ShowtimeFormModal = ({
           />
         </Form.Item>
 
-        {/* Gio nhap la gio RAP. end_at do backend suy ra tu thoi luong phim. */}
+        {/* Entered time is CINEMA time. end_at is derived by the backend from the movie runtime. */}
         <Form.Item
           name="start_at"
           label={t('showtime.startAt')}
@@ -126,7 +135,7 @@ export const ShowtimeFormModal = ({
           />
         </Form.Item>
 
-        {/* POST bo qua status (luon tao 'open'), nen chi cho doi khi sua. */}
+        {/* POST ignores status (always creates 'open'), so only offer it when editing. */}
         {showtime ? (
           <Form.Item name="status" label={t('showtime.status')} rules={[required]}>
             <Select

@@ -1,13 +1,6 @@
-import type { Hall, Seat } from '@/types';
+import type { Hall, Seat, SeatChange, SeatType } from '@/types';
 
-/**
- * Hinh dang TOI THIEU cua mot ghe de ve duoc luoi.
- *
- * Co hai kieu ghe khac nhau di qua day: `Seat` (luoi vat ly cua phong, man
- * admin) va `SeatMapSeat` (luoi cua mot suat chieu, man khach - them status,
- * price, showtime_seat_id va BO hall_id). Ca hai deu thoa hinh dang nay, nen
- * toan bo phan toan hoc dung chung duoc thay vi viet lai lan thu hai.
- */
+/** Minimum seat shape for grid math - `Seat` (admin) and `SeatMapSeat` (customer) both satisfy it, so all math is shared. */
 export interface GridSeat {
   row_label: string;
   col_number: number;
@@ -15,35 +8,19 @@ export interface GridSeat {
   is_gap: boolean;
 }
 
-/**
- * Toan hoc cua luoi ghe, tach rieng khoi React vi day la cho de sai nhat cua ca
- * man hinh va la cho duy nhat dang viet test.
- *
- * Hai su that tu backend chi phoi toan bo file nay:
- *
- * 1. Ghe `col_span = 2` chiem cot N VA N+1, va KHONG co ban ghi ghe nao o cot
- *    N+1 (generateSeats bo qua cot da bi nuot). Vi vay so cot co LO HONG, va
- *    khong bao gio duoc ve luoi theo chi so mang.
- * 2. `aisle_after_cols` chi la goi y ve. Backend chi kiem tra do dai mang
- *    (<= 49) chu KHONG kiem tra gia tri, nen no co the chua 0, so am, hoac so
- *    lon hon seats_per_row. Phia ve phai tu loc.
- */
+/** Seat-grid math, React-free (easiest to get wrong, hence tested). Couple seats swallow a column (never render by index); `aisle_after_cols` is length-checked only, so filter here. */
 
-/** Chieu rong mot o ghe, tinh bang px. */
-export const SEAT_SIZE = 30;
-/** Be rong cua khe loi di chen giua hai cot. */
-export const AISLE_WIDTH = 18;
+/** One seat cell, in px. */
+export const SEAT_SIZE = 40;
+/** Aisle gap between two columns. */
+export const AISLE_WIDTH = 22;
 
 export interface SeatRow<T extends GridSeat = Seat> {
   rowLabel: string;
   seats: T[];
 }
 
-/**
- * Gom ghe theo hang, GIU NGUYEN thu tu backend tra ve (ORDER BY row_index,
- * col_number). Khong tu sap xep lai theo row_label: sap chuoi se sai tu hang AA
- * tro di (AA dung truoc B theo alphabet nhung la hang thu 27).
- */
+/** Keeps backend row order - never sort by row_label (AA precedes B alphabetically but is row 27). */
 export const groupSeatsByRow = <T extends GridSeat>(seats: T[]): SeatRow<T>[] => {
   const rows: SeatRow<T>[] = [];
   const index = new Map<string, SeatRow<T>>();
@@ -59,11 +36,7 @@ export const groupSeatsByRow = <T extends GridSeat>(seats: T[]): SeatRow<T>[] =>
   return rows;
 };
 
-/**
- * Chi giu nhung vi tri loi di thuc su ve duoc: so nguyen trong khoang
- * 1..seatsPerRow-1, khong trung nhau. Loi di sau cot cuoi cung khong ve gi ca
- * nen bi loai luon.
- */
+/** Keep only renderable aisles: 1..seatsPerRow-1, deduped (past the last column renders nothing). */
 export const normalizeAisles = (aisleAfterCols: number[], seatsPerRow: number): number[] => {
   const seen = new Set<number>();
   aisleAfterCols.forEach((col) => {
@@ -73,20 +46,16 @@ export const normalizeAisles = (aisleAfterCols: number[], seatsPerRow: number): 
 };
 
 export interface GridLayout {
-  /** Gia tri cho CSS `grid-template-columns`. */
+  /** Value for CSS `grid-template-columns`. */
   templateColumns: string;
-  /** Vach luoi bat dau cua mot so cot (CSS grid dem tu 1). */
+  /** Grid line a column starts at (CSS grids count from 1). */
   lineOf: (col: number) => number;
-  /** So TRACK mot ghe chiem - khong bang col_span khi co khe loi di ken giua. */
+  /** TRACKS one seat spans - not col_span when an aisle track sits between. */
   spanOf: (col: number, colSpan: number) => number;
   aisles: number[];
 }
 
-/**
- * Loi di duoc ve bang mot TRACK RIENG chu khong phai margin cua o ghe: neu lay
- * margin thi o ghe bi bop lai trong khi be rong cot van giu nguyen, va luoi
- * lech dan ve ben phai.
- */
+/** Aisles are their OWN TRACK, not seat margin (margin squeezes cells, skewing the grid right). */
 export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): GridLayout => {
   const aisles = normalizeAisles(aisleAfterCols, seatsPerRow);
   const aisleSet = new Set(aisles);
@@ -98,7 +67,7 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
   }
 
   const lineOf = (col: number): number => {
-    // Vach = 1 + so track dung truoc no = 1 + (col-1) o ghe + so loi di da chen.
+    // Line = 1 + tracks before it = 1 + (col-1) cells + inserted aisles.
     let aislesBefore = 0;
     aisles.forEach((aisle) => {
       if (aisle < col) aislesBefore += 1;
@@ -107,8 +76,7 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
   };
 
   const spanOf = (col: number, colSpan: number): number => {
-    // Ghe doi phu cot col va col+1. Neu loi di roi dung giua hai cot do thi ghe
-    // phai keo qua ca track loi di, tuc 3 track chu khong phai 2.
+    // Couple covers col and col+1. An aisle between stretches it over the aisle track too: 3 tracks, not 2.
     if (colSpan <= 1) return 1;
     return colSpan + (aisleSet.has(col) ? 1 : 0);
   };
@@ -116,32 +84,18 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
   return { templateColumns: tracks.join(' '), lineOf, spanOf, aisles };
 };
 
-/**
- * Suc chua BAN DUOC. Khong co field nao cua backend noi con so nay:
- * `rows * seats_per_row` la so O LUOI chu khong phai so ghe (ghe doi nuot mot
- * cot, ghe is_gap khong ban duoc), va moi truy van bao cao ben backend deu dem
- * bang `COUNT(*) FILTER (WHERE NOT is_gap)`. Tinh giong het o day.
- */
+/** Sellable capacity, counted like the backend: `rows * seats_per_row` counts cells (couples swallow a column, gaps are unsellable). */
 export const sellableCapacity = (seats: GridSeat[]): number =>
   seats.reduce((total, seat) => (seat.is_gap ? total : total + 1), 0);
 
-/**
- * `labels` cua selector duoc backend viet hoa nhung KHONG trim (chi `rows` moi
- * duoc trim). Mot nhan thua khoang trang se khong khop ghe nao, va "khong khop
- * ghe nao" la loi 400 lam ROLLBACK CA LO - ke ca nhung thay doi hop le dung
- * canh no. Vi vay moi nhan deu phai duoc lam sach o day truoc khi gui.
- */
+/** Backend uppercases labels but does NOT trim (400 ROLLS BACK the whole batch) - clean here first. */
 export const cleanSeatLabel = (label: string): string => label.trim().toUpperCase();
 
-/** Toi da cua backend: 50 thay doi moi lan goi, 500 nhan moi thay doi. */
+/** Backend cap: 50 changes/call, 500 labels/change. */
 export const MAX_CHANGES_PER_CALL = 50;
 export const MAX_LABELS_PER_CHANGE = 500;
 
-/**
- * Cat danh sach nhan thanh nhieu `SeatChange` de khong vuot tran 500 nhan.
- * Tra ve nhieu lo neu so thay doi vuot qua 50 - moi lo la mot lan goi API rieng,
- * vi backend chay ca lo trong MOT transaction va lo qua lon thi ca lo cung hong.
- */
+/** Chunk labels within backend caps (one batch = ONE transaction, oversized batches fail whole). */
 export const chunkLabels = (labels: string[]): string[][][] => {
   const changes: string[][] = [];
   for (let i = 0; i < labels.length; i += MAX_LABELS_PER_CHANGE) {
@@ -154,43 +108,25 @@ export const chunkLabels = (labels: string[]): string[][][] => {
   return batches;
 };
 
-/**
- * So cot THUC SU phai ve. Khong tin thang `hall.seats_per_row`: no co the nho
- * hon luoi ghe that.
- *
- * KHONG co rang buoc nao trong CSDL buoc `halls.rows`/`seats_per_row` khop voi
- * bang `seats` - hai bang duoc ghi bang hai lenh khac nhau trong cung mot
- * transaction. Da tung lech that: `RegenerateLayout` ghi qua `UpdateHall`, ma
- * whitelist cot cua no khong co rows/seats_per_row, nen doi phong 4x5 thanh 6x8
- * sinh 48 ghe toi cot 8 con bang halls van noi 4x5 mai mai (da va o BE ngay
- * 2026-09-18 bang `UpdateHallLayout` + test hoi quy T76b).
- *
- * Van ve theo du lieu ghe that chu khong theo con so phong khai bao: luoi khi do
- * khong bao gio bi cat, va `declaredMismatch` bao cho nguoi truc biet hai ben
- * lech thay vi ve am tham mot so do sai.
- */
+/** Real column count from seat data (never trust `hall.seats_per_row`: no DB constraint ties it to `seats`, drifted for real once). */
 export const widestColumn = (seats: Pick<GridSeat, 'col_number' | 'col_span'>[]): number =>
   seats.reduce((max, s) => Math.max(max, s.col_number + s.col_span - 1), 0);
 
-/**
- * Bien the cho man KHACH. `GET /shows/:id/seats` khong tra ve rows /
- * seats_per_row cua phong - chi co ghe - nen so cot phai suy hoan toan tu du
- * lieu ghe.
- */
+/** Customer variant: `GET /shows/:id/seats` omits rows/seats_per_row - derive from seats. */
 export const seatsPerRowFromSeats = (seats: Pick<GridSeat, 'col_number' | 'col_span'>[]): number =>
   widestColumn(seats);
 
 export const renderedSeatsPerRow = (hall: Hall, seats: Seat[]): number =>
   Math.max(widestColumn(seats), hall.seats_per_row);
 
-/** Mo ta luoi cho phan tom tat cua man hinh. */
+/** Grid summary for the screen's recap panel. */
 export interface GridSummary {
   gridCells: number;
   seatCount: number;
   sellable: number;
   gaps: number;
   doubleSeats: number;
-  /** true khi `rows`/`seats_per_row` cua phong khong khop luoi ghe that. */
+  /** true when the hall's declared rows/seats_per_row mismatch real seats. */
   declaredMismatch: boolean;
   actualRows: number;
   actualSeatsPerRow: number;
@@ -205,10 +141,107 @@ export const summarizeGrid = (hall: Hall, seats: Seat[]): GridSummary => {
     sellable: sellableCapacity(seats),
     gaps: seats.filter((s) => s.is_gap).length,
     doubleSeats: seats.filter((s) => s.col_span === 2).length,
-    // Phong chua co ghe nao thi khong coi la lech - do la trang thai khac.
+    // A seatless hall is not "mismatched" - different state.
     declaredMismatch:
       seats.length > 0 && (actualRows !== hall.rows || actualSeatsPerRow !== hall.seats_per_row),
     actualRows,
     actualSeatsPerRow,
   };
 };
+
+/** Edit screen is ONE DRAFT SESSION: changes touch local draft only; one Save folds everything (new rows get fake `pending-row-N-col` ids). */
+export const PENDING_ROW_PREFIX = 'pending-row-';
+
+export const makePendingSeatId = (rowIndex: number, colNumber: number): string =>
+  `${PENDING_ROW_PREFIX}${rowIndex}-${colNumber}`;
+
+export const isPendingSeatId = (id: string): boolean => id.startsWith(PENDING_ROW_PREFIX);
+
+export const pendingRowIndexOf = (id: string): number =>
+  Number(id.slice(PENDING_ROW_PREFIX.length).split('-')[0]);
+
+/** Go dto.RowLabel port: base-26 Excel-style columns (A..Z, AA, AB...). */
+export const rowLabelFromIndex = (n: number): string => {
+  let label = '';
+  let value = n;
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+};
+
+/** Standard-seat placeholder for a pending row. The label is PREVIEW only (server may assign another); Save matches by column order. */
+export const buildPendingRow = (
+  rowIndex: number,
+  seatsPerRow: number,
+  rowLabel: string,
+  hallId: string
+): Seat[] =>
+  Array.from({ length: seatsPerRow }, (_, i) => {
+    const col = i + 1;
+    return {
+      id: makePendingSeatId(rowIndex, col),
+      hall_id: hallId,
+      label: `${rowLabel}${col}`,
+      row_label: rowLabel,
+      col_number: col,
+      seat_type: 'standard' as SeatType,
+      is_gap: false,
+      col_span: 1 as const,
+    };
+  });
+
+export interface SeatPatchGroup {
+  labels: string[];
+  seat_type?: SeatType;
+  is_gap?: boolean;
+}
+
+/** Diff real (non-pending) seats draft-vs-saved, grouped by (seat_type, is_gap) - id-matched even right after a pending save. */
+export const diffChangedSeats = (saved: Seat[], draft: Seat[]): SeatPatchGroup[] => {
+  const savedById = new Map(saved.map((s) => [s.id, s]));
+  const groups = new Map<string, SeatPatchGroup>();
+  draft.forEach((seat) => {
+    if (isPendingSeatId(seat.id)) return;
+    const before = savedById.get(seat.id);
+    if (!before || (before.seat_type === seat.seat_type && before.is_gap === seat.is_gap)) return;
+    const key = `${seat.seat_type}|${seat.is_gap}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { labels: [], seat_type: seat.seat_type, is_gap: seat.is_gap };
+      groups.set(key, group);
+    }
+    group.labels.push(cleanSeatLabel(seat.label));
+  });
+  return [...groups.values()];
+};
+
+/** Like chunkLabels for multi-patch Saves, same two backend caps. */
+export const buildSeatChangeBatches = (groups: SeatPatchGroup[]): SeatChange[][] => {
+  const changes: SeatChange[] = [];
+  groups.forEach((group) => {
+    for (let i = 0; i < group.labels.length; i += MAX_LABELS_PER_CHANGE) {
+      changes.push({
+        selector: { labels: group.labels.slice(i, i + MAX_LABELS_PER_CHANGE) },
+        seat_type: group.seat_type,
+        is_gap: group.is_gap,
+      });
+    }
+  });
+  const batches: SeatChange[][] = [];
+  for (let i = 0; i < changes.length; i += MAX_CHANGES_PER_CALL) {
+    batches.push(changes.slice(i, i + MAX_CHANGES_PER_CALL));
+  }
+  return batches;
+};
+
+/** Mergeable pair: same row, adjacent, single, non-gap (mirrors BE `spanSet`). */
+export const areAdjacentSeats = (a: Seat, b: Seat): boolean =>
+  a.row_label === b.row_label &&
+  a.col_span === 1 &&
+  b.col_span === 1 &&
+  !a.is_gap &&
+  !b.is_gap &&
+  Math.abs(a.col_number - b.col_number) === 1;

@@ -22,8 +22,8 @@ export const MovieCard = ({ movie, onBook, onTrailer }: MovieCardProps) => {
   const { t } = useTranslation();
   const { token } = antdTheme.useToken();
 
-  // Bien cua card lay tu token antd de dark mode dung mau, con moi gia tri
-  // chuyen dong deu den tu var(--motion-*) trong MovieCard.css.
+  // Card variables come from the antd token so dark mode recolors; every motion
+  // value comes from var(--motion-*) in MovieCard.css.
   const cssVars = {
     '--movie-card-bg': token.colorBgContainer,
     '--movie-card-radius': `${token.borderRadiusLG}px`,
@@ -67,7 +67,7 @@ export const MovieCard = ({ movie, onBook, onTrailer }: MovieCardProps) => {
   );
 };
 
-/** Skeleton co dung khung cua card that nen khong gay layout shift khi load xong. */
+/** Skeleton reuses the real card frame, so no layout shift on load. */
 export const MovieCardSkeleton = () => {
   const { token } = antdTheme.useToken();
   return (

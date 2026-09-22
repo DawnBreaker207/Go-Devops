@@ -9,13 +9,7 @@ interface ShowtimeBreakdownTableProps {
   showtimes: DailyBreakdownShowtime[];
 }
 
-/**
- * Chi tiet tung suat chieu cua mot ngay, doc tu cot jsonb `breakdown.showtimes`.
- *
- * Ten phim va ten phong o day la ANH CHUP luc chot so, khong phai join song voi
- * bang movies/halls - doi ten phim hom nay khong lam bao cao thang truoc doi
- * theo, va do la dung.
- */
+/** Per-showtime rows of one day using close-out snapshots. */
 export const ShowtimeBreakdownTable = ({ showtimes }: ShowtimeBreakdownTableProps) => {
   const { t } = useTranslation();
 

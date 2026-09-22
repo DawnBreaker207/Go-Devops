@@ -18,7 +18,6 @@ const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'));
 const MoviesPage = lazy(() => import('@/features/movie/MoviesPage'));
 const ShowtimesPage = lazy(() => import('@/features/showtime/ShowtimesPage'));
 const HallsPage = lazy(() => import('@/features/hall/HallsPage'));
-const HallSeatsPage = lazy(() => import('@/features/hall/HallSeatsPage'));
 const BookingsPage = lazy(() => import('@/features/booking/BookingsPage'));
 const UsersPage = lazy(() => import('@/features/user/UsersPage'));
 const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
@@ -33,6 +32,7 @@ const PricingPage = lazy(() => import('@/features/browse/PricingPage'));
 const CinemaInfoPage = lazy(() => import('@/features/browse/CinemaInfoPage'));
 const OffersPage = lazy(() => import('@/features/browse/OffersPage'));
 const AccountPage = lazy(() => import('@/features/browse/AccountPage'));
+// Booking flow is a single route with internal step state; success is a separate page.
 // See BookingFlowPage.tsx / BookingSuccessPage.tsx.
 const BookingFlowPage = lazy(() => import('@/features/booking-flow/BookingFlowPage'));
 const BookingSuccessPage = lazy(() => import('@/features/booking-flow/BookingSuccessPage'));
@@ -52,6 +52,7 @@ export const router = createBrowserRouter([
       { path: PATHS.offers, element: <OffersPage /> },
       { path: PATHS.account, element: <AccountPage /> },
       // Single `/select-seat/:showtimeId` route, internal step state.
+      // Panel follows the page theme (INK + `--cp-seat-*` flip per mode, see CustomerLayout).
       { path: PATHS.selectSeat, element: <BookingFlowPage /> },
       // Post-payment landing: separate page outside the flow; clears stale flow store on mount.
       { path: PATHS.bookingSuccess, element: <BookingSuccessPage /> },
@@ -89,8 +90,7 @@ export const router = createBrowserRouter([
       {
         element: <MainLayout />,
         children: [
-          // Nhom theo dung hang so roles ma navigation.tsx dung cho sider, nen
-          // menu va quyen vao route khong the lech nhau.
+          // Groups reuse the same roles constants as the sider so menu and access never drift apart.
           {
             element: <RequireRole roles={ROLES_OPERATOR} />,
             children: [
@@ -99,7 +99,6 @@ export const router = createBrowserRouter([
               { path: PATHS.movies, element: <MoviesPage /> },
               { path: PATHS.showtimes, element: <ShowtimesPage /> },
               { path: PATHS.halls, element: <HallsPage /> },
-              { path: PATHS.hallSeats, element: <HallSeatsPage /> },
               { path: PATHS.boxOffice, element: <BoxOfficePage /> },
               { path: PATHS.customerLookup, element: <CustomerLookupPage /> },
             ],

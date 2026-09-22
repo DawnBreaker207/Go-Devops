@@ -4,15 +4,10 @@ import { PictureOutlined } from '@ant-design/icons';
 interface MoviePosterProps {
   url?: string;
   title: string;
-  /** Chieu rong px; ty le poster luon 2:3. */
   width?: number;
 }
 
-/**
- * O anh poster trong bang. Khung co dinh theo ty le 2:3 nen hang khong nhay
- * chieu cao giua luc anh chua ve xong va luc ve xong, va phim khong co poster
- * van chiem dung cho do.
- */
+/** Fixed-ratio poster cell keeping table rows stable. */
 export const MoviePoster = ({ url, title, width = 40 }: MoviePosterProps) => {
   const { token } = antdTheme.useToken();
   const box: React.CSSProperties = {

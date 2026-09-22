@@ -14,11 +14,11 @@ interface MovieFormModalProps {
   movie: Movie | null;
   confirmLoading: boolean;
   onCancel: () => void;
-  /** Nem loi ra thi modal giu nguyen va tu hien thi; resolve thi trang dong modal. */
+  /** Throw on failure so the modal stays open and surfaces it; resolve lets the page close it. */
   onSubmit: (payload: MoviePayload) => Promise<void>;
 }
 
-/** antd tu ve loi cua validateFields roi, khong toast them lan nua. */
+/** antd already draws validateFields errors itself; never toast them again. */
 const isFormValidationError = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'errorFields' in error;
 
@@ -33,14 +33,7 @@ export const MovieFormModal = ({
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
 
-  // Nap gia tri qua initialValues chu KHONG qua setFieldsValue trong useEffect.
-  // Duoi StrictMode, React chay effect -> cleanup -> effect lai; cleanup cua Field
-  // voi preserve={false} xoa gia tri khoi store va chay sau, nen thu tu cu de lai
-  // mot form rong. destroyOnHidden dung Form moi cho moi lan mo, nen initialValues
-  // duoc ap lai moi lan va khong dinh vao thu tu effect.
-  //
-  // PUT /movies/:id la FULL REPLACE va age_rating rong bi doi ve 'P': thieu field
-  // nao trong form la xoa cot do khi luu, nen phai liet ke du.
+  // Seed via initialValues only; saving replaces the record so list every field.
   const initialValues: Partial<FormValues> = movie
     ? {
         title: movie.title,
@@ -66,8 +59,8 @@ export const MovieFormModal = ({
       });
     } catch (error) {
       if (isFormValidationError(error)) return;
-      // 400/40001 tra details {json tag: message}: gan thang vao o nhap thay vi
-      // toast mot cau chung chung khong chi ro sai o dau.
+      // 400/40001 returns details {json tag: message}: attach straight onto the input instead of
+      // a generic toast that never says which field is wrong.
       if (applyApiFieldErrors(form, error)) return;
       message.error(errorMessage(error, t('common.somethingWrong')));
     }
@@ -136,7 +129,7 @@ export const MovieFormModal = ({
           />
         </Form.Item>
 
-        {/* Backend bind `url`: duong dan tuong doi kieu /media/x.jpg bi tu choi 400. */}
+        {/* Backend binds `url`: relative paths like /media/x.jpg are rejected with 400. */}
         <Form.Item
           name="poster_url"
           label={t('movie.posterUrl')}

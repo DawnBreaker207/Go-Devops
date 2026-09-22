@@ -39,11 +39,11 @@ interface FormValues {
 
 interface HallFormModalProps {
   open: boolean;
-  /** null = tao moi (form day du); co gia tri = sua (chi 4 field UpdateHallRequest). */
+  /** null = create (full form); set = edit (only the 4 UpdateHallRequest fields). */
   hall: Hall | null;
   confirmLoading: boolean;
   onCancel: () => void;
-  /** Nem loi ra thi modal giu nguyen va tu gan loi vao dung o nhap. */
+  /** Throw on failure so the modal stays open and maps errors onto the right inputs. */
   onCreate: (payload: HallPayload) => Promise<void>;
   onUpdate: (payload: UpdateHallPayload) => Promise<void>;
 }
@@ -74,8 +74,7 @@ export const HallFormModal = ({
   const template = Form.useWatch('template', form);
   const usingTemplate = Boolean(template);
 
-  // Nap bang initialValues, khong bang setFieldsValue trong effect - xem
-  // .claude/rules/pages-components.md.
+  // Seed via initialValues, never via setFieldsValue in an effect.
   const initialValues: Partial<FormValues> = hall
     ? {
         name: hall.name,
@@ -96,9 +95,9 @@ export const HallFormModal = ({
       const values = await form.validateFields();
 
       if (hall) {
-        // PUT /admin/halls/:id la PATCH ve ngu nghia: bo trong field nao thi giu
-        // nguyen. Nhung aisle_after_cols KHONG phai con tro ben Go, nen gui []
-        // la XOA HET loi di - va do la dung y khi nguoi dung xoa trang o nhap.
+        // PUT /admin/halls/:id is PATCH in semantics: any omitted field is kept
+        // as-is. But aisle_after_cols is NOT a pointer in Go, so sending []
+        // CLEARS all aisles - which is intended when the user empties the input.
         await onUpdate({
           name: values.name,
           screen_position: values.screen_position,
@@ -150,8 +149,8 @@ export const HallFormModal = ({
 
         {isEdit ? (
           <>
-            {/* Sua phong KHONG bao gio dung toi ghe. Doi luoi la mot thao tac
-                khac han, nam trong man so do ghe. */}
+            {/* Editing a hall NEVER touches seats. Changing the grid is a separate
+                operation, done in the seat-map screen. */}
             <Alert
               type="info"
               showIcon
@@ -213,9 +212,9 @@ export const HallFormModal = ({
             <Divider orientation="left" plain>
               {t('hall.prices')}
             </Divider>
-            {/* Backend doi DU 4 loai gia va deu > 0 ngay tu luc tao; thieu mot
-                loai la 400/40001 details {seat_type}. Khong co duong nao tao
-                phong ma bo trong bang gia. */}
+            {/* Backend requires ALL 4 price types, all > 0, right at creation; a missing
+                type is 400/40001 with details {seat_type}. There is no way to create
+                a hall with an empty price table. */}
             <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
               {t('hall.pricesRequiredHint')}
             </Typography.Paragraph>

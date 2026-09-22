@@ -32,8 +32,8 @@ const day = (date: string, showtimes: DailyBreakdownShowtime[] | undefined): Dai
 });
 
 describe('flattenShowtimes', () => {
-  it('chiu duoc ngay khong co khoa showtimes trong breakdown', () => {
-    // `breakdown` la jsonb tu do; khong co gi trong schema ep no phai co khoa do.
+  it('tolerates days missing the showtimes key in breakdown', () => {
+    // `breakdown` is free-form jsonb; no schema forces that key.
     const days = [day('2026-09-17', undefined), day('2026-09-18', [show('A', 1, 10, 100)])];
     expect(flattenShowtimes(days)).toHaveLength(1);
   });
@@ -86,9 +86,9 @@ describe('occupancyPercent', () => {
     expect(occupancyPercent(0, 0)).toBe(0);
   });
 
-  it('cong don truoc roi moi chia, khong lay trung binh cong cua tung suat', () => {
-    // Mot suat 1/10 va mot suat 100/200: trung binh cong la 30%, nhung ty le
-    // that la 101/210 = 48.1%. Suat to phai nang hon suat nho.
+  it('sums before dividing, never averages per-show rates', () => {
+    // One 1/10 show plus one 100/200: naive mean is 30%, but the truth is
+    // 101/210 = 48.1%. Big shows must weigh more.
     expect(occupancyPercent(101, 210)).toBe(48.1);
   });
 });
@@ -99,9 +99,9 @@ describe('missingDays', () => {
     expect(missingDays('2026-09-15', '2026-09-18', days)).toEqual(['2026-09-15', '2026-09-17']);
   });
 
-  it('ngay co dong nhung toan so 0 KHONG bi coi la thieu', () => {
-    // Day la khac biet quan trong nhat cua man hinh: ngay khong ban duoc gi van
-    // duoc chot so va van co dong; chi ngay chua chot moi la thieu du lieu.
+  it('a zero-sales closed day is NOT missing', () => {
+    // The screen's key distinction: an unsold day still closes with a row;
+    // only unclosed days are missing data.
     const days = [day('2026-09-18', [])];
     expect(missingDays('2026-09-18', '2026-09-18', days)).toEqual([]);
   });

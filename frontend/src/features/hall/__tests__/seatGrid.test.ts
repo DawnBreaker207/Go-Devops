@@ -3,11 +3,18 @@ import {
   AISLE_WIDTH,
   MAX_CHANGES_PER_CALL,
   SEAT_SIZE,
+  areAdjacentSeats,
   buildGridLayout,
+  buildPendingRow,
+  buildSeatChangeBatches,
   chunkLabels,
   cleanSeatLabel,
+  diffChangedSeats,
   groupSeatsByRow,
+  isPendingSeatId,
   normalizeAisles,
+  pendingRowIndexOf,
+  rowLabelFromIndex,
   sellableCapacity,
 } from '../seatGrid';
 import type { ColSpan, Seat, SeatType } from '@/types';
@@ -28,9 +35,9 @@ const seat = (
 });
 
 describe('groupSeatsByRow', () => {
-  it('giu nguyen thu tu backend tra ve, khong sap lai theo alphabet', () => {
-    // Backend sap theo row_index, nen hang thu 27 la AA va phai dung SAU Z.
-    // Sap chuoi se dua AA len truoc B - day chinh la loi phai tranh.
+  it('keeps backend order, never re-sorts alphabetically', () => {
+    // Backend sorts by row_index, so row 27 is AA and must stand AFTER Z.
+    // String sort would put AA before B - exactly the bug to avoid.
     const rows = groupSeatsByRow([seat('Z', 1), seat('AA', 1), seat('AB', 1)]);
     expect(rows.map((r) => r.rowLabel)).toEqual(['Z', 'AA', 'AB']);
   });
@@ -44,9 +51,9 @@ describe('groupSeatsByRow', () => {
 });
 
 describe('normalizeAisles', () => {
-  it('bo gia tri ngoai khoang ve duoc', () => {
-    // Backend CHI kiem tra do dai mang (max=49), khong kiem tra gia tri, nen
-    // du lieu that co the chua 0, so am hoac so vuot so cot.
+  it('drops out-of-range aisle values', () => {
+    // The backend ONLY checks array length (max=49), never values, so real
+    // data may hold 0, negatives or over-column numbers.
     expect(normalizeAisles([0, -3, 4, 99, 12], 12)).toEqual([4]);
   });
 
@@ -72,7 +79,7 @@ describe('buildGridLayout', () => {
     expect(layout.templateColumns).toBe(
       `${SEAT_SIZE}px ${SEAT_SIZE}px ${SEAT_SIZE}px ${AISLE_WIDTH}px ${SEAT_SIZE}px ${SEAT_SIZE}px ${SEAT_SIZE}px`
     );
-    // Cot 1..3 khong doi; cot 4 tro di bi day sang phai mot track.
+    // Cols 1..3 unchanged; col 4+ shifts right one track.
     expect(layout.lineOf(3)).toBe(3);
     expect(layout.lineOf(4)).toBe(5);
     expect(layout.lineOf(6)).toBe(7);
@@ -80,9 +87,9 @@ describe('buildGridLayout', () => {
 
   it('ghe doi keo qua ca track loi di khi loi di roi giua no', () => {
     const layout = buildGridLayout(6, [3]);
-    // Ghe doi neo o cot 3 phu cot 3 va 4, ma loi di lai nam giua -> 3 track.
+    // Couple anchored at col 3 covering 3 and 4 with an aisle between -> 3 tracks.
     expect(layout.spanOf(3, 2)).toBe(3);
-    // Ghe doi khong bi loi di cat thi van la 2 track.
+    // Uncut couple stays 2 tracks.
     expect(layout.spanOf(1, 2)).toBe(2);
     expect(layout.spanOf(1, 1)).toBe(1);
   });
@@ -106,9 +113,8 @@ describe('sellableCapacity', () => {
 });
 
 describe('cleanSeatLabel', () => {
-  it('trim va viet hoa, vi backend chi viet hoa chu khong trim', () => {
-    // Mot nhan thua khoang trang khong khop ghe nao, va "khong khop ghe nao"
-    // la loi 400 lam rollback CA LO thay doi.
+  it('trims and uppercases, since the backend uppercases but never trims', () => {
+    // A padded label matches no seat, and "no match" is a 400 rolling back the WHOLE batch.
     expect(cleanSeatLabel(' a1 ')).toBe('A1');
   });
 });
@@ -136,5 +142,116 @@ describe('chunkLabels', () => {
     expect(batches).toHaveLength(2);
     expect(batches[0]).toHaveLength(MAX_CHANGES_PER_CALL);
     expect(batches[1]).toHaveLength(1);
+  });
+});
+
+describe('rowLabelFromIndex', () => {
+  it('khop dung ban dich cua dto.RowLabel (Go): A..Z roi AA, AB...', () => {
+    expect(rowLabelFromIndex(1)).toBe('A');
+    expect(rowLabelFromIndex(26)).toBe('Z');
+    expect(rowLabelFromIndex(27)).toBe('AA');
+    expect(rowLabelFromIndex(28)).toBe('AB');
+    expect(rowLabelFromIndex(52)).toBe('AZ');
+    expect(rowLabelFromIndex(53)).toBe('BA');
+  });
+});
+
+describe('pending row helpers', () => {
+  it('buildPendingRow sinh dung so ghe, cung mot id doc duoc lai qua isPendingSeatId/pendingRowIndexOf', () => {
+    const row = buildPendingRow(2, 4, 'G', 'hall-1');
+    expect(row).toHaveLength(4);
+    expect(row.map((s) => s.label)).toEqual(['G1', 'G2', 'G3', 'G4']);
+    row.forEach((seat) => {
+      expect(isPendingSeatId(seat.id)).toBe(true);
+      expect(pendingRowIndexOf(seat.id)).toBe(2);
+      expect(seat.seat_type).toBe('standard');
+      expect(seat.is_gap).toBe(false);
+    });
+  });
+
+  it('id ghe THAT (tu server) khong bi coi la pending', () => {
+    expect(isPendingSeatId('a1b2c3')).toBe(false);
+  });
+});
+
+describe('diffChangedSeats', () => {
+  it('bo qua ghe pending - chua len server nen khong the la mot THAY DOI', () => {
+    const saved = [seat('A', 1)];
+    const draft = [...saved, ...buildPendingRow(0, 1, 'B', 'hall-1')];
+    expect(diffChangedSeats(saved, draft)).toEqual([]);
+  });
+
+  it('bo qua ghe khong doi gi', () => {
+    const saved = [seat('A', 1)];
+    expect(diffChangedSeats(saved, saved)).toEqual([]);
+  });
+
+  it('gom cac ghe co CUNG patch vao mot nhom, khac patch thi nhom rieng', () => {
+    const saved = [seat('A', 1), seat('A', 2), seat('A', 3)];
+    const draft = [
+      { ...saved[0], seat_type: 'vip' as SeatType },
+      { ...saved[1], seat_type: 'vip' as SeatType },
+      { ...saved[2], is_gap: true },
+    ];
+    const groups = diffChangedSeats(saved, draft);
+    expect(groups).toHaveLength(2);
+    const vipGroup = groups.find((g) => g.seat_type === 'vip');
+    expect(vipGroup?.labels.sort()).toEqual(['A1', 'A2']);
+    const gapGroup = groups.find((g) => g.is_gap === true);
+    expect(gapGroup?.labels).toEqual(['A3']);
+  });
+});
+
+describe('buildSeatChangeBatches', () => {
+  it('mot nhom nho thi ra dung mot SeatChange', () => {
+    const batches = buildSeatChangeBatches([{ labels: ['A1', 'A2'], seat_type: 'vip' }]);
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toEqual([
+      { selector: { labels: ['A1', 'A2'] }, seat_type: 'vip', is_gap: undefined },
+    ]);
+  });
+
+  it('cat mot nhom vuot 500 nhan thanh nhieu SeatChange', () => {
+    const labels = Array.from({ length: 501 }, (_, i) => `A${i + 1}`);
+    const batches = buildSeatChangeBatches([{ labels, is_gap: true }]);
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(2);
+    expect(batches[0][0].selector.labels).toHaveLength(500);
+    expect(batches[0][1].selector.labels).toHaveLength(1);
+  });
+
+  it('gom nhieu nhom lai roi moi cat theo tran 50 thay doi/lan goi', () => {
+    const groups = Array.from({ length: MAX_CHANGES_PER_CALL + 1 }, (_, i) => ({
+      labels: [`A${i + 1}`],
+      seat_type: 'vip' as SeatType,
+    }));
+    const batches = buildSeatChangeBatches(groups);
+    expect(batches).toHaveLength(2);
+    expect(batches[0]).toHaveLength(MAX_CHANGES_PER_CALL);
+    expect(batches[1]).toHaveLength(1);
+  });
+});
+
+describe('areAdjacentSeats', () => {
+  it('adjacent same-row singles merge', () => {
+    expect(areAdjacentSeats(seat('A', 3), seat('A', 4))).toBe(true);
+    // Pick order irrelevant.
+    expect(areAdjacentSeats(seat('A', 4), seat('A', 3))).toBe(true);
+  });
+
+  it('khac hang thi khong ghep duoc du so cot lien tiep', () => {
+    expect(areAdjacentSeats(seat('A', 3), seat('B', 4))).toBe(false);
+  });
+
+  it('cach nhau hon 1 cot thi khong ghep duoc', () => {
+    expect(areAdjacentSeats(seat('A', 3), seat('A', 5))).toBe(false);
+  });
+
+  it('mot trong hai da la ghe doi (col_span=2) thi khong ghep duoc', () => {
+    expect(areAdjacentSeats(seat('A', 3, { col_span: 2 }), seat('A', 4))).toBe(false);
+  });
+
+  it('mot trong hai la o trong thi khong ghep duoc', () => {
+    expect(areAdjacentSeats(seat('A', 3, { is_gap: true }), seat('A', 4))).toBe(false);
   });
 });

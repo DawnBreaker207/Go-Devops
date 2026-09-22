@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '@/components/PageHeader';
+import TableCard from '@/components/TableCard';
 import MovieFormModal from './components/MovieFormModal';
 import MoviePoster from './components/MoviePoster';
 import { useCreateMovie, useDeleteMovie, useMovieList, useUpdateMovie } from './hooks/useMovies';
@@ -23,7 +24,7 @@ export const MoviesPage = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
 
-  // page / page_size / search song trong URL: F5 hay gui link deu ra dung trang.
+  // List state lives in the URL (see useListQuery).
   const { query, page, pageSize, search, setPage, setSearch } = useListQuery();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Movie | null>(null);
@@ -43,8 +44,7 @@ export const MoviesPage = () => {
     setModalOpen(true);
   };
 
-  // Khong bat loi o day: MovieFormModal can chinh loi de gan details vao dung o
-  // nhap (400/40001). Nem tiep la cach duy nhat no biet lan luu that bai.
+  // Don't catch here: the modal needs the raw error to bind details to inputs (400/40001). Rethrow is how it learns the save failed.
   const handleSubmit = async (payload: MoviePayload) => {
     if (editing) {
       await updateMovie.mutateAsync({ id: editing.id, payload });
@@ -153,21 +153,23 @@ export const MoviesPage = () => {
         }
       />
 
-      <Table<Movie>
-        rowKey="id"
-        columns={columns}
-        dataSource={data?.items ?? []}
-        loading={isFetching}
-        scroll={{ x: 900 }}
-        pagination={{
-          current: data?.meta.page ?? page,
-          pageSize: data?.meta.page_size ?? pageSize,
-          total: data?.meta.total ?? 0,
-          showSizeChanger: true,
-          showTotal: (total) => t('common.totalItems', { total }),
-          onChange: setPage,
-        }}
-      />
+      <TableCard>
+        <Table<Movie>
+          rowKey="id"
+          columns={columns}
+          dataSource={data?.items ?? []}
+          loading={isFetching}
+          scroll={{ x: 900 }}
+          pagination={{
+            current: data?.meta.page ?? page,
+            pageSize: data?.meta.page_size ?? pageSize,
+            total: data?.meta.total ?? 0,
+            showSizeChanger: true,
+            showTotal: (total) => t('common.totalItems', { total }),
+            onChange: setPage,
+          }}
+        />
+      </TableCard>
 
       <MovieFormModal
         open={modalOpen}

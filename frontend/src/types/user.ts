@@ -1,49 +1,33 @@
 import type { PageQuery } from './api';
 import type { User } from './auth';
 
-/**
- * Quan tri tai khoan - mirror cua internal/dto/user.go. Ban than `User` (tuc
- * dto.UserResponse) nam o './auth' vi authStore cung dung no.
- *
- * Ca nhom endpoint nay la ADMIN-ONLY, khong phai admin+staff nhu nhom phong
- * chieu: `RequireRoles(models.RoleAdmin)` tren ca 4 route.
- */
+/** Account admin, mirroring internal/dto/user.go. `User` lives in './auth' (authStore uses it). All endpoints here are ADMIN-ONLY (RequireRoles admin on all 4 routes), unlike halls which allow staff. */
 
 export type UserRole = User['role'];
 
-/** Thu tu hien thi; cung la thu tu quyen giam dan cho nguoi doc, KHONG phai
- *  thu bac ky thuat - backend so khop role chinh xac, admin khong bao ham staff. */
+/** Display order; descending privilege for readers, NOT a technical rank: backend matches roles exactly, admin does not imply staff. */
 export const USER_ROLES: readonly UserRole[] = ['admin', 'staff', 'customer'] as const;
 
-/**
- * Role duoc phep TAO qua `POST /admin/users`. Khach hang tu dang ky lay,
- * nen binding cua backend chi nhan `oneof=staff admin`.
- */
+/** Roles creatable via POST /admin/users (customers self-register; backend binding is oneof=staff admin). */
 export const CREATABLE_ROLES: readonly UserRole[] = ['staff', 'admin'] as const;
 
-/** dto.UserListQuery. Khong co sort/order - backend luon `created_at DESC`. */
+/** No sort/order: backend always `created_at DESC`. */
 export interface UserListQuery extends PageQuery {
   role?: UserRole;
-  /** Con tro ben Go: bo trong la khong loc, khac han voi false. */
+  /** Go pointer: absent means no filter, distinct from false. */
   active?: boolean;
 }
 
 /** dto.CreateUserRequest. `role` chi nhan staff hoac admin. */
 export interface CreateUserPayload {
   email: string;
-  /** min=6, max=72 (tran cua bcrypt). */
+  /** min=6, max=72 (bcrypt limit). */
   password: string;
   full_name: string;
   role: UserRole;
 }
 
-/**
- * dto.UpdateUserRequest - `PATCH /admin/users/:id` (va alias `PUT` khong co
- * trong swagger). Chi khoa/mo khoa va doi role; khong sua duoc ten, email hay
- * so dien thoai cua nguoi khac.
- *
- * Gui ca hai field deu trong la 400/40001 "nothing to update".
- */
+/** Lock/unlock and role only; cannot edit anyone's name/email/phone. Both fields empty is 400/40001 "nothing to update". */
 export interface UpdateUserPayload {
   active?: boolean;
   role?: UserRole;

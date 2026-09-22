@@ -25,7 +25,7 @@ interface FormValues {
 interface LayoutRegenerateModalProps {
   open: boolean;
   hall: Hall;
-  /** Gia hien tai, dung de dap lai vao body - xem ghi chu trong handleOk. */
+  /** Current prices, echoed back into the body - see the note in handleOk. */
   prices: HallPrice[];
   onCancel: () => void;
   onDone: () => void;
@@ -34,7 +34,7 @@ interface LayoutRegenerateModalProps {
 const isFormValidationError = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'errorFields' in error;
 
-/** "4, 10" -> [4, 10]. Bo moi thu khong phai so duong. */
+/** "4, 10" -> [4, 10]. Drops anything that isn't a positive number. */
 const parseAisles = (raw: string): number[] =>
   raw
     .split(',')
@@ -57,12 +57,9 @@ export const LayoutRegenerateModal = ({
   const template = Form.useWatch('template', form);
   const usingTemplate = Boolean(template);
 
-  // Nap bang initialValues chu khong setFieldsValue trong effect - StrictMode +
-  // preserve={false} se xoa mat gia tri. Xem .claude/rules/pages-components.md.
-  //
-  // screen_position va aisle_after_cols BAT BUOC phai duoc nap san: service gan
-  // thang `current.ScreenPosition = req.ScreenPosition`, nen bo trong la reset ve
-  // 'front' va xoa sach loi di - mat du lieu am tham.
+  // Seed via initialValues, never setFieldsValue in an effect (StrictMode +
+  // preserve={false} wipes values). screen_position and aisle_after_cols MUST
+  // be pre-filled: empty resets to 'front' and clears all aisles silently.
   const initialValues: FormValues = {
     template: '',
     rows: hall.rows,
@@ -75,12 +72,7 @@ export const LayoutRegenerateModal = ({
     try {
       const values = await form.validateFields();
 
-      /**
-       * `name` va `prices` van BAT BUOC theo binding cua dto.HallRequest du
-       * RegenerateLayout khong doc field nao trong hai - endpoint nay dung chung
-       * DTO voi POST /admin/halls. Gui lai ten hien tai va bo gia hien tai; loai
-       * nao chua co gia thi dien 1 cho du 4 khoa, gia tri khong di den dau ca.
-       */
+      /** Resend name and full prices alongside the layout change. */
       const priceMap = SEAT_TYPES.reduce<Record<SeatType, number>>(
         (acc, type) => {
           acc[type] = prices.find((p) => p.seat_type === type)?.price ?? 1;
@@ -89,15 +81,7 @@ export const LayoutRegenerateModal = ({
         {} as Record<SeatType, number>
       );
 
-      /**
-       * Chon mau thi PHAI BO TRONG screen_position va aisle_after_cols.
-       *
-       * `resolveLayout` ben backend chi dien tu mau vao nhung field con trong:
-       * `if len(req.AisleAfterCols) == 0 { req.AisleAfterCols = t.aisleAfterCols }`.
-       * Form nay nap san hai field do tu phong HIEN TAI, nen neu cu gui di thi
-       * chung luon khac rong va luon thang mau - loi di cua mau bi vut im lang,
-       * dung cai ma canh bao ngay trong modal noi la se lay theo mau.
-       */
+      /** With a template, omit layout fields so template values apply. */
       const payload: HallPayload = values.template
         ? { name: hall.name, prices: priceMap, template: values.template }
         : {
@@ -105,9 +89,9 @@ export const LayoutRegenerateModal = ({
             prices: priceMap,
             rows: values.rows,
             seats_per_row: values.seats_per_row,
-            // Khong co mau thi hai field nay BAT BUOC phai gui: RegenerateLayout
-            // gan thang `current.ScreenPosition = req.ScreenPosition`, bo trong
-            // la reset ve 'front' va xoa sach loi di.
+            // Without a template both fields MUST be sent: RegenerateLayout
+            // assigns `current.ScreenPosition = req.ScreenPosition` directly; omitting
+            // them resets to 'front' and clears all aisles.
             screen_position: values.screen_position,
             aisle_after_cols: parseAisles(values.aisle_after_cols),
           };
@@ -135,10 +119,7 @@ export const LayoutRegenerateModal = ({
       destroyOnHidden
       width={560}
     >
-      {/*
-        Canh bao phai hien TRUOC khi nguoi dung dien, chu khong doi 409 tra ve:
-        409 chi den sau khi ho da go xong ca cai form.
-      */}
+      {/* Warn upfront instead of after a failed save. */}
       <Alert
         type="warning"
         showIcon
@@ -169,10 +150,7 @@ export const LayoutRegenerateModal = ({
           />
         </Form.Item>
 
-        {/*
-          Chon mau thi backend tu dien rows/seats_per_row VA ca seat_types, gaps,
-          spans, aisle_after_cols cua mau do - khong phai cua phong hien tai.
-        */}
+        {/* With a template, rows and seats come from the template. */}
         {usingTemplate ? (
           <Alert
             type="info"
@@ -199,8 +177,8 @@ export const LayoutRegenerateModal = ({
           </>
         )}
 
-        {/* An khi da chon mau: hai field nay khong duoc gui nua, nen de chung
-            hien ra voi gia tri cu la noi doi voi nguoi dung. */}
+        {/* Hidden once a template is picked: these fields are no longer sent, so showing
+            them with stale values would mislead the user. */}
         {usingTemplate ? null : (
           <>
             <Form.Item name="screen_position" label={t('hall.screenPosition')}>

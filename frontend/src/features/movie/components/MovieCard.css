@@ -1,6 +1,4 @@
-/* Movie card motion. Xem .claude/rules/motion.md va skills/fe-motion/patterns.md.
- * Chi transform va opacity duoc animate; bong dung mot lop rieng de fade opacity
- * thay vi animate box-shadow. Moi so deu la token var(--motion-*). */
+/* Card motion: animate transform + opacity only (shadow fades on its own layer, never animate box-shadow). Every value is a var(--motion-*) token. */
 
 .movie-card {
   position: relative;
@@ -10,11 +8,11 @@
   overflow: hidden;
   background: var(--movie-card-bg, var(--cp-surface-base));
   cursor: pointer;
-  /* Liet ke tung property - khong dung shorthand bat tat ca */
+  /* Listed per property - no catch-all shorthand */
   transition: transform var(--motion-duration-base) var(--motion-ease-out);
 }
 
-/* Lop bong rieng: animate opacity, khong animate box-shadow. */
+/* Separate shadow layer: animate opacity, never box-shadow. */
 .movie-card::after {
   content: '';
   position: absolute;
@@ -41,8 +39,7 @@
   transition: transform var(--motion-duration-base) var(--motion-ease-out);
 }
 
-/* Overlay + nut: HIEN SAN. Tren thiet bi cam ung khong co hover nen khong duoc
- * giau hanh dong sau hover. Chi thiet bi co chuot moi an di roi fade lai. */
+/* Overlay + buttons: ALWAYS VISIBLE. Touch has no hover, so never hide actions behind it; only real-mouse devices fade them out/in. */
 .movie-card__overlay {
   position: absolute;
   inset: auto 0 0 0;
@@ -64,8 +61,7 @@
 .movie-card__title {
   font-weight: 600;
   line-height: 1.35;
-  /* Giu 2 dong co dinh: card khong doi chieu cao khi tieu de dai ngan khac nhau,
-   * nen khong co layout shift luc danh sach load. */
+  /* Fixed 2 lines: card height never shifts on varying titles, no layout shift on list load. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -78,8 +74,7 @@
   opacity: 0.65;
 }
 
-/* Hover chi cho thiet bi co chuot that. Khong co Tailwind trong repo nay nen
- * scope bang tay. Moi hover deu co :focus-within tuong duong cho ban phim. */
+/* Hover for real-mouse devices only. Hand-scoped (no Tailwind here). Every hover has a matching :focus-within for keyboard. */
 @media (hover: hover) and (pointer: fine) {
   .movie-card__overlay {
     opacity: 0;
@@ -106,14 +101,12 @@
   }
 }
 
-/* Trang thai nhan. Giu ca tren cam ung. */
+/* Pressed state. Kept on touch too. */
 .movie-card:active {
   transform: scale(var(--motion-scale-press));
 }
 
-/* Focus nhin thay duoc trong luc card dang dich chuyen. Vong focus deo mau
-   brand chu khong phai mot mau do rieng: xem .claude/rules/design-tokens.md,
-   khong duoc de ra mau thu hai cho mot man hinh. */
+/* Visible focus while the card moves. Focus ring follows brand, never a second red per screen. */
 .movie-card:focus-visible {
   outline: 2px solid var(--movie-card-focus, var(--cp-brand));
   outline-offset: 2px;

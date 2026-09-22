@@ -1,33 +1,14 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Alert,
-  App,
-  Button,
-  Input,
-  Popconfirm,
-  Space,
-  Table,
-  Tag,
-  Tooltip,
-  Typography,
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import {
-  AppstoreOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  DollarOutlined,
-  EditOutlined,
-  PlusOutlined,
-} from '@ant-design/icons';
+import { Alert, App, Button, Card, Col, Empty, Flex, Input, Pagination, Row, Space } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '@/components/PageHeader';
+import HallCard from './components/HallCard';
 import HallFormModal from './components/HallFormModal';
 import HallPriceModal from './components/HallPriceModal';
 import CloneHallModal from './components/CloneHallModal';
+import HallSeatPanel from './HallSeatPanel';
 import {
-  isPriceSetComplete,
   useCreateHall,
   useDeleteHall,
   useHallList,
@@ -36,12 +17,12 @@ import {
 } from './hooks/useHalls';
 import type { Hall, HallPayload, UpdateHallPayload } from '@/types';
 import { useListQuery } from '@/hooks/useListQuery';
-import { hallSeatsPath } from '@/routes/paths';
 import { errorMessage } from '@/utils/error';
 
+/** Hall cards + inline seat grid on one page: clicking a card expands that hall's grid below, no child route. Single cinema (no chain), so the hall picker IS the main screen. */
 export const HallsPage = () => {
   const { t } = useTranslation();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const { query, page, pageSize, search, setPage, setSearch } = useListQuery();
   const { data, isFetching, error } = useHallList(query);
@@ -53,6 +34,18 @@ export const HallsPage = () => {
   const [editing, setEditing] = useState<Hall | null>(null);
   const [pricingHall, setPricingHall] = useState<Hall | null>(null);
   const [cloningHall, setCloningHall] = useState<Hall | null>(null);
+
+  const [selectedHallId, setSelectedHallId] = useState<string | null>(null);
+  // Reported by HallSeatPanel: unsaved edits exist; confirm before switching cards (a `key` change discards input, see selectHall).
+  const [panelDirty, setPanelDirty] = useState(false);
+
+  // Preselect the first hall once. One-shot (autoSelected guard) so paging/search never jumps halls.
+  const [autoSelected, setAutoSelected] = useState(false);
+  if (!autoSelected && data && halls.length > 0) {
+    setAutoSelected(true);
+    // Keep a just-created selection; don't override it here.
+    if (selectedHallId === null) setSelectedHallId(halls[0].id);
+  }
 
   const createHall = useCreateHall();
   const updateHall = useUpdateHall();
@@ -68,11 +61,31 @@ export const HallsPage = () => {
     setFormOpen(true);
   };
 
-  // Khong bat loi o day: modal can chinh loi de gan details vao dung o nhap.
+  const selectHall = (id: string) => {
+    if (id === selectedHallId) return;
+    const doSelect = () => setSelectedHallId(id);
+    if (panelDirty) {
+      modal.confirm({
+        title: t('hall.discardTitle'),
+        content: t('hall.discardBody'),
+        okText: t('hall.discardConfirm'),
+        okButtonProps: { danger: true },
+        cancelText: t('hall.stayEditing'),
+        // Switching `key` remounts HallSeatPanel, resetting its local state; no child cancel call needed.
+        onOk: doSelect,
+      });
+      return;
+    }
+    doSelect();
+  };
+
+  // Don't catch here: the modal needs the raw error for input binding.
   const handleCreate = async (payload: HallPayload) => {
-    await createHall.mutateAsync(payload);
+    const created = await createHall.mutateAsync(payload);
     message.success(t('common.createSuccess'));
     setFormOpen(false);
+    // New card selected directly; its seats are unclassified, so seat arranging is almost surely next.
+    setSelectedHallId(created.id);
   };
 
   const handleUpdate = async (payload: UpdateHallPayload) => {
@@ -87,137 +100,12 @@ export const HallsPage = () => {
     try {
       await deleteHall.mutateAsync(id);
       message.success(t('common.deleteSuccess'));
+      if (selectedHallId === id) setSelectedHallId(null);
     } catch (err) {
-      // 409/40900 khi phong con suat chieu chua chieu xong. Thong bao cua backend
-      // la tieng Anh nhung cu the hon bat cu cau nao viet san o day.
+      // Backend message is English but more specific than any canned sentence here.
       message.error(errorMessage(err, t('common.somethingWrong')));
     }
   };
-
-  const columns: ColumnsType<Hall> = [
-    {
-      title: t('hall.name'),
-      dataIndex: 'name',
-      key: 'name',
-      ellipsis: true,
-      render: (name: string, record) => (
-        <Space direction="vertical" size={0}>
-          <Link to={hallSeatsPath(record.id)}>{name}</Link>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t(`hall.screen_${record.screen_position}`)}
-            {record.aisle_after_cols.length > 0
-              ? ` · ${t('hall.aislesShort', { cols: record.aisle_after_cols.join(', ') })}`
-              : ''}
-          </Typography.Text>
-        </Space>
-      ),
-    },
-    {
-      title: t('hall.grid'),
-      key: 'grid',
-      width: 120,
-      align: 'right',
-      // rows x seats_per_row la so O LUOI, khong phai suc chua: ghe doi nuot mot
-      // cot va ghe is_gap khong ban duoc. Suc chua that nam trong man so do ghe.
-      render: (_, record) => (
-        <span className="tabular-nums">
-          {record.rows} × {record.seats_per_row}
-        </span>
-      ),
-    },
-    {
-      title: t('hall.prices'),
-      key: 'prices',
-      width: 190,
-      render: (_, record) => {
-        const rows = priceStatuses.byHallId[record.id];
-        if (rows === undefined) {
-          return <Typography.Text type="secondary">…</Typography.Text>;
-        }
-        if (isPriceSetComplete(rows)) {
-          return (
-            <Tag color="green" bordered={false}>
-              {t('hall.pricesComplete')}
-            </Tag>
-          );
-        }
-        return (
-          // Day la loi im lang duy nhat backend khong bao: danh sach suat chieu
-          // cho khach JOIN hall_prices va HAVING count(DISTINCT seat_type) = 4,
-          // nen phong thieu gia bien mat khoi phia khach ma van hien o admin.
-          <Tooltip title={t('hall.pricesIncompleteTooltip')}>
-            <Tag color="warning" bordered={false}>
-              {t('hall.pricesIncomplete', { count: rows.length })}
-            </Tag>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      title: t('hall.active'),
-      dataIndex: 'active',
-      key: 'active',
-      width: 120,
-      render: (active: boolean) => (
-        <Tag color={active ? 'green' : 'default'} bordered={false}>
-          {t(active ? 'hall.activeYes' : 'hall.activeNo')}
-        </Tag>
-      ),
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      width: 190,
-      align: 'right',
-      render: (_, record) => (
-        <Space size={4}>
-          <Tooltip title={t('hall.seats')}>
-            <Link to={hallSeatsPath(record.id)}>
-              <Button type="text" icon={<AppstoreOutlined />} aria-label={`seats-${record.id}`} />
-            </Link>
-          </Tooltip>
-          <Tooltip title={t('hall.prices')}>
-            <Button
-              type="text"
-              icon={<DollarOutlined />}
-              aria-label={`prices-${record.id}`}
-              onClick={() => setPricingHall(record)}
-            />
-          </Tooltip>
-          <Tooltip title={t('hall.clone')}>
-            <Button
-              type="text"
-              icon={<CopyOutlined />}
-              aria-label={`clone-${record.id}`}
-              onClick={() => setCloningHall(record)}
-            />
-          </Tooltip>
-          <Tooltip title={t('common.edit')}>
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              aria-label={`edit-${record.id}`}
-              onClick={() => openEdit(record)}
-            />
-          </Tooltip>
-          <Popconfirm
-            title={t('hall.deleteConfirm')}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            onConfirm={() => handleDelete(record.id)}
-          >
-            {/* Nut xoa trong Figma la nut DAC mau do, khong phai icon vien. */}
-            <Button
-              danger
-              type="primary"
-              icon={<DeleteOutlined />}
-              aria-label={`delete-${record.id}`}
-            />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
 
   return (
     <>
@@ -248,21 +136,49 @@ export const HallsPage = () => {
         />
       ) : null}
 
-      <Table<Hall>
-        rowKey="id"
-        columns={columns}
-        dataSource={halls}
-        loading={isFetching}
-        scroll={{ x: 900 }}
-        pagination={{
-          current: data?.meta.page ?? page,
-          pageSize: data?.meta.page_size ?? pageSize,
-          total: data?.meta.total ?? 0,
-          showSizeChanger: true,
-          showTotal: (total) => t('common.totalItems', { total }),
-          onChange: setPage,
-        }}
-      />
+      {!isFetching && halls.length === 0 ? (
+        <Empty description={t('common.noData')} />
+      ) : (
+        <Row gutter={[16, 16]}>
+          {halls.map((hall) => (
+            <Col key={hall.id} xs={24} sm={12} lg={8}>
+              <HallCard
+                hall={hall}
+                priceRows={priceStatuses.byHallId[hall.id]}
+                selected={selectedHallId === hall.id}
+                onSelect={() => selectHall(hall.id)}
+                onEdit={() => openEdit(hall)}
+                onPrice={() => setPricingHall(hall)}
+                onClone={() => setCloningHall(hall)}
+                onDelete={() => handleDelete(hall.id)}
+              />
+            </Col>
+          ))}
+        </Row>
+      )}
+
+      {(data?.meta.total_pages ?? 0) > 1 ? (
+        <Flex justify="center" style={{ marginTop: 16 }}>
+          <Pagination
+            current={data?.meta.page ?? page}
+            pageSize={data?.meta.page_size ?? pageSize}
+            total={data?.meta.total ?? 0}
+            showSizeChanger
+            showTotal={(total) => t('common.totalItems', { total })}
+            onChange={setPage}
+          />
+        </Flex>
+      ) : null}
+
+      {selectedHallId ? (
+        <Card size="small" style={{ marginTop: 20 }}>
+          <HallSeatPanel
+            key={selectedHallId}
+            hallId={selectedHallId}
+            onDirtyChange={setPanelDirty}
+          />
+        </Card>
+      ) : null}
 
       <HallFormModal
         open={formOpen}

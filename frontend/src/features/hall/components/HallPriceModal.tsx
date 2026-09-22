@@ -22,11 +22,7 @@ interface HallPriceModalProps {
 const isFormValidationError = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'errorFields' in error;
 
-/**
- * Bang gia cua mot phong. Doc ve la MANG (sap theo alphabet), ghi len la MAP
- * (phai du 4 loai) - hai chieu khong doi xung, va PUT la UPSERT TOAN BO chu
- * khong phai sua tung dong, nen form luon phai gui ca 4.
- */
+/** Price editor always saving the full set of seat prices. */
 export const HallPriceModal = ({ open, hall, onCancel, onDone }: HallPriceModalProps) => {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -35,8 +31,8 @@ export const HallPriceModal = ({ open, hall, onCancel, onDone }: HallPriceModalP
   const prices = useHallPrices(open && hall ? hall.id : undefined);
   const setPrices = useSetHallPrices();
 
-  // Thu tu hien thi lay theo SEAT_TYPES chu khong theo thu tu server tra ve:
-  // GET sap alphabet, PUT echo lai theo thu tu khac, tin ben nao cung lech.
+  // Display order follows SEAT_TYPES, not the server's return order:
+  // GET sorts alphabetically, PUT echoes back in yet another order; trusting either drifts.
   const initialValues: Partial<FormValues> = prices.data
     ? {
         prices: SEAT_TYPES.reduce<Record<SeatType, number>>(
@@ -66,9 +62,9 @@ export const HallPriceModal = ({ open, hall, onCancel, onDone }: HallPriceModalP
       onDone();
     } catch (error) {
       if (isFormValidationError(error)) return;
-      // Thieu mot loai gia thi backend tra details {seat_type: "<loai>"} chu
-      // khong phai ten field cua form, nen applyApiFieldErrors se khong gan
-      // duoc vao o nao - roi xuong toast la dung.
+      // A missing price type comes back as details {seat_type: "<type>"}, not
+      // a form field name, so applyApiFieldErrors can't attach it anywhere -
+      // falling through to a toast is correct.
       if (applyApiFieldErrors(form, error)) return;
       message.error(errorMessage(error, t('common.somethingWrong')));
     }

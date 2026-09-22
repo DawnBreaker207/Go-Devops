@@ -7,17 +7,18 @@ import type {
   HallPayload,
   HallPrice,
   HallTemplate,
+  MergeSeatsPayload,
   PagedData,
   PageQuery,
   PricePayload,
   Seat,
   SeatUpdatePayload,
+  SplitSeatPayload,
   UpdateHallPayload,
 } from '@/types';
 
 export const hallApi = {
-  /** GET /admin/halls - CO phan trang, khong phai mang tran. admin + staff.
-   *  page_size > 100 bi tu choi 400/40001 chu KHONG bi cat bot. */
+  /** Paginated; page_size > 100 is rejected 400/40001, not clamped. */
   list: (query: PageQuery) =>
     apiClient.get<ApiResponse<PagedData<Hall>>>('/admin/halls', { params: query }).then(unwrap),
 
@@ -26,11 +27,11 @@ export const hallApi = {
   create: (payload: HallPayload) =>
     apiClient.post<ApiResponse<Hall>>('/admin/halls', payload).then(unwrap),
 
-  /** PUT /admin/halls/:id - chi ten / huong man / loi di / active. Khong dung toi ghe. */
+  /** Meta only (name/screen/aisles/active); never touches seats. */
   update: (id: string, payload: UpdateHallPayload) =>
     apiClient.put<ApiResponse<Hall>>(`/admin/halls/${id}`, payload).then(unwrap),
 
-  /** Tra 204 VOI THAN RONG - khong co envelope. Dung cho qua unwrap(). */
+  /** 204 with empty body; never unwrap. */
   remove: (id: string) =>
     apiClient
       .delete<void>(`/admin/halls/${id}`, { headers: { Accept: '*/*' } })
@@ -39,35 +40,45 @@ export const hallApi = {
   clone: (id: string, payload: CloneHallPayload) =>
     apiClient.post<ApiResponse<Hall>>(`/admin/halls/${id}/clone`, payload).then(unwrap),
 
-  /**
-   * PUT /admin/halls/:id/layout - dung lai TOAN BO luoi ghe. Pha huy: xoa het
-   * seats va showtime_seats cua moi suat chieu chua xoa, roi sinh lai. Bi chan
-   * vinh vien 409 khi phong TUNG co bat ky don nao (khong loc trang thai,
-   * khong loc suat da xoa).
-   */
+  /** Destructive: wipes seats + showtime_seats of non-deleted shows, then rebuilds. 409 if the hall ever had any order. */
   regenerateLayout: (id: string, payload: HallPayload) =>
     apiClient.put<ApiResponse<Hall>>(`/admin/halls/${id}/layout`, payload).then(unwrap),
 
-  /** GET /admin/hall-templates - MANG TRAN, 3 muc, sap theo alphabet. */
+  /** Bare array of 3, alphabetical. */
   templates: () => apiClient.get<ApiResponse<HallTemplate[]>>('/admin/hall-templates').then(unwrap),
 
-  /** GET /admin/halls/:id/seats - MANG TRAN, ca luoi trong mot lan, khong phan trang. */
+  /** Whole grid in one call, unpaginated. */
   seats: (id: string) =>
     apiClient.get<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats`).then(unwrap),
 
-  /** PATCH /admin/halls/:id/seats - tra ve CHI nhung ghe bi cham, khong phai ca luoi. */
+  /** Returns only touched seats, not the whole grid. */
   bulkUpdateSeats: (id: string, payload: BulkSeatUpdatePayload) =>
     apiClient.patch<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats`, payload).then(unwrap),
 
   updateSeat: (id: string, seatId: string, payload: SeatUpdatePayload) =>
     apiClient.put<ApiResponse<Seat>>(`/admin/halls/${id}/seats/${seatId}`, payload).then(unwrap),
 
-  /** GET /admin/halls/:id/prices - MANG TRAN 0..4 muc, sap theo ALPHABET. */
+  /** Appends exactly one standard row; returns only the new row. */
+  addRow: (id: string) =>
+    apiClient.post<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats/rows`).then(unwrap),
+
+  /** Deletes any row; rows behind renumber. Returns the deleted seats. */
+  deleteRow: (id: string, rowLabel: string) =>
+    apiClient.delete<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats/rows/${rowLabel}`).then(unwrap),
+
+  /** Merges 2 adjacent singles into a couple; the right seat is deleted. */
+  mergeSeats: (id: string, payload: MergeSeatsPayload) =>
+    apiClient.post<ApiResponse<Seat>>(`/admin/halls/${id}/seats/merge`, payload).then(unwrap),
+
+  /** Splits a couple into 2 singles. Returns both (old + new in the next column). */
+  splitSeat: (id: string, payload: SplitSeatPayload) =>
+    apiClient.post<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats/split`, payload).then(unwrap),
+
+  /** Bare array of 0..4, alphabetical. */
   prices: (id: string) =>
     apiClient.get<ApiResponse<HallPrice[]>>(`/admin/halls/${id}/prices`).then(unwrap),
 
-  /** PUT /admin/halls/:id/prices - phia ghi la MAP, phai du 4 loai va deu > 0.
-   *  Tra ve mang 4 muc theo thu tu AllSeatTypes, khong phai thu tu cua GET. */
+  /** Write side is a MAP: all 4 types required, each > 0. Returns 4 rows in AllSeatTypes order (not GET order). */
   setPrices: (id: string, payload: PricePayload) =>
     apiClient.put<ApiResponse<HallPrice[]>>(`/admin/halls/${id}/prices`, payload).then(unwrap),
 };

@@ -5,7 +5,7 @@ import { CREATABLE_ROLES } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { applyApiFieldErrors } from '@/utils/form';
 
-/** Tran cua bcrypt, cung la binding max=72 ben backend. */
+/** bcrypt ceiling, matching the backend's max=72 binding. */
 const PASSWORD_MAX = 72;
 const PASSWORD_MIN = 6;
 
@@ -20,18 +20,14 @@ interface UserFormModalProps {
   open: boolean;
   confirmLoading: boolean;
   onCancel: () => void;
-  /** Nem loi ra thi modal giu nguyen va tu gan loi vao dung o nhap. */
+  /** Throw on failure so the modal stays open and maps errors onto the right inputs. */
   onSubmit: (payload: CreateUserPayload) => Promise<void>;
 }
 
 const isFormValidationError = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'errorFields' in error;
 
-/**
- * Chi TAO tai khoan. Khong co man sua ho so nguoi khac: backend chi cho doi
- * `active` va `role` qua PATCH, con ten/email/dien thoai thi chinh chu doi lay
- * qua `PUT /users/me`.
- */
+/** Staff account creation form. */
 export const UserFormModal = ({ open, confirmLoading, onCancel, onSubmit }: UserFormModalProps) => {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -48,7 +44,7 @@ export const UserFormModal = ({ open, confirmLoading, onCancel, onSubmit }: User
       });
     } catch (error) {
       if (isFormValidationError(error)) return;
-      // Trung email la 409/40900 khong kem details, nen roi xuong toast.
+      // A duplicate email is 409/40900 with no details, so it falls through to a toast.
       if (applyApiFieldErrors(form, error)) return;
       message.error(errorMessage(error, t('common.somethingWrong')));
     }
@@ -68,8 +64,8 @@ export const UserFormModal = ({ open, confirmLoading, onCancel, onSubmit }: User
       destroyOnHidden
       width={520}
     >
-      {/* Backend chan tao tai khoan khach o day (binding oneof=staff admin):
-          khach tu dang ky qua /auth/register. */}
+      {/* Backend blocks customer accounts here (binding oneof=staff admin):
+          customers self-register via /auth/register. */}
       <Alert
         type="info"
         showIcon

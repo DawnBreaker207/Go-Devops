@@ -9,13 +9,7 @@ import type {
 } from '@/types';
 
 export const showtimeApi = {
-  /**
-   * GET /movies/:id/showtimes - CONG KHAI, tra ve MANG TRAN (khong {items,meta}).
-   *
-   * Day la o chon suat cua khach. Repository chi tra ve suat cua phim dang
-   * `showing`, trang thai `open`, `start_at >= now()`, va phong co DU 4 loai
-   * gia. Tham so `date` (YYYY-MM-DD) gioi han ket qua trong DUNG mot ngay.
-   */
+  /** Public bare array for the customer showtime picker. Only `showing` movies, `open` shows with start_at >= now and 4 price rows; `date` (YYYY-MM-DD) limits to one day. */
   forMovie: (movieId: string, date?: string) =>
     apiClient
       .get<ApiResponse<ShowtimeListItem[]>>(`/movies/${movieId}/showtimes`, {
@@ -23,7 +17,7 @@ export const showtimeApi = {
       })
       .then(unwrap),
 
-  /** GET /admin/showtimes - admin + staff. Giu ca suat da dong, da qua, phim nhap. */
+  /** Admin + staff. Keeps closed, past, and draft-movie shows. */
   list: (query: ShowtimeListQuery) =>
     apiClient
       .get<ApiResponse<PagedData<Showtime>>>('/admin/showtimes', { params: query })
@@ -38,7 +32,7 @@ export const showtimeApi = {
   update: (id: string, payload: ShowtimePayload) =>
     apiClient.put<ApiResponse<Showtime>>(`/admin/showtimes/${id}`, payload).then(unwrap),
 
-  /** Tra 200 kem {code,message:"deleted"} va KHONG co data - dung doc ket qua. */
+  /** 200 with {code,message:"deleted"} and no data; ignore the body. */
   remove: (id: string) =>
     apiClient.delete<ApiResponse<void>>(`/admin/showtimes/${id}`).then(() => undefined),
 };

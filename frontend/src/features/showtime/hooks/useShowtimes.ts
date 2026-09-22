@@ -2,12 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { showtimeApi } from '@/api/showtime.api';
 import { movieApi } from '@/api/movie.api';
 import { MOVIE_QUERY_KEY } from '@/features/movie/hooks/useMovies';
+import { BROWSE_QUERY_KEY } from '@/features/browse/hooks/useBrowse';
 import type { ShowtimeListQuery, ShowtimePayload } from '@/types';
 
 export const SHOWTIME_QUERY_KEY = 'showtimes';
 
-// Danh sach phong thuoc domain hall; import lai de chi co MOT khoa cache 'halls'
-// va mot cho dinh nghia no.
+/** Refresh all showtime caches after a mutation. */
+const invalidateShowtimeCaches = (queryClient: ReturnType<typeof useQueryClient>) => {
+  queryClient.invalidateQueries({ queryKey: [SHOWTIME_QUERY_KEY] });
+  queryClient.invalidateQueries({ queryKey: [BROWSE_QUERY_KEY] });
+};
+
+// The hall list belongs to the hall domain; re-export so there is exactly ONE 'halls' cache key
+// and one place defining it.
 export { useHallOptions } from '@/features/hall/hooks/useHalls';
 
 export const useShowtimeList = (query: ShowtimeListQuery) =>
@@ -15,12 +22,12 @@ export const useShowtimeList = (query: ShowtimeListQuery) =>
     queryKey: [SHOWTIME_QUERY_KEY, query],
     queryFn: () => showtimeApi.list(query),
     placeholderData: (previous) => previous,
+    // The same admin is editing this list (proactive invalidate above) -
+    // no refetch-on-mount needed within one short working session.
+    staleTime: 30_000,
   });
 
-/**
- * Danh sach cho o chon trong form. page_size 100 la tran cua backend; du cho
- * quy mo hien tai, va neu vuot thi phai doi sang Select co tim kiem tu xa.
- */
+/** Movie picker list for the showtime form. */
 const PICKER_PAGE_SIZE = 100;
 
 export const useMovieOptions = () =>
@@ -34,7 +41,7 @@ export const useCreateShowtime = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: ShowtimePayload) => showtimeApi.create(payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [SHOWTIME_QUERY_KEY] }),
+    onSuccess: () => invalidateShowtimeCaches(queryClient),
   });
 };
 
@@ -43,7 +50,7 @@ export const useUpdateShowtime = () => {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: ShowtimePayload }) =>
       showtimeApi.update(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [SHOWTIME_QUERY_KEY] }),
+    onSuccess: () => invalidateShowtimeCaches(queryClient),
   });
 };
 
@@ -51,6 +58,6 @@ export const useDeleteShowtime = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => showtimeApi.remove(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [SHOWTIME_QUERY_KEY] }),
+    onSuccess: () => invalidateShowtimeCaches(queryClient),
   });
 };

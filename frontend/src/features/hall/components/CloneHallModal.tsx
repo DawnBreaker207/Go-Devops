@@ -26,8 +26,8 @@ export const CloneHallModal = ({ open, hall, onCancel, onDone }: CloneHallModalP
   const [form] = Form.useForm<FormValues>();
   const clone = useCloneHall();
 
-  // copy_prices mac dinh false ben backend, nhung mac dinh TRUE o day: mot phong
-  // khong co gia se bien mat khoi moi danh sach phia khach ma khong bao gi ca.
+  // copy_prices defaults to false on the backend, but TRUE here: a hall
+  // without prices vanishes from every customer list with no warning.
   const initialValues: FormValues = {
     name: hall ? t('hall.cloneNameSuggestion', { name: hall.name }) : '',
     copy_prices: true,

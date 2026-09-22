@@ -11,11 +11,13 @@ import {
   Table,
   Tag,
   Typography,
+  theme as antdTheme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import PageHeader from '@/components/PageHeader';
+import TableCard from '@/components/TableCard';
 import ShowtimeBreakdownTable from './components/ShowtimeBreakdownTable';
 import { useDailyReport } from './hooks/useReports';
 import { type MovieRollupRow, missingDays, occupancyPercent, rollupByMovie } from './reportRollup';
@@ -29,14 +31,14 @@ import {
   toCinemaTime,
 } from '@/utils/format';
 
-/** Mac dinh cua backend khi khong truyen tham so: 7 ngay tinh den hom nay. */
+/** Backend default with no params: 7 days through today. */
 const DEFAULT_DAYS = 7;
 
 export const ReportsPage = () => {
   const { t } = useTranslation();
+  const { token } = antdTheme.useToken();
 
-  // Khoang ngay la trang thai cua rieng man nay, giong bo loc cua cac bang khac
-  // (useListQuery chi lo page/page_size/search dung chung).
+  // Screen-local range, like other tables' filters (useListQuery owns only shared page/page_size/search).
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(() => [
     dayjs().subtract(DEFAULT_DAYS - 1, 'day'),
     dayjs(),
@@ -135,8 +137,7 @@ export const ReportsPage = () => {
       key: 'occupancy_rate',
       width: 110,
       align: 'right',
-      // Backend da lam ROUND(100.0 * seats_sold / capacity), tuc DA la phan
-      // tram. Nhan them 100 lan nua se ra 333% thay vi 3.33%.
+      // Backend already percent; never *100.
       render: (value: number) => <span className="tabular-nums">{value}%</span>,
     },
     {
@@ -161,7 +162,7 @@ export const ReportsPage = () => {
             allowClear={false}
             format={DATE_FORMAT}
             value={range}
-            // Khong cho chon tuong lai: mot ngay chua den thi khong the chot so.
+            // Future dates unpickable: an unarrived day can't be closed.
             disabledDate={(current) => current.isAfter(dayjs(), 'day')}
             onChange={(value) => {
               if (value?.[0] && value[1]) setRange([value[0], value[1]]);
@@ -175,15 +176,19 @@ export const ReportsPage = () => {
           type="error"
           showIcon
           style={{ marginBottom: 16 }}
-          // Loi kiem tra khoang ngay (sai dinh dang, from sau to, qua 366 ngay)
-          // la 400/40001 KHONG kem details, nen chi hien duoc cau cua server.
+          // Range errors are bare 400/40001 without details, so only the server sentence can be shown.
           message={errorMessage(error, t('common.somethingWrong'))}
         />
       ) : null}
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={8}>
-          <Card size="small">
+          <Card
+            size="small"
+            hoverable
+            variant="borderless"
+            style={{ boxShadow: token.boxShadowTertiary }}
+          >
             <Statistic
               title={t('report.totalRevenue')}
               value={data?.total_revenue ?? 0}
@@ -193,7 +198,12 @@ export const ReportsPage = () => {
           </Card>
         </Col>
         <Col xs={24} sm={8}>
-          <Card size="small">
+          <Card
+            size="small"
+            hoverable
+            variant="borderless"
+            style={{ boxShadow: token.boxShadowTertiary }}
+          >
             <Statistic
               title={t('report.ticketsSold')}
               value={data?.tickets_sold ?? 0}
@@ -202,7 +212,12 @@ export const ReportsPage = () => {
           </Card>
         </Col>
         <Col xs={24} sm={8}>
-          <Card size="small">
+          <Card
+            size="small"
+            hoverable
+            variant="borderless"
+            style={{ boxShadow: token.boxShadowTertiary }}
+          >
             <Statistic
               title={t('report.occupancy')}
               value={occupancyPercent(totalSeats, totalCapacity)}
@@ -213,11 +228,7 @@ export const ReportsPage = () => {
         </Col>
       </Row>
 
-      {/*
-        Hai con so tren dem theo hai truc khac nhau: doanh thu theo ngay TRA
-        TIEN, do lap day theo ngay SUAT CHIEU chay. Phai noi ra, khong thi nguoi
-        doc se tuong bao cao bi sai khi thay chung khong khop.
-      */}
+      {/* Revenue (by paid day) and occupancy (by show day) use different axes; say so or readers will call the mismatch a bug. */}
       <Alert
         type="info"
         showIcon
@@ -238,12 +249,7 @@ export const ReportsPage = () => {
         />
       ) : null}
 
-      <Card
-        size="small"
-        title={t('report.byMovie')}
-        style={{ marginBottom: 16 }}
-        styles={{ body: { padding: 0 } }}
-      >
+      <TableCard title={t('report.byMovie')} style={{ marginBottom: 16 }}>
         <Table<MovieRollupRow>
           rowKey="movie"
           size="small"
@@ -262,9 +268,9 @@ export const ReportsPage = () => {
             ),
           }}
         />
-      </Card>
+      </TableCard>
 
-      <Card size="small" title={t('report.byDay')} styles={{ body: { padding: 0 } }}>
+      <TableCard title={t('report.byDay')}>
         <Table<DailyAggregate>
           rowKey="report_date"
           size="small"
@@ -274,8 +280,7 @@ export const ReportsPage = () => {
           pagination={false}
           scroll={{ x: 800 }}
           expandable={{
-            // Chi mo duoc ngay thuc su co suat chieu; ngay 0 suat thi mui ten
-            // chi to ra co gi de xem ma khong co.
+            // Only days that actually ran shows expand; a 0-show day arrow would open nothing.
             rowExpandable: (row) => (row.breakdown?.showtimes?.length ?? 0) > 0,
             expandedRowRender: (row) => (
               <ShowtimeBreakdownTable showtimes={row.breakdown?.showtimes ?? []} />
@@ -316,7 +321,7 @@ export const ReportsPage = () => {
             ) : null
           }
         />
-      </Card>
+      </TableCard>
     </>
   );
 };
