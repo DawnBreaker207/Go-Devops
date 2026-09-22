@@ -158,7 +158,8 @@ func run() error {
 	reportService := service.NewReportService(repository.NewReportRepository(db), showtimeRepo,
 		paymentRepo, batchRepo, bookingRepo, location)
 
-	comboService := service.NewComboService(repository.NewComboRepository(db), repository.NewComboOrderRepository(db), bookingRepo)
+	comboService := service.NewComboService(db, repository.NewComboRepository(db), repository.NewComboOrderRepository(db), bookingRepo)
+	discountService := service.NewDiscountService(db, repository.NewDiscountRepository(db), bookingRepo)
 
 	imageStore, mediaDir := buildImageStore(cfg)
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
@@ -202,6 +203,7 @@ func run() error {
 		Media:    handlers.NewMediaHandler(mediaService, mediaDir, maxUpload),
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
 		Combo:    handlers.NewComboHandler(comboService),
+		Discount: handlers.NewDiscountHandler(discountService),
 	})
 
 	server := &http.Server{
@@ -281,6 +283,15 @@ func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 	for _, p := range registry.List() {
 		names = append(names, p.Name())
 	}
+	// An EMPTY return_redirect_url makes GET /payments/{provider}/return answer raw
+	// JSON instead of a 303 back to the frontend, so the customer pays and then
+	// lands on a JSON page with their money already taken. It is a config gap, not
+	// a code bug, and it ships empty - so say so at boot rather than at checkout.
+	if strings.TrimSpace(cfg.Payment.ReturnRedirectURL) == "" {
+		logger.Warn("payment.return_redirect_url is empty: after paying, customers get raw JSON " +
+			"instead of being sent back to the site (set PAYMENT_RETURN_REDIRECT_URL)")
+	}
+
 	if len(names) == 0 {
 		logger.Warn("no payment provider enabled: customers can not pay")
 	} else {

@@ -90,8 +90,10 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Report:   handlers.NewReportHandler(h.reports),
 		Media:    handlers.NewMediaHandler(service.NewMediaService(storage.NewLocal(mediaDir, "http://test"), 1<<20), mediaDir, 1<<20),
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
-		Combo: handlers.NewComboHandler(service.NewComboService(
+		Combo: handlers.NewComboHandler(service.NewComboService(db,
 			repository.NewComboRepository(db), repository.NewComboOrderRepository(db), repository.NewBookingRepository(db))),
+		Discount: handlers.NewDiscountHandler(service.NewDiscountService(db,
+			repository.NewDiscountRepository(db), repository.NewBookingRepository(db))),
 	})
 }
 

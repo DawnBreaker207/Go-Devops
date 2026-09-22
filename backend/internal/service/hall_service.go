@@ -20,6 +20,9 @@ type HallService interface {
 	GetByID(ctx context.Context, id string) (*dto.HallResponse, error)
 	SeatsByHall(ctx context.Context, hallID string) ([]models.Seat, error)
 	PricesByHall(ctx context.Context, hallID string) ([]models.HallPrice, error)
+	// PublicPrices is the customer-facing price list: only bookable halls, one
+	// payload, no auth. Unlike PricesByHall it returns a DTO, not models.
+	PublicPrices(ctx context.Context) (*dto.PublicPriceListResponse, error)
 	Create(ctx context.Context, req dto.HallRequest) (*dto.HallResponse, error)
 	UpdateSeat(ctx context.Context, hallID, seatID string, req dto.SeatUpdateRequest) (*dto.SeatResponse, error)
 	BulkUpdateSeats(ctx context.Context, hallID string, req dto.BulkSeatUpdateRequest) ([]dto.SeatResponse, error)
@@ -71,6 +74,33 @@ func (s *hallService) SeatsByHall(ctx context.Context, hallID string) ([]models.
 		return nil, err
 	}
 	return s.hallRepo.SeatsByHall(ctx, hallID)
+}
+
+func (s *hallService) PublicPrices(ctx context.Context) (*dto.PublicPriceListResponse, error) {
+	rows, err := s.hallRepo.PublicPriceList(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group in insertion order: the query is ORDER BY hall name, so the payload
+	// keeps that order without a second sort.
+	result := dto.PublicPriceListResponse{Halls: make([]dto.PublicHallPrices, 0, 4)}
+	index := make(map[string]int, 4)
+	for _, row := range rows {
+		at, ok := index[row.HallID]
+		if !ok {
+			index[row.HallID] = len(result.Halls)
+			at = len(result.Halls)
+			result.Halls = append(result.Halls, dto.PublicHallPrices{
+				HallID: row.HallID, HallName: row.HallName, Prices: map[string]int64{},
+			})
+		}
+		result.Halls[at].Prices[row.SeatType] = row.Price
+		if result.FromPrice == 0 || row.Price < result.FromPrice {
+			result.FromPrice = row.Price
+		}
+	}
+	return &result, nil
 }
 
 func (s *hallService) PricesByHall(ctx context.Context, hallID string) ([]models.HallPrice, error) {

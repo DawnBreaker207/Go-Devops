@@ -21,12 +21,16 @@ definitions:
         type: string
       customer:
         $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderCustomer'
+      discount_amount:
+        type: integer
       expires_at:
         type: string
       id:
         type: string
       paid_at:
         type: string
+      payable_amount:
+        type: integer
       payment:
         $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary'
       seats:
@@ -42,6 +46,12 @@ definitions:
       status_reason:
         type: string
       total_amount:
+        description: |-
+          TotalAmount is the SEAT SUBTOTAL, before any discount. The amount the
+          customer actually owes is PayableAmount below - a screen that renders
+          total_amount as "amount due" is showing the wrong number on a discounted
+          order. Both are always present (no omitempty) so the two can never be
+          confused by one of them being absent.
         type: integer
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AdminOverviewResponse:
@@ -69,6 +79,16 @@ definitions:
         type: integer
       users:
         type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ApplyDiscountRequest:
+    properties:
+      code:
+        example: WELCOME10
+        maxLength: 32
+        minLength: 1
+        type: string
+    required:
+    - code
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AuditLogResponse:
     properties:
@@ -307,6 +327,72 @@ definitions:
     required:
     - items
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboRequest:
+    properties:
+      active:
+        description: |-
+          Active defaults to TRUE when omitted: a product created from the admin
+          screen is normally meant to go on sale immediately.
+        type: boolean
+      description:
+        maxLength: 2000
+        type: string
+      image_url:
+        maxLength: 512
+        type: string
+      name:
+        example: Combo 1 - Bap ngot + 2 Pepsi
+        maxLength: 255
+        minLength: 2
+        type: string
+      price:
+        example: 89000
+        minimum: 0
+        type: integer
+    required:
+    - name
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateDiscountRequest:
+    properties:
+      active:
+        description: Omitted defaults to TRUE.
+        type: boolean
+      code:
+        example: WELCOME10
+        maxLength: 32
+        minLength: 3
+        type: string
+      description:
+        maxLength: 2000
+        type: string
+      ends_at:
+        type: string
+      kind:
+        enum:
+        - percent
+        - amount
+        example: percent
+        type: string
+      max_discount:
+        minimum: 1
+        type: integer
+      max_uses:
+        minimum: 1
+        type: integer
+      min_order:
+        minimum: 0
+        type: integer
+      starts_at:
+        type: string
+      value:
+        example: 10
+        minimum: 1
+        type: integer
+    required:
+    - code
+    - kind
+    - value
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest:
     properties:
       email:
@@ -377,6 +463,48 @@ definitions:
         type: string
     required:
     - password
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountAppliedResponse:
+    properties:
+      booking_id:
+        type: string
+      code:
+        type: string
+      discount:
+        type: integer
+      payable:
+        type: integer
+      subtotal:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse:
+    properties:
+      active:
+        type: boolean
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      ends_at:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      max_discount:
+        type: integer
+      max_uses:
+        type: integer
+      min_order:
+        type: integer
+      starts_at:
+        type: string
+      used_count:
+        type: integer
+      value:
+        type: integer
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.FailedJobAlert:
     properties:
@@ -774,12 +902,16 @@ definitions:
     properties:
       created_at:
         type: string
+      discount_amount:
+        type: integer
       expires_at:
         type: string
       id:
         type: string
       paid_at:
         type: string
+      payable_amount:
+        type: integer
       payment:
         $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary'
       showtime:
@@ -795,6 +927,12 @@ definitions:
           $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.TicketResponse'
         type: array
       total_amount:
+        description: |-
+          TotalAmount is the SEAT SUBTOTAL, before any discount. The amount the
+          customer actually owes is PayableAmount below - a screen that renders
+          total_amount as "amount due" is showing the wrong number on a discounted
+          order. Both are always present (no omitempty) so the two can never be
+          confused by one of them being absent.
         type: integer
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.OrderShowtime:
@@ -822,12 +960,16 @@ definitions:
     properties:
       created_at:
         type: string
+      discount_amount:
+        type: integer
       expires_at:
         type: string
       id:
         type: string
       paid_at:
         type: string
+      payable_amount:
+        type: integer
       payment:
         $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PaymentSummary'
       showtime:
@@ -839,6 +981,12 @@ definitions:
       status_reason:
         type: string
       total_amount:
+        description: |-
+          TotalAmount is the SEAT SUBTOTAL, before any discount. The amount the
+          customer actually owes is PayableAmount below - a screen that renders
+          total_amount as "amount due" is showing the wrong number on a discounted
+          order. Both are always present (no omitempty) so the two can never be
+          confused by one of them being absent.
         type: integer
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PayRequest:
@@ -917,6 +1065,28 @@ definitions:
         type: object
     required:
     - prices
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices:
+    properties:
+      hall_id:
+        type: string
+      hall_name:
+        type: string
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        description: Keyed by seat type, whole VND. Always four entries.
+        type: object
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicPriceListResponse:
+    properties:
+      from_price:
+        type: integer
+      halls:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices'
+        type: array
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemRequestBody:
     properties:
@@ -1388,6 +1558,48 @@ definitions:
       txn_ref:
         type: string
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateComboRequest:
+    properties:
+      active:
+        type: boolean
+      description:
+        maxLength: 2000
+        type: string
+      image_url:
+        maxLength: 512
+        type: string
+      name:
+        maxLength: 255
+        minLength: 2
+        type: string
+      price:
+        minimum: 0
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateDiscountRequest:
+    properties:
+      active:
+        type: boolean
+      description:
+        maxLength: 2000
+        type: string
+      ends_at:
+        type: string
+      max_discount:
+        minimum: 1
+        type: integer
+      max_uses:
+        minimum: 1
+        type: integer
+      min_order:
+        minimum: 0
+        type: integer
+      starts_at:
+        type: string
+      value:
+        minimum: 1
+        type: integer
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateHallRequest:
     properties:
       active:
@@ -1675,6 +1887,440 @@ paths:
       summary: Start a job now, in the background
       tags:
       - batch
+  /admin/concessions:
+    get:
+      description: Unlike the public GET /combos this is paged and INCLUDES inactive
+        products, so an operator can put one back on sale.
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Match name or description
+        in: query
+        name: search
+        type: string
+      - description: Filter on sale / off sale; omit for both
+        in: query
+        name: active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List the concession catalogue (operator)
+      tags:
+      - combos
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Add a concession product
+      tags:
+      - combos
+  /admin/concessions/{id}:
+    delete:
+      description: 'Soft delete: past combo orders still reference it, so the row
+        stays and only leaves the catalogue.'
+      parameters:
+      - description: Combo id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Retire a concession product
+      tags:
+      - combos
+    get:
+      parameters:
+      - description: Combo id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get one concession product (operator)
+      tags:
+      - combos
+    patch:
+      consumes:
+      - application/json
+      description: 'PARTIAL update: an omitted field is left alone. A body with no
+        field at all is 400/40001.'
+      parameters:
+      - description: Combo id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateComboRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ComboResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Update a concession product
+      tags:
+      - combos
+  /admin/discounts:
+    get:
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Match code or description
+        in: query
+        name: search
+        type: string
+      - description: Filter enabled/disabled; omit for both
+        in: query
+        name: active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List discount codes (admin)
+      tags:
+      - discounts
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Code
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateDiscountRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: code already exists
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create a discount code (admin)
+      tags:
+      - discounts
+  /admin/discounts/{id}:
+    delete:
+      description: 'Soft delete: orders that used it keep their link, and the code
+        string becomes reusable.'
+      parameters:
+      - description: Discount code id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Retire a discount code (admin)
+      tags:
+      - discounts
+    get:
+      parameters:
+      - description: Discount code id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get one discount code (admin)
+      tags:
+      - discounts
+    patch:
+      consumes:
+      - application/json
+      description: 'PARTIAL update. `code` and `kind` cannot be changed: either would
+        rewrite what the code meant for orders that already used it.'
+      parameters:
+      - description: Discount code id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateDiscountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Update a discount code (admin)
+      tags:
+      - discounts
   /admin/hall-templates:
     get:
       produces:
@@ -3941,6 +4587,108 @@ paths:
       summary: Settle a paid booking
       tags:
       - orders
+  /orders/{id}/discount:
+    delete:
+      description: Customer only. Gives the code's redemption back.
+      parameters:
+      - description: Booking id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountAppliedResponse'
+              type: object
+        "400":
+          description: no discount to remove
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: no longer pending
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Remove the discount code from a pending order
+      tags:
+      - orders
+    post:
+      consumes:
+      - application/json
+      description: Customer only. `subtotal` stays the seat total; `payable` is what
+        the gateway will charge. Every refusal is 400/40001 with a distinct message,
+        and an unknown code answers the same message as a disabled one so the endpoint
+        cannot be used to enumerate codes.
+      parameters:
+      - description: Booking id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Code
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ApplyDiscountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountAppliedResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: the order belongs to another user
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: already discounted, or no longer pending
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Apply a discount code to a pending order
+      tags:
+      - orders
   /orders/{id}/pay:
     post:
       consumes:
@@ -4247,6 +4995,31 @@ paths:
       summary: List the payment providers a customer can choose
       tags:
       - payments
+  /pricing:
+    get:
+      description: 'Seat-type prices per bookable hall, plus the cheapest seat anywhere.
+        No auth: this is the customer price page. Only halls a customer can actually
+        book appear — active, and with all four seat types priced, the same gate the
+        customer showtime query uses.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicPriceListResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Public ticket price list
+      tags:
+      - halls
   /shows/{id}/seats:
     get:
       parameters:

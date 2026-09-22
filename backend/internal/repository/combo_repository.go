@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -20,6 +21,20 @@ type ComboRepository interface {
 	// round trip; combos that are missing, soft-deleted or inactive are simply
 	// absent from the returned map.
 	FindActiveByIDs(ctx context.Context, ids []string) (map[string]models.Combo, error)
+
+	// List is the operator view: paged, name/description search, and it shows
+	// INACTIVE products too (ListActive above deliberately never does).
+	// active == nil means no filter.
+	List(ctx context.Context, page, pageSize int, search string, active *bool) ([]models.Combo, int64, error)
+	// The three writes take the caller's tx so the service can put the audit row
+	// in the same transaction (see .claude/rules/service-repo-layer.md).
+	Create(ctx context.Context, tx *gorm.DB, combo *models.Combo) error
+	// Update writes only the columns named in `fields`, so a partial request can
+	// never blank the columns it did not mention.
+	Update(ctx context.Context, tx *gorm.DB, id string, fields map[string]any) error
+	// SoftDelete keeps past combo_order_items readable (they snapshot name and
+	// price, but the FK still points here).
+	SoftDelete(ctx context.Context, tx *gorm.DB, id string) error
 }
 
 type comboRepository struct {
@@ -48,6 +63,62 @@ func (r *comboRepository) FindByID(ctx context.Context, id string) (*models.Comb
 		return nil, fmt.Errorf("find combo: %w", err)
 	}
 	return &combo, nil
+}
+
+func (r *comboRepository) List(ctx context.Context, page, pageSize int, search string, active *bool) ([]models.Combo, int64, error) {
+	// Built twice (count + page) from one filter helper so the two can never drift.
+	filter := func(tx *gorm.DB) *gorm.DB {
+		if search != "" {
+			pattern := "%" + strings.ToLower(search) + "%"
+			tx = tx.Where("LOWER(name) LIKE ? OR LOWER(description) LIKE ?", pattern, pattern)
+		}
+		if active != nil {
+			tx = tx.Where("active = ?", *active)
+		}
+		return tx
+	}
+
+	var total int64
+	if err := filter(r.db.WithContext(ctx).Model(&models.Combo{})).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count combos: %w", err)
+	}
+
+	var combos []models.Combo
+	if err := filter(r.db.WithContext(ctx)).
+		Order("name").Limit(pageSize).Offset((page - 1) * pageSize).
+		Find(&combos).Error; err != nil {
+		return nil, 0, fmt.Errorf("list combos: %w", err)
+	}
+	return combos, total, nil
+}
+
+func (r *comboRepository) Create(ctx context.Context, tx *gorm.DB, combo *models.Combo) error {
+	// Writes Active exactly as given, including false — see the comment on
+	// models.Combo.Active for why that field carries no `default:` tag.
+	if err := tx.WithContext(ctx).Create(combo).Error; err != nil {
+		return fmt.Errorf("create combo: %w", err)
+	}
+	return nil
+}
+
+func (r *comboRepository) Update(ctx context.Context, tx *gorm.DB, id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	// Model(&Combo{}) + Where, not Updates(struct): a map write is the only way
+	// to set a column to its zero value (price 0, active false) on purpose.
+	if err := tx.WithContext(ctx).Model(&models.Combo{}).
+		Where("id = ?", id).Updates(fields).Error; err != nil {
+		return fmt.Errorf("update combo: %w", err)
+	}
+	return nil
+}
+
+func (r *comboRepository) SoftDelete(ctx context.Context, tx *gorm.DB, id string) error {
+	if err := tx.WithContext(ctx).Where("id = ?", id).Delete(&models.Combo{}).Error; err != nil {
+		return fmt.Errorf("delete combo: %w", err)
+	}
+	return nil
 }
 
 func (r *comboRepository) FindActiveByIDs(ctx context.Context, ids []string) (map[string]models.Combo, error) {

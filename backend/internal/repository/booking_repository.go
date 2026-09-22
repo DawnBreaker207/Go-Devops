@@ -78,19 +78,21 @@ type ShowtimeInfoRow struct {
 // AdminOrderRow: one operator-list booking (account, showtime, carried payment attempt).
 // Nullable text columns are plain strings, like BookingHeader.
 type AdminOrderRow struct {
-	ID            string     `gorm:"column:id"`
-	UserID        string     `gorm:"column:user_id"`
-	ShowtimeID    string     `gorm:"column:showtime_id"`
-	Status        string     `gorm:"column:status"`
-	StatusReason  string     `gorm:"column:status_reason"`
-	TotalAmount   int64      `gorm:"column:total_amount"`
-	SoldVia       string     `gorm:"column:sold_via"`
-	CustomerName  string     `gorm:"column:customer_name"`
-	CustomerPhone string     `gorm:"column:customer_phone"`
-	ExpiresAt     *time.Time `gorm:"column:expires_at"`
-	PaidAt        *time.Time `gorm:"column:paid_at"`
-	CreatedAt     time.Time  `gorm:"column:created_at"`
-	Seats         int        `gorm:"column:seats"`
+	ID           string `gorm:"column:id"`
+	UserID       string `gorm:"column:user_id"`
+	ShowtimeID   string `gorm:"column:showtime_id"`
+	Status       string `gorm:"column:status"`
+	StatusReason string `gorm:"column:status_reason"`
+	TotalAmount  int64  `gorm:"column:total_amount"`
+	// Undiscounted subtotal above; what the customer owes is TotalAmount-DiscountAmount.
+	DiscountAmount int64      `gorm:"column:discount_amount"`
+	SoldVia        string     `gorm:"column:sold_via"`
+	CustomerName   string     `gorm:"column:customer_name"`
+	CustomerPhone  string     `gorm:"column:customer_phone"`
+	ExpiresAt      *time.Time `gorm:"column:expires_at"`
+	PaidAt         *time.Time `gorm:"column:paid_at"`
+	CreatedAt      time.Time  `gorm:"column:created_at"`
+	Seats          int        `gorm:"column:seats"`
 
 	Email    string `gorm:"column:email"`
 	FullName string `gorm:"column:full_name"`
@@ -165,6 +167,11 @@ type BookingRepository interface {
 	ExpireBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
 	// ExtendBookingExpiry moves a pending unpaid booking's expiry; concurrent changes make it a no-op.
 	ExtendBookingExpiry(ctx context.Context, tx *gorm.DB, id string, expiresAt time.Time) (int64, error)
+	// SetDiscount writes (or clears, with a nil codeID and 0) the discount on a
+	// booking. The WHERE pins status=pending AND paid_at IS NULL, so a discount
+	// can never be attached to an order whose money has already moved; 0 rows
+	// means the order changed underneath and the caller must refuse.
+	SetDiscount(ctx context.Context, tx *gorm.DB, id string, codeID *string, amount int64) (int64, error)
 	SetPaid(ctx context.Context, tx *gorm.DB, id, paymentID string) (int64, error)
 	ConfirmBooking(ctx context.Context, tx *gorm.DB, id string) (int64, error)
 	RefundBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
@@ -415,6 +422,23 @@ func (r *bookingRepository) VoidTicketsForBooking(ctx context.Context, tx *gorm.
 		models.TicketVoid, bookingID, models.TicketIssued)
 	if res.Error != nil {
 		return 0, fmt.Errorf("void tickets: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *bookingRepository) SetDiscount(ctx context.Context, tx *gorm.DB, id string, codeID *string, amount int64) (int64, error) {
+	// paid_at IS NULL as well as status=pending: an order can be paid for a
+	// moment before it flips to confirmed, and re-pricing it in that window would
+	// change what the customer owes after they already paid.
+	res := r.conn(ctx, tx).Model(&models.Booking{}).
+		Where("id = ? AND status = ? AND paid_at IS NULL", id, models.BookingPending).
+		Updates(map[string]any{
+			"discount_code_id": codeID,
+			"discount_amount":  amount,
+			"updated_at":       time.Now(),
+		})
+	if res.Error != nil {
+		return 0, fmt.Errorf("set booking discount: %w", res.Error)
 	}
 	return res.RowsAffected, nil
 }
@@ -874,7 +898,7 @@ func (r *bookingRepository) AdminOrderList(ctx context.Context, query dto.AdminO
 	rows := make([]AdminOrderRow, 0, query.PageSize)
 	if err := tx.
 		Select(`bookings.id, bookings.user_id, bookings.showtime_id, bookings.status,
-			bookings.status_reason, bookings.total_amount, bookings.sold_via,
+			bookings.status_reason, bookings.total_amount, bookings.discount_amount, bookings.sold_via,
 			bookings.customer_name, bookings.customer_phone, bookings.expires_at,
 			bookings.paid_at, bookings.created_at,
 			(SELECT COUNT(*) FROM booking_seats bs WHERE bs.booking_id = bookings.id) AS seats,

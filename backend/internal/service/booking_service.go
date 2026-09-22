@@ -938,10 +938,13 @@ func adminOrderItem(row *repository.AdminOrderRow) dto.AdminOrderListItem {
 			ShowtimeID:   row.ShowtimeID,
 			Status:       row.Status,
 			StatusReason: row.StatusReason,
-			TotalAmount:  row.TotalAmount,
-			CreatedAt:    row.CreatedAt,
-			ExpiresAt:    row.ExpiresAt,
-			PaidAt:       row.PaidAt,
+			// Same rule as orderStatus: total is the subtotal, payable is the charge.
+			TotalAmount:    row.TotalAmount,
+			DiscountAmount: row.DiscountAmount,
+			PayableAmount:  row.TotalAmount - row.DiscountAmount,
+			CreatedAt:      row.CreatedAt,
+			ExpiresAt:      row.ExpiresAt,
+			PaidAt:         row.PaidAt,
 			Showtime: &dto.OrderShowtime{
 				MovieID:    row.MovieID,
 				MovieTitle: row.MovieTitle,
@@ -1450,10 +1453,14 @@ func orderStatus(b *models.Booking, pay *models.Payment, show *repository.Showti
 		ShowtimeID:   b.ShowtimeID,
 		Status:       b.Status,
 		StatusReason: derefString(b.StatusReason),
-		TotalAmount:  b.TotalAmount,
-		CreatedAt:    b.CreatedAt,
-		ExpiresAt:    b.ExpiresAt,
-		PaidAt:       b.PaidAt,
+		// TotalAmount is the undiscounted seat subtotal; PayableAmount is what
+		// the gateway charges. See models.Booking.Payable.
+		TotalAmount:    b.TotalAmount,
+		DiscountAmount: b.DiscountAmount,
+		PayableAmount:  b.Payable(),
+		CreatedAt:      b.CreatedAt,
+		ExpiresAt:      b.ExpiresAt,
+		PaidAt:         b.PaidAt,
 	}
 	if show != nil {
 		now := time.Now()

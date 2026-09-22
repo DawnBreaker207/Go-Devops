@@ -75,7 +75,7 @@ type PriceRequest struct {
 
 type SeatUpdateRequest struct {
 	SeatType string `json:"seat_type" binding:"omitempty,oneof=standard vip couple recliner"`
-	IsGap *bool `json:"is_gap"`
+	IsGap    *bool  `json:"is_gap"`
 }
 
 // MergeSeatsRequest turns two adjacent standards into one couple (col_span=2); right seat deleted.
@@ -189,4 +189,22 @@ func RowLabel(n int) string {
 		s[i], s[j] = s[j], s[i]
 	}
 	return string(s)
+}
+
+// PublicHallPrices is one hall's price list for the public price page. Only
+// halls a customer can actually book appear (active, and all four seat types
+// priced) — the same gate the customer showtime query applies.
+type PublicHallPrices struct {
+	HallID   string `json:"hall_id"`
+	HallName string `json:"hall_name"`
+	// Keyed by seat type, whole VND. Always four entries.
+	Prices map[string]int64 `json:"prices"`
+}
+
+// PublicPriceListResponse is the whole price page in one payload. `from_price`
+// is the cheapest seat a customer can buy anywhere, which is the number a
+// "tickets from X" headline should use.
+type PublicPriceListResponse struct {
+	FromPrice int64              `json:"from_price"`
+	Halls     []PublicHallPrices `json:"halls"`
 }

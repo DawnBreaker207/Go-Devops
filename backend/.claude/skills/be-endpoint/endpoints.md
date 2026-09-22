@@ -1,24 +1,50 @@
 # BackEnd-CP endpoint reference
 
-Generated 2026-09-18. The **Guard column is parsed directly from `internal/router/router.go`** (group nesting +
-per-route middleware), not from prose. Request/response/notes come from the handlers and DTOs.
-`docs/swagger.json` was regenerated on 2026-09-18 and now covers 72 of the 78 `/api/v1` operations; the 6
-gaps are aliases with no `@Router`. Still treat `router.go` as the only complete list.
+Generated 2026-09-18, **re-verified against the source 2026-09-22** after a large feature pull. The **Guard
+column is parsed directly from `internal/router/router.go`** (group nesting + per-route middleware), not from
+prose. Request/response/notes come from the handlers and DTOs.
 
-**83 distinct METHOD+path rows.** `router.go` holds 82 registration statements; `v1.Match` (GET+POST on the
-payment IPN) yields two rows, and `engine.Static` counts once as `GET|HEAD /media/*filepath`.
+**108 `/api/v1` operations** as of 2026-09-22, up from 78. `docs/swagger.json` documents **102** of them, so
+**6 are still undocumented** — they remain the `@Router`-less aliases listed at the bottom of this file.
+Treat `router.go` as the only complete list, always.
+
+**13 of those 108 were added on 2026-09-22 after the pull** and are marked `NEW 09-22b` below: five for the
+concession catalogue (`/admin/concessions`, operator scope) and seven for discount codes (five admin-only under
+`/admin/discounts`, plus `POST` and `DELETE /orders/:id/discount` for customers), and the public
+`GET /pricing`.
+
+The 2026-09-22 pull added **17 operations** that this file did not describe; they are marked `NEW 09-22` in
+their sections below. Four new schema migrations came with them (`000006_session_devices`,
+`000007_catalog_lifecycle`, `000008_combo`, `000009_notification_preferences`), so a database created before
+that pull is **four migrations behind** and every one of those endpoints will fail against it.
 
 ## Re-verify these numbers before trusting them
 
 Every count in the config is reproducible. Run these from the `BackEnd-CP` root; the expected values held on
-2026-09-18. If one disagrees, this file is stale — fix it before building on it.
+**2026-09-22**. If one disagrees, this file is stale — fix it before building on it.
 
 ```bash
-grep -cE '\.(GET|POST|PUT|PATCH|DELETE)\(' internal/router/router.go   # 79  \_ 82 statements
-grep -cE '\.(Match|Any|Static)\(' internal/router/router.go            #  3  /  = 83 rows (Match counts twice)
-find . -name '*.go' -not -path './docs/*' | wc -l                      # 144 Go files
+# Full operation list, group prefixes resolved. This is the check that matters.
+python3 - <<'EOF'
+import re
+src = open('internal/router/router.go').read()
+pre = {'v1':'/api/v1','auth':'/api/v1/auth','public':'/api/v1','protected':'/api/v1',
+       'movies':'/api/v1/movies','catalog':'/api/v1/admin','orders':'/api/v1/orders',
+       'tickets':'/api/v1/tickets','comboOrders':'/api/v1/combo-orders','staff':'/api/v1/staff',
+       'halls':'/api/v1/halls','admin':'/api/v1/admin'}
+pat = re.compile(r'\b(\w+)\.(GET|POST|PUT|PATCH|DELETE|Match)\(\s*(\[\][^)]*?\}\s*,\s*)?"([^"]*)"')
+ops = set()
+for m in pat.finditer(src):
+    g, v, path = m.group(1), m.group(2), m.group(4)
+    if g not in pre: continue
+    full = (pre[g] + path).replace('//', '/').rstrip('/') or pre[g]
+    ops |= {('GET', full), ('POST', full)} if v == 'Match' else {(v, full)}
+print(len([o for o in ops if o[1].startswith('/api/v1')]))   # 95 on 2026-09-22
+EOF
+find . -name '*.go' -not -path './docs/*' | wc -l                      # 153 Go files
 grep -cE '^\s*Err[A-Za-z0-9]+\s*=\s*(BadRequest|Validation|Unauthorized|TokenExpired|Forbidden|NotFound|Conflict|PayloadTooLarge|PreconditionRequired|TooManyRequests|Internal|BadGateway|ServiceUnavailable)\(' pkg/errors/errors.go   # 52
-python3 -c "import json;d=json.load(open('docs/swagger.json'));print(sum(len([k for k in v if k in ('get','post','put','patch','delete')]) for v in d['paths'].values()))"   # 72 documented vs 78 real -> 6 aliases
+python3 -c "import json;d=json.load(open('docs/swagger.json'));print(sum(len([k for k in v if k in ('get','post','put','patch','delete')]) for v in d['paths'].values()))"   # 89 documented vs 95 real -> 6 aliases
+ls migrations/schema/*.up.sql | wc -l                                  # 9 migrations
 ```
 
 The Guard column is produced by walking the group nesting in `router.go` and unioning each group's `.Use(...)`
@@ -100,7 +126,7 @@ Notes:
 - `POST /api/v1/auth/reset-password` — Single-use token (sha256 of lowercased value); on success revokes every refresh token of the user .
 - `POST /api/v1/auth/terms-accept` — Re-verifies credentials, stores accepted terms version, then issues a token pair. Swagger's documented 428 is never returned.
 
-## /api/v1/users  (4)
+## /api/v1/users  (9)
 
 | Method | Path | Guard | Request | Response `data` | Statuses \| codes |
 |---|---|---|---|---|---|
@@ -108,6 +134,11 @@ Notes:
 | `GET` | `/api/v1/users/me` | jwt | - | dto.UserResponse | 200 401 403 404 500 503 \| 40100 40101 40300 40400 50300 |
 | `PUT` | `/api/v1/users/me` | jwt audit:users.update_profile | dto.UpdateProfileRequest (json body: full_name 2-255 required, phone optional max 20) | dto.UserResponse | 200 400 401 403 404 413 500 503 \| 40001 40100 40101 40300 40400 41300 |
 | `PUT` | `/api/v1/users/me/password` | jwt audit:users.change_password | dto.ChangePasswordRequest (json body: current_password, new_password 6-72) | dto.TokenResponse | 200 400 401 403 404 413 500 503 \| 40001 40100 40101 40300 40400 41300 50000 |
+| `GET` | `/api/v1/users/me/sessions` | jwt — **NEW 09-22** | dto.SessionListQuery (query: device_id omitempty max=255) | `[]dto.SessionResponse` — **BARE ARRAY** | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
+| `DELETE` | `/api/v1/users/me/sessions/:id` | jwt audit:users.revoke_session — **NEW 09-22** | - (path param id) | - | 200 401 403 404 500 503 \| 40100 40101 40300 40400 |
+| `GET` | `/api/v1/users/me/transactions` | jwt — **NEW 09-22** | dto.PageQuery | response.Paged{items=[]dto.TransactionResponse} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
+| `GET` | `/api/v1/users/me/notification-preferences` | jwt — **NEW 09-22** | - | dto.NotificationPreferenceResponse (booking_reminders, promo_offers — both plain bool, both REQUIRED) | 200 401 403 500 503 \| 40100 40101 40300 |
+| `PUT` | `/api/v1/users/me/notification-preferences` | jwt audit:users.update_notification_preferences — **NEW 09-22** | dto.UpdateNotificationPreferenceRequest — replaces BOTH flags at once | dto.NotificationPreferenceResponse | 200 400 401 403 413 500 503 \| 40001 40100 40101 40300 41300 |
 
 Notes:
 
@@ -115,6 +146,16 @@ Notes:
 - `GET /api/v1/users/me` — Auth re-reads account status (30s cache); a role change since the token was minted answers 401.
 - `PUT /api/v1/users/me` — Only full_name and phone are writable; empty phone clears it. Audit row written inside the transaction .
 - `PUT /api/v1/users/me/password` — Revokes every other session and returns a fresh token pair; the client must replace both stored tokens.
+- `GET /api/v1/users/me/sessions` — **Bare array, not paged.** `is_current` is true ONLY when the caller passes
+  its own `device_id` and it matches; omit the param and every row reads `is_current: false`. `user_agent` and
+  `last_used_at` are omitempty.
+- `DELETE /api/v1/users/me/sessions/:id` — Revokes one device's refresh-token family. Revoking your OWN session
+  does not invalidate the access token you are holding; it dies at its next refresh (TTL 900s).
+- `GET /api/v1/users/me/transactions` — Payment history scoped to the caller. Carries `booking_id` and
+  `showtime_id` per row, so it links back without a second call. `paid_amount` / `paid_at` / `refunded_at` are
+  omitempty pointers — absent, not zero.
+- `PUT /api/v1/users/me/notification-preferences` — Replaces both flags; there is no partial update. Both false
+  is a legal state ("send me nothing").
 
 ## /api/v1/movies  (6)
 
@@ -135,6 +176,16 @@ Notes:
 - `GET /api/v1/movies/:id` — Anonymous read cached in Redis under movie:<id>
 - `PUT /api/v1/movies/:id` — All MovieRequest fields required each call; duration change blocked while any showtime (even closed) is still to come
 - `GET /api/v1/movies/:id/showtimes` — Movie not "showing" returns empty array ; only open, not-yet-started shows in halls priced for all 4 seat types
+
+## /api/v1/pricing  (1)  — NEW 09-22b
+
+| Method | Path | Guard | Request | Response `data` | Statuses \| codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/v1/pricing` | public rl:public optional-auth | - | dto.PublicPriceListResponse (`from_price` + `halls[]`, each with all 4 seat-type prices) | 200 429 500 503 \| 42900 50000 50300 |
+
+Notes: the only ANONYMOUS read of `hall_prices`. Applies the same gate as the customer showtime query —
+`active = TRUE` and all four seat types priced above 0 — so a hall nobody can book never appears. An empty
+`halls` therefore means "nothing is bookable", not "prices are unconfigured", and `from_price` is 0 there.
 
 ## /api/v1/showtimes  (1)
 
@@ -182,7 +233,7 @@ Notes:
 - `GET /api/v1/events/shows/:id` — Seat updates debounced ~100ms, ": ping" every 15s, per-write 10s deadline, stream force-closed after 30min - re-token and reconnect.
 - `GET /api/v1/events/token` — Token TTL 30s , reusable for reconnects, bound to showtime+hall. stream_url is prebuilt with the token.
 
-## /api/v1/orders  (8)
+## /api/v1/orders  (12)
 
 | Method | Path | Guard | Request | Response `data` | Statuses \| codes |
 |---|---|---|---|---|---|
@@ -194,6 +245,10 @@ Notes:
 | `GET` | `/api/v1/orders/:id/status` | jwt+customer | - (path param id only) | dto.OrderStatusResponse | 200 401 403 404 500 503 \| 40100 40101 40300 50000 50300 |
 | `GET` | `/api/v1/orders/:id/tickets` | jwt+customer | - (path param id only) | dto.OrderDetailResponse | 200 401 403 404 500 503 \| 40100 40101 40300 50000 50300 |
 | `POST` | `/api/v1/orders/hold` | jwt+customer rl:hold audit:orders.hold | dto.HoldRequest (json body: show_id required, seat_ids required min=1, idempotency_key omitempty min=1 max=128) | dto.HoldResponse | 201 400 401 403 404 409 413 429 500 503 \| 40001 40100 40101 40300 41300 42900 50000 50300 |
+| `POST` | `/api/v1/orders/init` | jwt+customer rl:hold audit:orders.init — **NEW 09-22** | dto.InitRequest (json body: show_id required) | dto.InitResponse (booking_id, showtime_id, expires_at, **ttl_seconds**, **reused**) | 200 400 401 403 404 409 429 500 503 \| 40001 40100 40101 40300 40400 40900 42900 |
+| `POST` | `/api/v1/orders/:id/refresh` | jwt+customer rl:hold audit:orders.refresh — **NEW 09-22** | - (path param id) | dto.RefreshResponse (the hold's new deadline) | 200 401 403 404 409 429 500 503 \| 40100 40101 40300 40400 40900 42900 |
+| `POST` | `/api/v1/orders/:id/discount` | jwt+customer audit:orders.apply_discount — **NEW 09-22b** | dto.ApplyDiscountRequest (json body: code required 1-32, matched UPPERCASE) | dto.DiscountAppliedResponse (booking_id, code, **subtotal**, discount, **payable**) | 200 400 401 403 404 409 500 503 \| 40001 40100 40101 40300 40400 40900 |
+| `DELETE` | `/api/v1/orders/:id/discount` | jwt+customer audit:orders.remove_discount — **NEW 09-22b** | - (path param id) | dto.DiscountAppliedResponse (discount 0, payable back to subtotal) | 200 400 401 403 404 409 500 503 \| 40001 40100 40101 40300 40400 40900 |
 
 Notes:
 
@@ -205,16 +260,66 @@ Notes:
 - `GET /api/v1/orders/:id/status` — Reconciles with the provider on every call (may settle the booking); poll this while waiting for payment.
 - `GET /api/v1/orders/:id/tickets` — Alias: identical handler and full payload as GET /api/v1/orders/:id, not a tickets-only array.
 - `POST /api/v1/orders/hold` — 201 not 200. Idempotency-key body field. One pending hold per user+show; replacing keeps old expires_at. TTL 10min default.
+- `POST /api/v1/orders/init` — **Opens a pending order BEFORE any seat is picked**, which is why the booking
+  screen can show a live countdown on first paint. It REUSES the caller's existing pending order for the same
+  show rather than making a second one (`reused: true` says so), under the same lock order as a hold
+  (user-show, user, clock, showtime). Refuses with `ErrShowtimeClosed` when the showtime is not `open`, has
+  already started, or its movie is not `showing` — so a stale link cannot open an order.
+  `ttl_seconds` exists so the client can run a ticker without doing clock arithmetic against a server
+  timestamp, which is the bug this avoids: the same instant arrives with different offsets from different
+  endpoints.
+- `POST /api/v1/orders/:id/refresh` — Heartbeat that extends a pending hold. **Ownership failure here is 403
+  `"this order belongs to another user"`, NOT 404** — the opposite choice from `GET /tickets/:id/qr`, which
+  hides existence behind a 404. Do not assume one convention across the API. Also 409 (`ErrBookingNotPending`)
+  once the order is paid or settled.
 
-## /api/v1/tickets  (1)
+## /api/v1/tickets  (2)
 
 | Method | Path | Guard | Request | Response `data` | Statuses \| codes |
 |---|---|---|---|---|---|
 | `POST` | `/api/v1/tickets/:id/redeem` | jwt+staff/admin audit:staff.redeem_ticket | dto.RedeemRequestBody (json body: showtime_id required) + path id = ticket id OR QR code | dto.RedeemResponse (status, ticket_id, showtime_id, movie_title, age_rating, hall_name, seat_label, start_at, checkin_opens_at, checkin_closes_at) | 200 400 401 403 413 500 503 \| 40001 40100 40101 40300 41300 50000 50300 |
+| `GET` | `/api/v1/tickets/:id/qr` | **jwt only — NO RequireRoles** — **NEW 09-22** | - (path param id = ticket id) | dto.TicketQRResponse (ticket_id, code, **qr_base64** — a base64 PNG, all three plain/REQUIRED) | 200 401 403 404 500 503 \| 40100 40101 40300 40400 50000 |
 
 Notes:
 
 - `POST /api/v1/tickets/:id/redeem` — Check-in gate: refusals are 200 with a verdict, not HTTP errors. Window default -30min/+20min around start_at.
+- `GET /api/v1/tickets/:id/qr` — **The route carries no role guard; ownership is enforced in the SERVICE.**
+  `bookingService.TicketQR` compares `row.UserID` against the caller and, for a non-staff caller looking at
+  someone else's ticket, returns **`ErrTicketNotFound` (404) rather than 403** — deliberately, so the API never
+  confirms that another user's ticket exists. Staff and admin may read any ticket. The server renders the PNG
+  (`GenerateQRPNG(row.Code)`) and hands back base64, so the client does not need a QR library; `code` is still
+  returned for a text fallback.
+
+## /api/v1/combos  (1)  — NEW 09-22
+
+| Method | Path | Guard | Request | Response `data` | Statuses \| codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/v1/combos` | **public** (rl:public + OptionalAuth) | - | `[]dto.ComboResponse` — **BARE ARRAY** | 200 401 429 500 503 \| 40100 42900 50300 |
+
+Notes:
+
+- `GET /api/v1/combos` — The concession catalogue behind step 2 of the booking wizard. Bare array, not paged.
+  `description` and `image_url` are omitempty; `id`, `name`, `price` (int64 whole VND) and `active` are always
+  present.
+- **There is NO write path for this catalogue.** It reads the `concession_items` table (created by
+  `000008_combo`), for which there is no admin endpoint and no seed file. On a fresh database the array is
+  empty, so the combo step renders with nothing to choose, and the only way to populate it today is direct
+  SQL. Treat that as a known gap, not a bug to chase in the frontend.
+
+## /api/v1/combo-orders  (2)  — NEW 09-22
+
+| Method | Path | Guard | Request | Response `data` | Statuses \| codes |
+|---|---|---|---|---|---|
+| `POST` | `/api/v1/combo-orders` | jwt (**no RequireRoles**) audit:combo_orders.create | dto.CreateComboOrderRequest (json: `booking_id` omitempty uuid, `items` required min=1 dive of {combo_id required uuid, quantity required min=1 max=20}) | the placed order with priced lines (`[]dto.ComboOrderItemResponse`: combo_id, combo_name, quantity, unit_price, subtotal) | 200/201 400 401 403 404 413 500 503 \| 40001 40100 40101 40300 40400 41300 |
+| `GET` | `/api/v1/combo-orders/me` | jwt (**no RequireRoles**) | dto.PageQuery | the caller's own combo orders | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
+
+Notes:
+
+- A combo order is **independent of the ticket booking**. `booking_id` is an optional correlation only ("pick up
+  with your tickets"); the DTO comment is explicit that a combo order never touches the booking. So it does not
+  extend a hold, does not appear in the booking total, and is not covered by the booking's payment.
+- Line prices are resolved server-side from the catalogue; the client never sends a price.
+- Neither route is customer-only, unlike the `/orders` tree — any signed-in role can place one.
 
 ## /api/v1/payments  (4)
 
@@ -258,13 +363,23 @@ Notes:
 - `GET /api/v1/staff/overview` — One call replacing /staff/dashboard + /staff/boxoffice/day; awaiting_checkin = sum(sold - checked_in).
 - `GET /api/v1/staff/showtimes/:id/tickets` — Plain array, not paginated. status=issued means still waiting at the gate. No ticket code is returned.
 
-## /api/v1/admin  (28)
+## /api/v1/admin  (46)
 
 | Method | Path | Guard | Request | Response `data` | Statuses \| codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/v1/admin/audit-logs` | jwt+admin | dto.AuditLogListQuery (query; embeds dto.PageQuery) - | response.Paged{items: []dto.AuditLogResponse, meta} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 50000 50300 |
 | `GET` | `/api/v1/admin/batch/jobs` | jwt+admin | dto.PageQuery (query: page, page_size, search) - | response.Paged{items: []models.BatchJob, meta} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 50000 50300 |
 | `POST` | `/api/v1/admin/batch/jobs/:name/run` | jwt+admin audit:admin.run_job | - (job name is the :name path param; no body read) | gin.H{job, run_id, status:"running", triggered_by:"manual"} | 202 404 409 401 403 500 503 \| 40100 40101 40300 40400 40900 50000 50300 |
+| `GET` | `/api/v1/admin/concessions` | jwt+admin/staff — **NEW 09-22b** | dto.AdminComboListQuery (embeds PageQuery; `active` is a Go POINTER, omit for both) | response.Paged{items=[]dto.ComboResponse} — **includes INACTIVE**, unlike public `GET /combos` | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
+| `GET` | `/api/v1/admin/concessions/:id` | jwt+admin/staff — **NEW 09-22b** | - (path param id) | dto.ComboResponse | 200 401 403 404 500 503 \| 40100 40101 40300 40400 |
+| `POST` | `/api/v1/admin/concessions` | jwt+admin/staff audit:admin.create_concession — **NEW 09-22b** | dto.CreateComboRequest (name 2-255, price>=0, image_url omitempty url, `active` omitted = TRUE) | dto.ComboResponse (201) | 201 400 401 403 413 500 503 \| 40001 40100 40101 40300 41300 |
+| `PATCH` | `/api/v1/admin/concessions/:id` | jwt+admin/staff audit:admin.update_concession — **NEW 09-22b** | dto.UpdateComboRequest — **PARTIAL**, all pointers; a body with no field is 400/40001 "nothing to update" | dto.ComboResponse | 200 400 401 403 404 500 503 \| 40001 40100 40101 40300 40400 |
+| `DELETE` | `/api/v1/admin/concessions/:id` | jwt+admin/staff audit:admin.delete_concession — **NEW 09-22b** | - (path param id) | **204, EMPTY BODY, no envelope** (soft delete) | 204 401 403 404 500 503 \| 40100 40101 40300 40400 |
+| `GET` | `/api/v1/admin/discounts` | jwt+**admin only** — **NEW 09-22b** | dto.DiscountListQuery (embeds PageQuery; `active` pointer) | response.Paged{items=[]dto.DiscountCodeResponse} | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
+| `GET` | `/api/v1/admin/discounts/:id` | jwt+**admin only** — **NEW 09-22b** | - (path param id) | dto.DiscountCodeResponse | 200 401 403 404 500 503 \| 40100 40101 40300 40400 |
+| `POST` | `/api/v1/admin/discounts` | jwt+**admin only** audit:admin.create_discount — **NEW 09-22b** | dto.CreateDiscountRequest (code 3-32 stored UPPERCASE, kind oneof=percent amount, value>=1, max_discount percent-only, min_order, starts_at/ends_at, max_uses) | dto.DiscountCodeResponse (201) | 201 400 401 403 409 413 500 503 \| 40001 40100 40101 40300 40900 41300 |
+| `PATCH` | `/api/v1/admin/discounts/:id` | jwt+**admin only** audit:admin.update_discount — **NEW 09-22b** | dto.UpdateDiscountRequest — PARTIAL; **`code` and `kind` are NOT accepted** (changing either rewrites what past orders meant) | dto.DiscountCodeResponse | 200 400 401 403 404 500 503 \| 40001 40100 40101 40300 40400 |
+| `DELETE` | `/api/v1/admin/discounts/:id` | jwt+**admin only** audit:admin.delete_discount — **NEW 09-22b** | - (path param id) | **204, EMPTY BODY** (soft delete; the code string becomes reusable) | 204 401 403 404 500 503 \| 40100 40101 40300 40400 |
 | `GET` | `/api/v1/admin/hall-templates` | jwt+admin/staff | - | []dto.HallTemplateResponse | 200 401 403 503 500 \| 40100 40101 40300 50000 50300 |
 | `GET` | `/api/v1/admin/halls` | jwt+admin/staff | dto.PageQuery (query: page, page_size<=100, search) | response.Paged{items=[]dto.HallResponse} | 200 400 401 403 503 500 \| 40001 40100 40101 40300 50000 50300 |
 | `POST` | `/api/v1/admin/halls` | jwt+admin/staff audit:admin.create_hall | dto.HallRequest (json body) | dto.HallResponse (201 Created) | 201 400 409 401 403 413 503 500 \| 40001 40100 40101 40300 40900 41300 50000 50300 |
@@ -292,6 +407,12 @@ Notes:
 | `POST` | `/api/v1/admin/users` | jwt+admin audit:admin.create_user | dto.CreateUserRequest (json body: email, password 6-72, full_name 2-255, role oneof staff\|admin) | dto.UserResponse | 201 400 401 403 409 413 500 503 \| 40001 40100 40101 40300 40900 41300 50000 |
 | `PATCH` | `/api/v1/admin/users/:id` | jwt+admin audit:admin.update_user | dto.UpdateUserRequest (json body: active *bool and/or role *string oneof customer\|staff\|admin) | dto.UserResponse | 200 400 401 403 404 409 413 500 503 \| 40001 40100 40101 40300 40400 40900 41300 |
 | `PUT` | `/api/v1/admin/users/:id` | jwt+admin audit:admin.update_user | dto.UpdateUserRequest (json body, same as PATCH) | dto.UserResponse | 200 400 401 403 404 409 413 500 503 \| 40001 40100 40101 40300 40400 40900 41300 |
+| `GET` | `/api/v1/admin/reports/breakdown` | jwt+admin — **NEW 09-22** | query `from`, `to` (`YYYY-MM-DD`, raw `c.Query`, no binding tag) | dto.BreakdownResponse (from, to, total_revenue, tickets_sold, **days[]**, **movies[]**, **halls[]**, **providers[]**) | 200 400 401 403 500 503 \| 40001 40100 40101 40300 |
+| `POST` | `/api/v1/admin/showtimes/:id/cancel` | jwt+admin/staff audit:admin.cancel_showtime — **NEW 09-22** | - (path param id) | dto.ShowtimeCancelResponse (showtime_id, status, **bookings_affected**) | 200 401 403 404 409 500 503 \| 40100 40101 40300 40400 40900 |
+| `POST` | `/api/v1/admin/halls/:id/seats/rows` | jwt+admin/staff audit:admin.add_hall_row — **NEW 09-22** | - (**no body**; path param id only) | `[]dto.SeatResponse` — the seats of the row just appended (**201**) | 201 401 403 404 409 500 503 \| 40100 40101 40300 40400 40900 |
+| `DELETE` | `/api/v1/admin/halls/:id/seats/rows/:rowLabel` | jwt+admin/staff audit:admin.delete_hall_row — **NEW 09-22** | - (path params id + rowLabel, e.g. `J`) | `[]dto.SeatResponse` — the remaining grid | 200 401 403 404 409 500 503 \| 40100 40101 40300 40400 40900 |
+| `POST` | `/api/v1/admin/halls/:id/seats/merge` | jwt+admin/staff audit:admin.merge_hall_seats — **NEW 09-22** | dto.MergeSeatsRequest (json: `left_label` required max=8, `right_label` required max=8, e.g. `D3`+`D4`) | `[]dto.SeatResponse` | 200 400 401 403 404 409 413 500 503 \| 40001 40100 40101 40300 40400 40900 41300 |
+| `POST` | `/api/v1/admin/halls/:id/seats/split` | jwt+admin/staff audit:admin.split_hall_seat — **NEW 09-22** | dto.SplitSeatRequest (json: `label` required max=8) | `[]dto.SeatResponse` | 200 400 401 403 404 409 413 500 503 \| 40001 40100 40101 40300 40400 40900 41300 |
 
 Notes:
 
@@ -326,3 +447,22 @@ Notes:
 - `PATCH /api/v1/admin/users/:id` — Side effect: invalidates the account-status cache, so a lock or role change lands within one request .
 - `PUT /api/v1/admin/users/:id` — Alias of the PATCH route, same handler and semantics (partial update despite PUT); pick either from the frontend.
 
+### The 2026-09-22 additions, in more detail
+
+- `GET /api/v1/admin/reports/breakdown` — The analytics feed behind the redesigned dashboard. Unlike
+  `/admin/reports/daily`, which returns only the `closeDay` day-rollups, this one pre-aggregates FOUR
+  dimensions server-side: `days`, `movies`, `halls` and `providers`. That removes the client-side rollup the
+  reports screen had to do from the jsonb `breakdown` column — prefer this endpoint for any new chart.
+  `from`/`to` are read with a raw `c.Query` and validated in the service, so a bad date is 400/40001 **with no
+  `details` map** — show the message, do not try to attach it to a field.
+- `POST /api/v1/admin/showtimes/:id/cancel` — **Not the same as `DELETE /admin/showtimes/:id`.** Delete refuses
+  while the showtime has unfinished business; cancel goes through with it: it releases seats and pushes every
+  affected booking through the normal refund pipeline, reporting how many in `bookings_affected`. Reach for
+  this when a screening genuinely will not happen, and expect money to move.
+- The four hall seat-editing routes are the **incremental** grid editor, and they are the answer to a gap this
+  config recorded earlier: `col_span` used to be changeable only by regenerating the whole layout from a
+  template. `merge` turns two neighbours into one 2-column seat, `split` undoes it, and `rows` appends or drops
+  a whole row — none of which destroys the rest of the grid the way `PUT /admin/halls/:id/layout` does.
+  `POST .../seats/rows` takes **no body** (it appends the next row after the last) and answers **201**;
+  the other three answer 200. All four return a `SeatResponse` array, and all four are still subject to the
+  `HallHasBookings` guard, so a hall with a live hold or a confirmed order refuses with 409.

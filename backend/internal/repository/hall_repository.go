@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"gorm.io/gorm"
@@ -227,6 +228,38 @@ func (r *HallRepository) PricesByHall(ctx context.Context, hallID string) ([]mod
 	var prices []models.HallPrice
 	err := r.db.WithContext(ctx).Where("hall_id = ?", hallID).Order("seat_type").Find(&prices).Error
 	return prices, err
+}
+
+// PublicPriceRow is one hall/seat-type price for the public price list.
+type PublicPriceRow struct {
+	HallID   string `gorm:"column:hall_id"`
+	HallName string `gorm:"column:hall_name"`
+	SeatType string `gorm:"column:seat_type"`
+	Price    int64  `gorm:"column:price"`
+}
+
+// PublicPriceList returns every ACTIVE hall's seat-type prices in one query.
+//
+// It mirrors the gate the customer showtime query uses: a hall missing one of the
+// four seat-type prices never reaches a customer, so listing it on a price page
+// would advertise a hall nobody can book. `price > 0` for the same reason — 0
+// means NOT CONFIGURED in this schema, not free.
+func (r *HallRepository) PublicPriceList(ctx context.Context) ([]PublicPriceRow, error) {
+	var rows []PublicPriceRow
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT h.id AS hall_id, h.name AS hall_name, hp.seat_type, hp.price
+		FROM halls h
+		JOIN hall_prices hp ON hp.hall_id = h.id
+		WHERE h.deleted_at IS NULL AND h.active = TRUE AND hp.price > 0
+		  AND h.id IN (
+		      SELECT hall_id FROM hall_prices WHERE price > 0
+		      GROUP BY hall_id HAVING count(DISTINCT seat_type) = 4
+		  )
+		ORDER BY h.name, hp.seat_type`).Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list public prices: %w", err)
+	}
+	return rows, nil
 }
 
 func (r *HallRepository) UpsertPrices(tx *gorm.DB, hallID string, prices map[string]int64) error {

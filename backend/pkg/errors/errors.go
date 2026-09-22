@@ -258,4 +258,21 @@ var (
 	ErrComboNotFound   = NotFound("combo not found")
 	ErrComboInactive   = Validation("combo is not available")
 	ErrComboOrderEmpty = Validation("combo order must have at least one item")
+
+	// Discount codes. Every reason a code will not apply is a DISTINCT sentence,
+	// because they all share code 40001 and the customer can only be told apart
+	// by the message. ErrDiscountNotFound is deliberately a 404 on the admin
+	// routes but is never used to answer a customer's apply attempt: an unknown
+	// code and an expired one both answer ErrDiscountInvalid, so the endpoint
+	// cannot be used to enumerate which codes exist.
+	ErrDiscountNotFound    = NotFound("discount code not found")
+	ErrDiscountInvalid     = Validation("this discount code is not valid")
+	ErrDiscountExpired     = Validation("this discount code is no longer valid")
+	ErrDiscountNotStarted  = Validation("this discount code is not active yet")
+	ErrDiscountExhausted   = Validation("this discount code has been fully redeemed")
+	ErrDiscountMinOrder    = Validation("the order total is below this code's minimum")
+	ErrDiscountAlreadySet  = Conflict("this order already has a discount code")
+	ErrDiscountNone        = Validation("this order has no discount code to remove")
+	ErrDiscountOrderClosed = Conflict("a discount can only be applied before payment")
+	ErrDiscountCodeExists  = Conflict("this discount code already exists")
 )

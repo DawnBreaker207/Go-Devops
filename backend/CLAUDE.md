@@ -2,16 +2,34 @@
 
 Auto-loaded when a session opens here, and lazily when a session at `CinemaProject/` reads a file in this repo.
 Keep <200 lines. Deep dives: `.claude/context/contract.md` (envelope, error codes, enums) and
-`.claude/skills/be-endpoint/` (all 79 routes + copyable templates).
+`.claude/skills/be-endpoint/` (every route + copyable templates).
 This file cites symbol + file, not line numbers — line numbers drift, grep the symbol.
 
 ## Project overview
 
 Cinema booking API: catalog (movies/halls/showtimes), seat holds and booking, payments through a provider
 registry, tickets with QR + check-in, staff box office, admin dashboards, audit log and cron batch jobs.
-Module `github.com/Cinema-Project-Juann/BackEnd-CP`. Working branch `develop`. 144 Go files outside `docs/`.
-`internal/router/router.go` holds 78 registration statements = **79 distinct METHOD+path rows** (`v1.Match` on the
-payment IPN counts twice; `engine.Static` counts once as `GET|HEAD /media/*filepath`).
+
+Added 2026-09-22 (10 migrations now, up from 5): **multi-device sessions** (`000006`, `/users/me/sessions`),
+**a `coming_soon` catalog lifecycle with preview showtimes** (`000007` — `movie.status` is no longer just
+draft/showing/ended), **a concession/combo catalogue and combo orders** (`000008`, `concession_items` +
+`combo_orders`), **notification preferences** (`000009`), plus `POST /orders/init` and
+`POST /orders/:id/refresh` (open-then-heartbeat a hold before any seat is picked), `GET /tickets/:id/qr`
+(server-rendered PNG), `POST /admin/showtimes/:id/cancel` (refunds, unlike DELETE which refuses), incremental
+hall seat editing (row add/delete, seat merge/split) and `GET /admin/reports/breakdown`.
+Added later the same day: **an operator write path for the concession catalogue** (`/admin/concessions`, admin
+AND staff) and **real discount codes** (`000010`, `/admin/discounts` admin-only plus
+`POST|DELETE /orders/:id/discount` for customers). The discount is the one place the money path changed:
+`bookings.total_amount` stays the undiscounted seat subtotal because `finalizeTx` asserts the sold seats add up
+to it, so the charge is `Booking.Payable()` (`total_amount - discount_amount`) and that is what lands in
+`payments.amount`.
+Plus `GET /pricing` (public): the only anonymous read of `hall_prices`, added because the customer price page
+had been hardcoding four tiers that matched no row in the table.
+Module `github.com/Cinema-Project-Juann/BackEnd-CP`. Working branch `develop`. **162** Go files outside `docs/`.
+`internal/router/router.go` registers **108 `/api/v1` operations** as of 2026-09-22 (`v1.Match` on the payment IPN
+counts twice; `engine.Static` counts once as `GET|HEAD /media/*filepath`).
+`docs/swagger.json` covers 102 of them. The reproducible count lives in
+`.claude/skills/be-endpoint/endpoints.md` — run it rather than trusting this sentence.
 
 ## Tech stack
 

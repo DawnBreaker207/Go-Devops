@@ -23,31 +23,38 @@ const (
 )
 
 const (
-	ReasonReplaced        = "replaced" // a newer hold of the same user/show replaced it
-	ReasonHoldExpired     = "hold_expired"
-	ReasonSeatsLost       = "seats_lost"      // a held seat was swept or taken over
-	ReasonShowtimeClosed  = "showtime_closed" // showtime closed or started before confirm
-	ReasonAmountMismatch  = "amount_mismatch"
-	ReasonPaidAfterExpiry = "paid_after_expiry"
-	ReasonCanceled          = "canceled" // the customer released the hold
+	ReasonReplaced          = "replaced" // a newer hold of the same user/show replaced it
+	ReasonHoldExpired       = "hold_expired"
+	ReasonSeatsLost         = "seats_lost"      // a held seat was swept or taken over
+	ReasonShowtimeClosed    = "showtime_closed" // showtime closed or started before confirm
+	ReasonAmountMismatch    = "amount_mismatch"
+	ReasonPaidAfterExpiry   = "paid_after_expiry"
+	ReasonCanceled          = "canceled"           // the customer released the hold
 	ReasonShowtimeCancelled = "showtime_cancelled" // the cinema cancelled the whole showtime
 )
 
 // At most one PENDING booking per user per showtime (partial unique index).
 type Booking struct {
-	ID             string     `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID         string     `gorm:"type:uuid;index" json:"user_id,omitempty"`
-	ShowtimeID     string     `gorm:"type:uuid;not null" json:"showtime_id"`
-	Status         string     `gorm:"type:varchar(16);not null;default:pending" json:"status"`
-	StatusReason   *string    `gorm:"type:varchar(64)" json:"status_reason,omitempty"`
-	TotalAmount    int64      `gorm:"not null;default:0" json:"total_amount"`
+	ID           string  `gorm:"type:uuid;primaryKey" json:"id"`
+	UserID       string  `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	ShowtimeID   string  `gorm:"type:uuid;not null" json:"showtime_id"`
+	Status       string  `gorm:"type:varchar(16);not null;default:pending" json:"status"`
+	StatusReason *string `gorm:"type:varchar(64)" json:"status_reason,omitempty"`
+	// TotalAmount is the SEAT SUBTOTAL and stays undiscounted: finalizeTx asserts
+	// that the sold seats' prices add up to it, and a booking that fails that
+	// assertion cannot confirm after the money has already been taken.
+	TotalAmount int64 `gorm:"not null;default:0" json:"total_amount"`
+	// DiscountAmount is what a code took off. The amount actually charged is
+	// Payable() below, which is what goes into payments.amount.
+	DiscountAmount int64      `gorm:"not null;default:0" json:"discount_amount"`
+	DiscountCodeID *string    `gorm:"type:uuid" json:"discount_code_id,omitempty"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	IdempotencyKey *string    `gorm:"type:varchar(128)" json:"idempotency_key,omitempty"`
 	// SoldVia: online bookings carry a user and a payment; counter bookings are
 	// walk-in sales with no account, no payment and no ticket email.
-	SoldVia        string     `gorm:"type:varchar(16);not null;default:online" json:"sold_via"`
-	CustomerName   string     `gorm:"type:varchar(255)" json:"customer_name,omitempty"`
-	CustomerPhone  string     `gorm:"type:varchar(20)" json:"customer_phone,omitempty"`
+	SoldVia       string `gorm:"type:varchar(16);not null;default:online" json:"sold_via"`
+	CustomerName  string `gorm:"type:varchar(255)" json:"customer_name,omitempty"`
+	CustomerPhone string `gorm:"type:varchar(20)" json:"customer_phone,omitempty"`
 	// PaymentID is the attempt whose collected money this booking carries.
 	PaymentID         *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
 	PaidAt            *time.Time `json:"paid_at,omitempty"`
@@ -61,6 +68,18 @@ type Booking struct {
 }
 
 func (Booking) TableName() string { return "bookings" }
+
+// Payable is the amount to charge: the seat subtotal minus any discount. This is
+// the ONLY number that should ever reach a payment provider. Everything
+// downstream (amount-mismatch detection, refunds) reads payments.amount, which is
+// set from this, so they follow automatically. Clamped at 0 defensively; the DB
+// constraint ck_bookings_discount_amount already forbids over-discounting.
+func (b *Booking) Payable() int64 {
+	if b.DiscountAmount >= b.TotalAmount {
+		return 0
+	}
+	return b.TotalAmount - b.DiscountAmount
+}
 
 func (b *Booking) BeforeCreate(*gorm.DB) error {
 	if b.ID == "" {

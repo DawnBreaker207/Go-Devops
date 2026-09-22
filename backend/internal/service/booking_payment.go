@@ -105,7 +105,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 		if open != nil {
 			attempt, reused = open, true
 			if open.RedirectURL == nil {
-			// Stored but never opened (call failed/died): after a grace period this request takes it over.
+				// Stored but never opened (call failed/died): after a grace period this request takes it over.
 				n, err := s.payments.ClaimOrphanCheckout(ctx, tx, open.ID, orphanCheckoutAfter)
 				if err != nil {
 					return err
@@ -118,7 +118,11 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 			BookingID: b.ID,
 			Provider:  name,
 			TxnRef:    newTxnRef(),
-			Amount:    b.TotalAmount,
+			// Payable(), NOT TotalAmount: a discount must reach the gateway, and
+			// total_amount deliberately stays the undiscounted seat subtotal so
+			// finalizeTx's seat-price assertion still holds. Amount-mismatch
+			// detection and refunds both read this column, so they follow.
+			Amount:    b.Payable(),
 			Status:    models.PaymentPending,
 			ExpiresAt: b.ExpiresAt,
 		}
@@ -559,7 +563,9 @@ func (s *bookingService) refundTx(ctx context.Context, tx *gorm.DB, b *models.Bo
 	// resource_type="payment" matches the duplicate-capture site in applyNotification: both refund an
 	// attempt, keyed off the payment with booking_id as correlation.
 	return s.audit(ctx, tx, "orders.refund", "payment", *b.PaymentID, b.ID, map[string]any{
-		"status": models.BookingRefunded, "reason": reason, "amount": b.TotalAmount,
+		// Payable(): the audited amount must be what was actually collected, not
+		// the pre-discount subtotal.
+		"status": models.BookingRefunded, "reason": reason, "amount": b.Payable(),
 		"payment_id": *b.PaymentID, "source": source,
 	})
 }

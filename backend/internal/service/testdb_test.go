@@ -192,9 +192,13 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, ctx: ctx, db: testDB, seat: map[string]string{}, emailOf: map[string]string{}}
 
 	// DELETE, not TRUNCATE: far faster on tiny tables (no new relfilenodes and fsync).
+	// Child-before-parent throughout: combo_order_items references both
+	// combo_orders and concession_items, combo_orders references users, and
+	// bookings.discount_code_id references discount_codes.
 	e.must(testDB.Exec(`DELETE FROM audit_logs; DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
+		DELETE FROM combo_order_items; DELETE FROM combo_orders; DELETE FROM concession_items;
 		DELETE FROM tickets; DELETE FROM booking_seats;
-		DELETE FROM payments; DELETE FROM bookings; DELETE FROM showtime_seats;
+		DELETE FROM payments; DELETE FROM bookings; DELETE FROM discount_codes; DELETE FROM showtime_seats;
 		DELETE FROM showtimes; DELETE FROM hall_prices; DELETE FROM seats; DELETE FROM halls;
 		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM users;`).Error)
 
@@ -245,8 +249,8 @@ func newEnv(t *testing.T) *env {
 		// Generous lifetime so refresh tests can extend; hold-replace tests
 		// (T21) never call Refresh and stay pinned to the old expiry.
 		RefreshMaxLifetime: 30 * time.Minute,
-		Publisher:     e.pub,
-		Hub:           e.hub,
+		Publisher:          e.pub,
+		Hub:                e.hub,
 	})
 	e.mailer = notify.NewMockMailer("")
 	e.emails = service.NewTicketEmailService(testDB, repo, e.mailer, time.UTC)

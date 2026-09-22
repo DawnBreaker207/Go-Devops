@@ -54,7 +54,7 @@ type InitResponse struct {
 	ExpiresAt  time.Time `json:"expires_at"`
 	// TTLSeconds lets the client run its ticker without clock math.
 	TTLSeconds int64 `json:"ttl_seconds"`
-	Reused bool `json:"reused"`
+	Reused     bool  `json:"reused"`
 }
 
 type RefreshResponse struct {
@@ -77,16 +77,23 @@ type PayResponse struct {
 }
 
 type OrderStatusResponse struct {
-	ID           string          `json:"id"`
-	ShowtimeID   string          `json:"showtime_id"`
-	Status       string          `json:"status"`
-	StatusReason string          `json:"status_reason,omitempty"`
-	TotalAmount  int64           `json:"total_amount"`
-	CreatedAt    time.Time       `json:"created_at"`
-	ExpiresAt    *time.Time      `json:"expires_at,omitempty"`
-	PaidAt       *time.Time      `json:"paid_at,omitempty"`
-	Payment      *PaymentSummary `json:"payment,omitempty"`
-	Showtime     *OrderShowtime  `json:"showtime,omitempty"`
+	ID           string `json:"id"`
+	ShowtimeID   string `json:"showtime_id"`
+	Status       string `json:"status"`
+	StatusReason string `json:"status_reason,omitempty"`
+	// TotalAmount is the SEAT SUBTOTAL, before any discount. The amount the
+	// customer actually owes is PayableAmount below - a screen that renders
+	// total_amount as "amount due" is showing the wrong number on a discounted
+	// order. Both are always present (no omitempty) so the two can never be
+	// confused by one of them being absent.
+	TotalAmount    int64           `json:"total_amount"`
+	DiscountAmount int64           `json:"discount_amount"`
+	PayableAmount  int64           `json:"payable_amount"`
+	CreatedAt      time.Time       `json:"created_at"`
+	ExpiresAt      *time.Time      `json:"expires_at,omitempty"`
+	PaidAt         *time.Time      `json:"paid_at,omitempty"`
+	Payment        *PaymentSummary `json:"payment,omitempty"`
+	Showtime       *OrderShowtime  `json:"showtime,omitempty"`
 }
 
 type OrderShowtime struct {

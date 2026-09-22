@@ -39,6 +39,7 @@ type Handlers struct {
 	Media    *handlers.MediaHandler
 	Audit    *handlers.AuditHandler
 	Combo    *handlers.ComboHandler
+	Discount *handlers.DiscountHandler
 }
 
 type Limiters struct {
@@ -115,6 +116,9 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
 		public.GET("/showtimes", h.Showtime.List)
 		public.GET("/combos", h.Combo.List)
+		// Public price page. The only anonymous read of hall_prices; everything
+		// else about halls is operator-scoped.
+		public.GET("/pricing", h.Hall.PublicPrices)
 	}
 
 	protected := v1.Group("")
@@ -167,6 +171,14 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.PUT("/showtimes/:id", middleware.Audit(db, "admin.update_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Update)
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
 			catalog.POST("/showtimes/:id/cancel", middleware.Audit(db, "admin.cancel_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Cancel)
+			// Concession catalogue. Operator scope (admin AND staff) like halls and
+			// showtimes, not admin-only like /admin/users and /admin/reports:
+			// putting popcorn back on sale is counter work, not an admin decision.
+			catalog.GET("/concessions", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminList)
+			catalog.GET("/concessions/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminGet)
+			catalog.POST("/concessions", middleware.Audit(db, "admin.create_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminCreate)
+			catalog.PATCH("/concessions/:id", middleware.Audit(db, "admin.update_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminUpdate)
+			catalog.DELETE("/concessions/:id", middleware.Audit(db, "admin.delete_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminDelete)
 		}
 
 		orders := protected.Group("/orders")
@@ -184,6 +196,12 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Cancel)
 			orders.POST("/:id/refresh", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.refresh", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Refresh)
+			// Discount: customer-only like the rest of this tree, and only while
+			// the order is still pending (the service enforces that, not the route).
+			orders.POST("/:id/discount", middleware.Audit(db, "orders.apply_discount", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Discount.Apply)
+			orders.DELETE("/:id/discount", middleware.Audit(db, "orders.remove_discount", "booking"),
+				middleware.RequireRoles(models.RoleCustomer), h.Discount.Remove)
 			orders.GET("/:id/status", middleware.RequireRoles(models.RoleCustomer), h.Booking.Status)
 			orders.GET("/:id", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
 			orders.GET("/:id/tickets", middleware.RequireRoles(models.RoleCustomer), h.Booking.Order)
@@ -255,6 +273,14 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			admin.GET("/audit-logs", h.Audit.List)
 			// Admin-only: staff read one order at a time (/staff/orders/:id), never all emails next to money.
 			admin.GET("/orders", h.Booking.AdminList)
+			// Discount codes are ADMIN-ONLY, unlike the concession catalogue next
+			// door: a code moves revenue, so it is a pricing decision rather than
+			// counter work. The group-level RequireRoles above covers all five.
+			admin.GET("/discounts", h.Discount.AdminList)
+			admin.GET("/discounts/:id", h.Discount.AdminGet)
+			admin.POST("/discounts", middleware.Audit(db, "admin.create_discount", "discount"), h.Discount.AdminCreate)
+			admin.PATCH("/discounts/:id", middleware.Audit(db, "admin.update_discount", "discount"), h.Discount.AdminUpdate)
+			admin.DELETE("/discounts/:id", middleware.Audit(db, "admin.delete_discount", "discount"), h.Discount.AdminDelete)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
 	}
