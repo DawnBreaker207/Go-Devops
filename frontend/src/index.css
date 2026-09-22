@@ -86,6 +86,12 @@
      Selected blue, held amber, sold red read on both, unchanged. */
   --cp-seat-available: #4b5563;
   --cp-seat-available-hover: #16a34a;
+  /* The fill above flips dark, so the number on it must flip light. Reuses an existing token rather
+     than inventing a second near-white. */
+  --cp-seat-available-text: var(--cp-seat-selected-text);
+  /* The screen bar is `seat.screen` = #ffffff, which vanishes on the light canvas (#f7f6f4).
+     The booking flow is force-dark so this is a fallback, not the normal path. */
+  --cp-seat-screen: #4b5563;
 }
 
 /* TAILWIND BRIDGE: alias --cp-* via `inline`, no new colors (one color keeps one definition). Enables bg-brand, text-brand, border-danger, ... utilities. */

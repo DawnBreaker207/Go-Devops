@@ -11,6 +11,7 @@ import type {
   PagedData,
   PageQuery,
   PricePayload,
+  PublicPriceList,
   Seat,
   SeatUpdatePayload,
   SplitSeatPayload,
@@ -18,6 +19,9 @@ import type {
 } from '@/types';
 
 export const hallApi = {
+  /** PUBLIC price page: no auth, one payload, only bookable halls. */
+  publicPrices: () => apiClient.get<ApiResponse<PublicPriceList>>('/pricing').then(unwrap),
+
   /** Paginated; page_size > 100 is rejected 400/40001, not clamped. */
   list: (query: PageQuery) =>
     apiClient.get<ApiResponse<PagedData<Hall>>>('/admin/halls', { params: query }).then(unwrap),

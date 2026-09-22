@@ -171,7 +171,7 @@ export const TicketCard = ({ order, tickets, showRebook }: TicketCardProps) => {
         <div className="text-right">
           <span className={FIELD_LABEL_CLASS}>{t('customer.totalPayment')}</span>
           <span className={`${FIELD_VALUE_CLASS} tabular-nums`}>
-            {formatVND(order.total_amount)}
+            {formatVND(order.payable_amount)}
           </span>
         </div>
       </div>

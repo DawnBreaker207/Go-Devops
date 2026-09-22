@@ -5,6 +5,7 @@ import type {
   Showtime,
   ShowtimeListItem,
   ShowtimeListQuery,
+  ShowtimeCancelResult,
   ShowtimePayload,
 } from '@/types';
 
@@ -35,4 +36,11 @@ export const showtimeApi = {
   /** 200 with {code,message:"deleted"} and no data; ignore the body. */
   remove: (id: string) =>
     apiClient.delete<ApiResponse<void>>(`/admin/showtimes/${id}`).then(() => undefined),
+
+  /** The ONLY way to stop a showtime that has already sold tickets.
+   *  DELETE refuses with 409 once a showtime has any booking; this cancels it and
+   *  refunds every paid booking through the normal refund pipeline, voiding the
+   *  issued tickets. It moves real money — never call it without a confirmation. */
+  cancel: (id: string) =>
+    apiClient.post<ApiResponse<ShowtimeCancelResult>>(`/admin/showtimes/${id}/cancel`).then(unwrap),
 };

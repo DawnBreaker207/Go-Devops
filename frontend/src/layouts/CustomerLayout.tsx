@@ -44,7 +44,8 @@ interface RouteHandle {
 /** Customer shell: top bar + content, no sider, no heavy antd. Own light/dark switch, dark by default; seats/checkout/tickets stay dark. Header has logo, uppercase nav, hamburger/avatar; mobile menu expands inline. No theater-select, search, or dead links. */
 export const CustomerLayout = () => {
   const { t } = useTranslation();
-  const themeMode = useAppStore((s) => s.theme);
+  // Customer zone only - `s.theme` belongs to the operator screens (antd) and is a different switch.
+  const themeMode = useAppStore((s) => s.customerTheme);
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 

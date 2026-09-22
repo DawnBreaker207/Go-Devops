@@ -13,6 +13,16 @@ const STATUS_COLOR: Record<Exclude<SeatVisual, 'blank'>, string> = {
   sold: 'text-(--cp-seat-sold)',
 };
 
+/** Seat NUMBER color, paired with the fill above. Every state has its own `*Text` token for a reason:
+ *  on `available` (#d1d5db) white measures ~1.3:1 and the number effectively disappears.
+ *  `held` is the one outline icon, so its number sits on the page backdrop, not on a filled seat. */
+const STATUS_LABEL_COLOR: Record<Exclude<SeatVisual, 'blank'>, string> = {
+  available: 'text-(--cp-seat-available-text)',
+  selected: 'text-(--cp-seat-selected-text)',
+  held: 'text-(--cp-seat-held)',
+  sold: 'text-(--cp-seat-sold-text)',
+};
+
 /** Shape = seat KIND: vip/couple read instantly, rest are singles. */
 const shapeOf = (seatType: SeatType): SeatShape =>
   seatType === 'vip' ? 'vip' : seatType === 'couple' ? 'couple' : 'single';
@@ -79,9 +89,7 @@ const SeatButtonImpl = ({
             className={`absolute inset-0 h-full w-full ${STATUS_COLOR[visual]}`}
           />
           <span
-            className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${
-              visual === 'held' ? 'text-(--cp-seat-held)' : 'text-white'
-            }`}
+            className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${STATUS_LABEL_COLOR[visual]}`}
           >
             {colNumber}
           </span>

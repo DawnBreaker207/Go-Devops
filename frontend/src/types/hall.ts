@@ -141,3 +141,21 @@ export interface MergeSeatsPayload {
 export interface SplitSeatPayload {
   label: string;
 }
+
+/** GET /pricing — PUBLIC, no auth. The only anonymous read of hall_prices.
+ *  Only halls a customer can actually book appear: active, and with all four
+ *  seat types priced (the same HAVING count(DISTINCT seat_type) = 4 gate the
+ *  customer showtime query uses). So an empty `halls` means no hall is bookable,
+ *  not that pricing is unconfigured. */
+export interface PublicHallPrices {
+  hall_id: string;
+  hall_name: string;
+  /** Always all four seat types, whole VND. */
+  prices: Record<SeatType, number>;
+}
+
+export interface PublicPriceList {
+  /** Cheapest seat anywhere; 0 when there is no bookable hall. */
+  from_price: number;
+  halls: PublicHallPrices[];
+}

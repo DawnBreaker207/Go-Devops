@@ -120,8 +120,18 @@ export const OrderDetailDrawer = ({ order, onClose }: OrderDetailDrawerProps) =>
             <Descriptions.Item label={t('booking.createdAt')}>
               {formatDateTime(detail.created_at)}
             </Descriptions.Item>
-            <Descriptions.Item label={t('booking.total')}>
+            {/* Three separate facts. The discount row only appears when there
+                is one, so an ordinary order reads exactly as it did before. */}
+            <Descriptions.Item label={t('booking.subtotal')}>
               <span className="tabular-nums">{formatVND(detail.total_amount)}</span>
+            </Descriptions.Item>
+            {detail.discount_amount > 0 ? (
+              <Descriptions.Item label={t('booking.discount')}>
+                <span className="tabular-nums">{`\u2212${formatVND(detail.discount_amount)}`}</span>
+              </Descriptions.Item>
+            ) : null}
+            <Descriptions.Item label={t('booking.total')}>
+              <span className="tabular-nums">{formatVND(detail.payable_amount)}</span>
             </Descriptions.Item>
           </Descriptions>
 

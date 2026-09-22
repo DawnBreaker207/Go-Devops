@@ -5,6 +5,14 @@
 The owner's chosen visual reference. **It is the visual language, not the information architecture** — the menu
 and the screen list mirror the backend, not this file. See `context/decisions.md` and `../CLAUDE.local.md`.
 
+> **Stale on colour since 2026-09-19. Read this first.**
+> Every "brand green" below refers to this file's `#1DE782`, which is **no longer the brand**: the owner moved
+> the brand to red `#E4002B` (CinePlex's), and the seat palette was replaced outright — free is grey, selecting
+> is **blue**, held amber, sold red. The dark backdrop was re-derived from the red too, so it is no longer
+> green-tinted. `.claude/rules/design-tokens.md` is the current source; it wins over this file on every colour.
+> What remains useful here is the **layout and composition** of each frame — where things sit, what a screen is
+> made of, and which frames have no backend behind them. Read it for structure, not for hex values.
+
 ## How to read it
 
 It is not fetchable. The page is an app shell and the design lives on a WebGL canvas, so WebFetch returns

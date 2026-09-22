@@ -16,6 +16,16 @@ import { API_DATE_FORMAT, DATE_FORMAT, formatDateTime, formatVND } from '@/utils
 const STATUS_COLOR: Record<ShowtimeStatus, string> = {
   open: 'green',
   closed: 'default',
+  // Cancelled is a refund, not a quiet close - it must not read as "default".
+  cancelled: 'red',
+};
+
+/** A map, not a ternary. The old `value === 'open' ? 'Open' : 'Closed'` rendered
+ *  a CANCELLED showtime as "closed", which is a different thing entirely. */
+const STATUS_LABEL_KEY: Record<ShowtimeStatus, string> = {
+  open: 'showtime.statusOpen',
+  closed: 'showtime.statusClosed',
+  cancelled: 'showtime.statusCancelled',
 };
 
 /** One-day board: shows with held/sold/free/checked-in plus counter totals and pending check-ins. GET /staff/overview joins all three in one call. */
@@ -42,7 +52,7 @@ const DashboardTab = () => {
       width: 100,
       render: (value: ShowtimeStatus) => (
         <Tag color={STATUS_COLOR[value]} bordered={false}>
-          {t(`showtime.status${value === 'open' ? 'Open' : 'Closed'}`)}
+          {t(STATUS_LABEL_KEY[value])}
         </Tag>
       ),
     },

@@ -1,23 +1,28 @@
 # FrontEnd-CP — Claude context
 
 Auto-loaded when a session opens here, and lazily when a session at `CinemaProject/` reads a file in this repo.
-Keep <200 lines. Deep dives: `.claude/skills/fe-page/api-contract.md` (what the backend really returns),
+Keep <280 lines (raised from 200 on 2026-09-22 — the project now has two zones to describe). Deep dives: `.claude/skills/fe-page/api-contract.md` (what the backend really returns),
 `.claude/context/decisions.md` (the conventions this repo had NOT decided yet — read it before inventing one),
 and `.claude/context/figma.md` (the design reference: how to open it, every frame's node-id, per-screen specs).
 This file cites symbol + file, not line numbers — line numbers drift, grep the symbol.
 
 ## Project overview
 
-Admin/staff web UI for `BackEnd-CP` (cinema booking). **There is no customer-facing UI yet** — every screen here
-is for an operator. Built: `movie` (table + form), `showtime` (table + filters + form), `booking` (table +
-filters + detail drawer), `hall` (table + create/edit/clone/price modals + a seat-grid editor at
-`/halls/:id/seats`), `user` (table + filters + inline role/lock controls + create modal),
-`report` (date range + per-movie rollup + per-day table with a per-showtime breakdown), `dashboard`.
-**The customer side is complete**: `CustomerLayout` (top nav, no sider, plain CSS, its own visual world),
-`browse` (home poster grid + film detail with a day strip and showtime picker), the full `booking-flow`
-(seat picker -> hold -> checkout with a countdown -> gateway -> auto-confirm -> tickets -> my tickets), and
-the customer account screens (register, forgot password, reset password) on the Figma split layout. Read
-`../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen.
+Web UI for `BackEnd-CP` (cinema booking). **It serves two audiences from one codebase**, and they look
+nothing alike on purpose — see "Two zones" below.
+
+**Operator zone** (`MainLayout`, antd): `dashboard` (tabs + period selector + recharts), `movie`, `showtime`,
+`hall` (incl. a seat-grid editor at `/halls/:id/seats`), `booking`, `user`, `report`, `staff` (box office +
+customer lookup), `audit` (audit-log viewer), `batch` (background jobs), `profile`. 11 menu entries.
+
+**Customer zone** (`CustomerLayout`, Tailwind): `browse` (banner carousel + Now/Coming tabs + poster grid,
+`/films`, film detail with a day strip, plus static `/pricing` `/cinema` `/offers`), `booking-flow` (a
+**single route** `/select-seat/:showtimeId` holding a 3-step wizard — seats, combos, confirm+pay — then
+`/payment-result` and `/booking-success/:bookingId`), and `auth` (customer login, register, password
+recovery). "My tickets" is a **tab inside `/account`**, not its own route.
+
+Read `../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen — it also
+lists the two features that exist in the UI with no backend behind them.
 
 **The visual language comes from a Figma file**; the information architecture does not — it mirrors the
 backend. **Before building a screen, open its Figma frame** and follow it: `.claude/context/figma.md` has every
@@ -26,9 +31,11 @@ frame's node-id, the only reliable way to open one, and the per-screen specs mea
 ## Tech stack (versions from package.json + package-lock.json)
 
 React **18.3** (not 19), TypeScript **6.0** (strict), Vite **8.2** (dev port 3000, no proxy), antd **5.29** +
-`@ant-design/icons`, `@tanstack/react-query` **v5**, zustand **5**, `react-router-dom` **v6** (data router),
-axios **1.20**, i18next **26** + react-i18next (vi default, en secondary), dayjs, vitest **5** + jsdom +
-@testing-library/react, eslint flat config + prettier + husky/lint-staged. Package manager is **npm**
+`@ant-design/icons`, **Tailwind v4.1** via `@tailwindcss/vite` (preflight OFF — see Styling),
+**recharts 2.15** (dashboard charts), `@tanstack/react-query` **v5**, zustand **5**,
+`react-router-dom` **v6** (data router), axios **1.20**, i18next **26** + react-i18next (vi default, en
+secondary), dayjs, vitest **5** + jsdom + @testing-library/react, **@playwright/test 1.63** for e2e
+(`npm run test:e2e`), eslint flat config + prettier + husky/lint-staged. Package manager is **npm**
 (`package-lock.json` is the only lockfile; `npm ci` in the Dockerfile). Node 22 per the Dockerfile; there is
 **no `engines` field and no `.nvmrc`**. **No schema-validation library** — no zod, yup or react-hook-form.
 
@@ -44,13 +51,19 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
   `unwrap()` -> `response.data.data`, and the `skipAuthRefresh` config flag.
 - `src/api/<domain>.api.ts` — one `<domain>Api` object literal of arrow methods.
 - `src/features/<domain>/` — singular folder, **plural** page (`movie/MoviesPage.tsx`), plus `components/`,
-  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`, `user`, `report`, `browse`, `booking-flow`.
+  `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`,
+  `user`, `report`, `staff`, `audit`, `batch`, `profile`, `browse`, `booking-flow`.
   `auth` holds BOTH the operator `LoginPage` (an antd card in `AuthLayout`) and the customer account screens
-  (`CustomerAuthShell`, a split panel) — they look nothing alike on purpose.
-- `src/components/` — cross-feature: `Loading`, `PageHeader`, `ErrorBoundary` (the only class component).
-- `src/layouts/` — `MainLayout` and `AuthLayout`. The sidebar and the breadcrumb are both derived from
-  `NAV_ITEMS` in `src/routes/navigation.tsx`, filtered by role through `useNavItems()`; `MainLayout` itself
-  holds no menu data.
+  (a split panel) — they look nothing alike on purpose.
+- `src/components/` — cross-feature antd pieces: `Loading`, `PageHeader`, `TableCard`, `ErrorBoundary` (the
+  only class component).
+- `src/components/ui/` — the **customer-zone UI kit**, plain Tailwind and no heavy antd: `Button`, `LinkButton`,
+  `FieldInput`, `Notice`, `Panel`, `EmptyState`, `SectionHead`, `StaticPage`, `SoonToast`, plus
+  `buttonStyles.ts`. Reach for these on a customer screen instead of an antd component or a new one-off.
+- `src/layouts/` — `MainLayout` (operator sider + breadcrumb, both derived from `NAV_ITEMS` in
+  `src/routes/navigation.tsx` and filtered by role through `useNavItems()`; the layout holds no menu data),
+  `AuthLayout` (operator login card), and the customer shell: `CustomerLayout` + `BottomNav`
+  (mobile) + `AvatarSwitcher` + `Footer`.
 - `src/routes/` — `index.tsx` exports `router` from `createBrowserRouter`, `paths.ts` exports `PATHS`,
   `ProtectedRoute.tsx` (token) and `RequireRole.tsx` (role) are layout routes, and `navigation.tsx` is the
   single source of nav entries + the `ROLES_OPERATOR` / `ROLES_ADMIN` constants the router groups by.
@@ -66,7 +79,30 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
   `form.ts` (`applyApiFieldErrors`).
 - `src/locales/` — `i18n.ts` + `vi.json` + `en.json`.
 - `src/theme/` — `tokens.ts` is the single source of every colour; `index.ts` maps them onto antd via
-  `buildTheme(mode)` and re-exports them. Mirrored into `--cp-*` in `src/index.css`, with a parity test.
+  `buildTheme(mode)` and re-exports them; **`customerTw.ts` holds the static Tailwind class strings** the
+  customer zone shares. Mirrored into `--cp-*` in `src/index.css`, with a parity test.
+- `e2e/` + `playwright.config.ts` — Playwright booking-flow coverage. Run with `npm run test:e2e`; reports are
+  git-ignored.
+
+## Two zones, two sets of conventions
+
+This is the single most important thing to get right before touching a screen.
+
+|            | Operator zone                                 | Customer zone                                |
+| ---------- | --------------------------------------------- | -------------------------------------------- |
+| Shell      | `MainLayout` / `AuthLayout`                   | `CustomerLayout`                             |
+| Components | antd (Table, Form, Modal, DatePicker)         | `src/components/ui/*` + Tailwind utilities   |
+| Colour     | antd tokens via `antdTheme.useToken()`        | `customerTw.ts` alphas of `--cp-ink-rgb`     |
+| Dark mode  | antd `darkAlgorithm`                          | its OWN light/dark switch (`appStore.theme`) |
+| Errors     | `message.error` toast / inline antd `<Alert>` | `<Notice variant="error">`                   |
+| Empty      | antd `<Empty/>`                               | `<EmptyState>`                               |
+
+**Never mix them.** An antd `Table` on a customer screen drags in the whole operator token system; a raw
+Tailwind utility on an operator screen bypasses `darkAlgorithm` and breaks dark mode.
+
+Two customer routes carry layout flags in their `handle`, which `CustomerLayout` reads via `useMatches()`:
+`forceDark` (seat map, checkout, tickets — the seat palette only reads correctly on dark) and `fullBleed` (the
+account split panel, which must escape `<main>`'s max-width). Set them there, not as props.
 
 ## Critical conventions
 
@@ -108,8 +144,10 @@ survives F5 and can be linked. Pass its `query` straight into the API call and t
 
 **Forms.** antd `Form` + `Form.useForm<FormValues>()`, `layout="vertical"`, validation through antd `rules`,
 every rule carrying an explicit i18n `message`. Modals take
-`{ open, entity | null, confirmLoading, onCancel, onSubmit }`, use `destroyOnClose` + `preserve={false}`, and
-seed defaults in a `useEffect` keyed on `[open, entity, form]`. For dates, model the form value as `dayjs.Dayjs`
+`{ open, entity | null, confirmLoading, onCancel, onSubmit }`, use **`destroyOnHidden`** + `preserve={false}`
+(`destroyOnClose` is deprecated in antd 5.29 and logs a console error), and seed defaults with
+**`initialValues`, never `setFieldsValue` in a `useEffect`** — see `.claude/rules/pages-components.md` for the
+empty-modal bug that rule exists to prevent. For dates, model the form value as `dayjs.Dayjs`
 and submit `.format('YYYY-MM-DD')`. `onSubmit` returns a promise and **throws on failure**: the modal catches it,
 runs `applyApiFieldErrors(form, error)` so a 400/40001 lands on the right input, and only toasts what is left.
 The page must therefore NOT swallow the mutation error.
@@ -135,11 +173,15 @@ a Vietnamese screen. All showtime conflicts share code 40900, so they cannot be 
 **Motion.** All animation follows `.claude/rules/motion.md` and the tokens in `src/motion.ts`; use the
 `fe-motion` skill when adding or reviewing it.
 
-**Styling.** Inline `style={{...}}` plus antd tokens via `antdTheme.useToken()`. All colour comes from
-`src/theme/tokens.ts` — see `.claude/rules/design-tokens.md`, which is binding. **Never write a hex literal in a
-component.** Customer-facing screens use plain CSS with `var(--cp-*)` and the motion tokens, the way
-`MovieCard.css` already does; they do not get antd's heavy components. `src/index.css` is a 26-line reset. No CSS modules, no Tailwind, no
-styled-components.
+**Styling.** **Tailwind v4 is in use** (added 2026-09-19 — `decisions.md` #15 was revisited; this file said
+otherwise until 2026-09-22). It is wired through `@tailwindcss/vite` with **preflight deliberately OFF**: its
+reset lands on top of antd and breaks the operator screens. `src/index.css` imports `antd/dist/reset.css` into
+a LOWER cascade layer than Tailwind's utilities, and maps the `--cp-*` tokens into Tailwind's colour namespace
+so `bg-brand` / `text-on-brand` read from the SAME source of truth as TS.
+All colour still comes from `src/theme/tokens.ts` — see `.claude/rules/design-tokens.md`, which is binding.
+**Never write a hex literal in a component.** Dark mode is antd's `darkAlgorithm` plus `var(--cp-*)`, NOT
+Tailwind's `dark:` variant — there is no `.dark` class on the DOM. Operator screens keep antd components;
+customer screens use Tailwind utilities over the same tokens. No CSS modules, no styled-components.
 
 **TypeScript.** `strict` + `noUnusedLocals` + `noUnusedParameters`, so an unused import **fails the build**.
 Use `import type` for type-only imports. Model enums as string unions (`'draft' | 'showing' | 'ended'`) with a
@@ -150,7 +192,7 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 ## Never
 
 - Never build a screen against an endpoint you have not found in `BackEnd-CP/internal/router/router.go`.
-  `docs/swagger.json` still misses 6 alias operations.
+  `docs/swagger.json` documents 89 of the 95 operations, so 6 aliases are invisible to it.
 - Never assume the response is `{items, meta}` — several list endpoints return a bare array.
 - Never send `ApiResponse<...>` through `unwrap()` for `DELETE /admin/halls/:id` or `DELETE /users/me`: both
   answer **204 with an empty body**.
@@ -189,10 +231,12 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
   already exist in both locale files.
 - Never edit `MainLayout`'s menu by hand; it is derived from `NAV_ITEMS`.
 - Never assume `src/assets/` exists — it is empty and therefore untracked by git.
-- Never write a colour anywhere but `src/theme/tokens.ts`, and never add Tailwind/CSS modules/styled-components
-  — settled in `.claude/context/decisions.md` #15.
+- Never write a colour anywhere but `src/theme/tokens.ts`. Tailwind IS allowed (see Styling above); CSS modules
+  and styled-components are not — `.claude/context/decisions.md` #15 has the full history, including why
+  preflight stays off.
+- Never use Tailwind's `dark:` variant: the app has no `.dark` class, so it silently never matches.
 
-## Build & dev commands (verified 2026-09-18)
+## Build & dev commands (verified 2026-09-22)
 
 | Purpose          | Command                                          | Notes                                                                                                                      |
 | ---------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
@@ -200,7 +244,9 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 | Typecheck only   | `npx tsc --noEmit -p tsconfig.app.json`          | **passes today**; fastest correctness gate                                                                                 |
 | Lint             | `npm run lint` / `npm run lint:fix`              | **passes today**                                                                                                           |
 | Format           | `npm run format`                                 | `src/` only. Root config files are still covered by lint-staged, which basename-matches `*.{ts,tsx}` and `*.{css,json,md}` |
-| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **9 files / 121 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach              |
+| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **12 files / 172 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach             |
+| E2E              | `npm run test:e2e`                               | Playwright, booking flow. Needs the stack up on :3000 and :8080; reports are git-ignored                                   |
+| Install          | `npm install`                                    | **Mandatory after a pull** — `npm ls --depth=0` reports lockfile drift                                                     |
 | Production build | `npm run build` (`tsc -b && vite build`)         | typecheck then bundle to `dist/`                                                                                           |
 | Preview build    | `npm run preview`                                | serves `dist/`                                                                                                             |
 

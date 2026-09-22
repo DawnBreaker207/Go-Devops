@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { App, Alert, Button, DatePicker, Popconfirm, Select, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import type dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import PageHeader from '@/components/PageHeader';
@@ -9,6 +9,7 @@ import TableCard from '@/components/TableCard';
 import ShowtimeFormModal from './components/ShowtimeFormModal';
 import {
   useCreateShowtime,
+  useCancelShowtime,
   useDeleteShowtime,
   useHallOptions,
   useMovieOptions,
@@ -24,6 +25,16 @@ import { API_DATE_FORMAT, DATE_FORMAT, formatDateTime, toCinemaTime } from '@/ut
 const STATUS_COLOR: Record<ShowtimeStatus, string> = {
   open: 'green',
   closed: 'default',
+  // Cancelled is a refund, not a quiet close - it must not read as "default".
+  cancelled: 'red',
+};
+
+/** A map, not a ternary. The old `value === 'open' ? 'Open' : 'Closed'` rendered
+ *  a CANCELLED showtime as "closed", which is a different thing entirely. */
+const STATUS_LABEL_KEY: Record<ShowtimeStatus, string> = {
+  open: 'showtime.statusOpen',
+  closed: 'showtime.statusClosed',
+  cancelled: 'showtime.statusCancelled',
 };
 
 const pastStyle: React.CSSProperties = { opacity: 0.45 };
@@ -60,6 +71,7 @@ export const ShowtimesPage = () => {
   const createShowtime = useCreateShowtime();
   const updateShowtime = useUpdateShowtime();
   const deleteShowtime = useDeleteShowtime();
+  const cancelShowtime = useCancelShowtime();
 
   const openCreate = () => {
     setEditing(null);
@@ -90,6 +102,22 @@ export const ShowtimesPage = () => {
       message.success(t('common.deleteSuccess'));
     } catch (err) {
       // Every showtime conflict shares 40900; tell apart by the backend message (already readable English), never swallow it.
+      message.error(errorMessage(err, t('common.somethingWrong')));
+    }
+  };
+
+  /** Cancel + refund. Separate from delete on purpose: DELETE is refused (409)
+   *  the moment a showtime has any booking, so this is the ONLY way to stop a
+   *  showtime that has already sold tickets — and it moves real money. */
+  const handleCancel = async (id: string) => {
+    try {
+      const result = await cancelShowtime.mutateAsync(id);
+      message.success(
+        result.bookings_affected > 0
+          ? t('showtime.cancelSuccessWithRefunds', { count: result.bookings_affected })
+          : t('showtime.cancelSuccess')
+      );
+    } catch (err) {
       message.error(errorMessage(err, t('common.somethingWrong')));
     }
   };
@@ -134,38 +162,61 @@ export const ShowtimesPage = () => {
       width: 120,
       render: (value: ShowtimeStatus) => (
         <Tag color={STATUS_COLOR[value]} bordered={false}>
-          {t(`showtime.status${value === 'open' ? 'Open' : 'Closed'}`)}
+          {t(STATUS_LABEL_KEY[value])}
         </Tag>
       ),
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 110,
+      width: 150,
       align: 'right',
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            aria-label={`edit-${record.id}`}
-            onClick={() => openEdit(record)}
-          />
-          <Popconfirm
-            title={t('showtime.deleteConfirm')}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            onConfirm={() => handleDelete(record.id)}
-          >
+      render: (_, record) => {
+        // A cancelled showtime is terminal: nothing left to edit, cancel or delete.
+        const done = record.status === 'cancelled';
+        return (
+          <Space>
             <Button
-              danger
               type="text"
-              icon={<DeleteOutlined />}
-              aria-label={`delete-${record.id}`}
+              icon={<EditOutlined />}
+              aria-label={`edit-${record.id}`}
+              disabled={done}
+              onClick={() => openEdit(record)}
             />
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title={t('showtime.cancelConfirm')}
+              description={t('showtime.cancelHint')}
+              okText={t('showtime.cancelCta')}
+              cancelText={t('common.cancel')}
+              okButtonProps={{ danger: true, loading: cancelShowtime.isPending }}
+              onConfirm={() => handleCancel(record.id)}
+            >
+              <Button
+                danger
+                type="text"
+                icon={<StopOutlined />}
+                aria-label={`cancel-${record.id}`}
+                disabled={done}
+              />
+            </Popconfirm>
+            <Popconfirm
+              title={t('showtime.deleteConfirm')}
+              description={t('showtime.deleteHint')}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => handleDelete(record.id)}
+            >
+              <Button
+                danger
+                type="text"
+                icon={<DeleteOutlined />}
+                aria-label={`delete-${record.id}`}
+                disabled={done}
+              />
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -219,7 +270,7 @@ export const ShowtimesPage = () => {
           options={[
             ...SHOWTIME_STATUSES.map((value) => ({
               value,
-              label: t(`showtime.status${value === 'open' ? 'Open' : 'Closed'}`),
+              label: t(STATUS_LABEL_KEY[value]),
             })),
           ]}
         />

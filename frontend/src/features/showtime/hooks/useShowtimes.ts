@@ -54,6 +54,21 @@ export const useUpdateShowtime = () => {
   });
 };
 
+/** Cancel + refund. Invalidates the showtime list AND the order/booking caches:
+ *  the cascade flips paid bookings to `refunded`, so a stale order list would
+ *  keep showing them as confirmed. */
+export const useCancelShowtime = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => showtimeApi.cancel(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [SHOWTIME_QUERY_KEY] });
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      void queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+};
+
 export const useDeleteShowtime = () => {
   const queryClient = useQueryClient();
   return useMutation({

@@ -112,6 +112,8 @@ export const OrderSidebar = ({
     stateLabels ??
     o.tickets.map((ticket) => ticket.seat_label);
 
+  // `total` is payable_amount, NOT total_amount: this number sits next to the
+  // pay button, so it must be what the gateway will actually charge.
   return (
     <BookingSummarySidebar
       posterUrl={movie.data?.poster_url}
@@ -120,7 +122,7 @@ export const OrderSidebar = ({
       hallName={o.showtime?.hall_name ?? ''}
       startAt={o.showtime?.start_at ?? ''}
       seatLabels={seatLabels}
-      total={o.total_amount}
+      total={o.payable_amount}
       step={step}
       onBack={onBack}
       onContinue={onContinue}

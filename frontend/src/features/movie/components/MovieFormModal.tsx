@@ -1,7 +1,17 @@
-import { App, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
+import { useState } from 'react';
+import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Upload } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
-import { MOVIE_AGE_RATINGS, type Movie, type MoviePayload, type MovieStatus } from '@/types';
+import {
+  MOVIE_AGE_RATINGS,
+  POSTER_ACCEPT,
+  POSTER_MAX_BYTES,
+  type Movie,
+  type MoviePayload,
+  type MovieStatus,
+} from '@/types';
+import { mediaApi } from '@/api/media.api';
 import { errorMessage } from '@/utils/error';
 import { applyApiFieldErrors } from '@/utils/form';
 
@@ -32,6 +42,25 @@ export const MovieFormModal = ({
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
+  const [uploading, setUploading] = useState(false);
+
+  /** Uploads and writes the returned URL straight into the field, so the operator
+   *  never has to host the image anywhere else first. */
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const result = await mediaApi.uploadPoster(file);
+      form.setFieldValue('poster_url', result.url);
+      // validateFields on one field: the url rule must re-run now that the value
+      // changed programmatically rather than by typing.
+      await form.validateFields(['poster_url']);
+      message.success(t('movie.posterUploaded'));
+    } catch (error) {
+      message.error(errorMessage(error, t('common.somethingWrong')));
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // Seed via initialValues only; saving replaces the record so list every field.
   const initialValues: Partial<FormValues> = movie
@@ -129,13 +158,48 @@ export const MovieFormModal = ({
           />
         </Form.Item>
 
-        {/* Backend binds `url`: relative paths like /media/x.jpg are rejected with 400. */}
+        {/* Backend binds `url`: relative paths like /media/x.jpg are rejected with 400.
+            The upload returns an ABSOLUTE url built from storage.public_base_url,
+            so what it hands back is directly valid here. */}
         <Form.Item
           name="poster_url"
           label={t('movie.posterUrl')}
+          extra={t('movie.posterUploadHint')}
           rules={[{ type: 'url', message: t('movie.urlInvalid') }]}
         >
-          <Input placeholder="https://..." maxLength={512} />
+          <Input
+            placeholder="https://..."
+            maxLength={512}
+            addonAfter={
+              <Upload
+                accept={POSTER_ACCEPT.join(',')}
+                showUploadList={false}
+                // customRequest, not `action`: antd's own uploader would bypass
+                // the shared client and send no Authorization header.
+                beforeUpload={(file) => {
+                  if (!POSTER_ACCEPT.includes(file.type as (typeof POSTER_ACCEPT)[number])) {
+                    message.error(t('movie.posterTypeInvalid'));
+                    return Upload.LIST_IGNORE;
+                  }
+                  if (file.size > POSTER_MAX_BYTES) {
+                    message.error(t('movie.posterTooLarge'));
+                    return Upload.LIST_IGNORE;
+                  }
+                  void handleUpload(file);
+                  // Always false: the upload is done by handleUpload above.
+                  return false;
+                }}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<UploadOutlined />}
+                  loading={uploading}
+                  aria-label={t('movie.posterUpload')}
+                />
+              </Upload>
+            }
+          />
         </Form.Item>
 
         <Form.Item

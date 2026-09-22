@@ -152,7 +152,7 @@ export const TicketsSection = () => {
                   </span>
                   <span className="flex-none text-right">
                     <span className={`block text-sm font-bold tabular-nums ${INK}`}>
-                      {formatVND(order.total_amount)}
+                      {formatVND(order.payable_amount)}
                     </span>
                     <span className={`block text-xs ${INK_60}`}>
                       {t(`booking.status_${order.status}`)}

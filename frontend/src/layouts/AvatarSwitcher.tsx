@@ -101,8 +101,10 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
   const isCustomer = useHasRole('customer');
   const isAdmin = useHasRole('admin');
 
-  const themeMode = useAppStore((s) => s.theme);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
+  // One component, two zones, two independent themes: the switch must drive the zone it is rendered in.
+  const isOperator = variant === 'operator';
+  const themeMode = useAppStore((s) => (isOperator ? s.theme : s.customerTheme));
+  const toggleTheme = useAppStore((s) => (isOperator ? s.toggleTheme : s.toggleCustomerTheme));
   const language = useAppStore((s) => s.language);
   const setLanguage = useAppStore((s) => s.setLanguage);
 

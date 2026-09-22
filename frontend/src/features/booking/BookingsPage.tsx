@@ -76,12 +76,24 @@ export const BookingsPage = () => {
       align: 'right',
     },
     {
+      // payable_amount is what the customer was charged. total_amount is the
+      // undiscounted seat subtotal, so showing THAT here would disagree with the
+      // payment row on any discounted order.
       title: t('booking.total'),
-      dataIndex: 'total_amount',
-      key: 'total_amount',
-      width: 130,
+      dataIndex: 'payable_amount',
+      key: 'payable_amount',
+      width: 150,
       align: 'right',
-      render: (value: number) => <span className="tabular-nums">{formatVND(value)}</span>,
+      render: (value: number, record) => (
+        <Space direction="vertical" size={0} style={{ alignItems: 'flex-end' }}>
+          <span className="tabular-nums">{formatVND(value)}</span>
+          {record.discount_amount > 0 ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {`\u2212${formatVND(record.discount_amount)}`}
+            </Typography.Text>
+          ) : null}
+        </Space>
+      ),
     },
     {
       title: t('booking.soldVia'),

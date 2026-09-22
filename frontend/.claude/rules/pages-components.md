@@ -8,6 +8,27 @@ paths:
 
 # Page + component rules
 
+## Which zone are you in?
+
+Answer this before anything else. The two zones share `PATHS`, `@/types`, `@/api` and the tokens, and **share
+nothing else**.
+
+- **Operator** (`MainLayout` / `AuthLayout`): everything below about antd `Table`, antd `Form`, `PageHeader`,
+  `message.error` and antd `<Empty/>` applies.
+- **Customer** (`CustomerLayout`): use `src/components/ui/*` (`Button`, `LinkButton`, `FieldInput`, `Notice`,
+  `Panel`, `EmptyState`, `SectionHead`, `StaticPage`) with Tailwind utilities from `src/theme/customerTw.ts`.
+  No antd `Table`, `Form`, `Modal` or `DatePicker`. The four states become: a skeleton that matches the real
+  box (`PosterGridSkeleton` is the pattern), `<Notice variant="error">`, `<EmptyState>`, and the happy path.
+
+Customer-zone specifics that are easy to miss:
+
+- **Layout flags live in the route, not in props.** `CustomerLayout` reads `forceDark` and `fullBleed` off
+  `useMatches()`; set them in the route's `handle` in `src/routes/index.tsx`.
+- **Tailwind class strings must be static.** Tailwind scans source text, so an interpolated class is never
+  generated and fails with no error. Put shared strings in `customerTw.ts`, pre-fused, including `hover-fine:`
+  variants.
+- **Never Tailwind's `dark:`** — there is no `.dark` class on the DOM.
+
 ## Structure
 
 - Feature-first: a **singular** folder with a **plural** page — `src/features/movie/MoviesPage.tsx`,
@@ -83,5 +104,11 @@ and `/admin/audit-logs`. An admin-only query on a screen that staff can also ope
 
 ## Styling
 
-Inline `style={{...}}` + `antdTheme.useToken()` tokens (`token.colorBgContainer`, `token.borderRadiusLG`).
-Theme changes belong in `src/theme.ts` only. Prettier: single quotes, semicolons, 100 columns.
+**Operator:** inline `style={{...}}` + `antdTheme.useToken()` tokens (`token.colorBgContainer`,
+`token.borderRadiusLG`). **Customer:** Tailwind utilities plus the shared strings in `src/theme/customerTw.ts`.
+
+Theme changes belong in `src/theme/tokens.ts` only — note the path: it is a directory now (`tokens.ts`,
+`index.ts`, `customerTw.ts`), not the old single `src/theme.ts`. `.claude/rules/design-tokens.md` is binding and
+covers the Tailwind wiring, the preflight-off decision and the current palette.
+
+Prettier: single quotes, semicolons, 100 columns.

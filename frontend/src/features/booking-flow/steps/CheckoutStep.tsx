@@ -15,7 +15,9 @@ import {
   INK_BORDER_10,
   INK_BORDER_14,
 } from '@/theme/customerTw';
-import { MOCK_VOUCHERS, calcMockVoucher } from '../mockVoucher';
+import { useApplyDiscount, useRemoveDiscount } from '../hooks/useDiscount';
+import { useComboOrderForBooking } from '../hooks/useCombos';
+import { discountErrorMessage } from '../discountErrors';
 
 interface CheckoutStepProps {
   bookingId: string;
@@ -28,15 +30,23 @@ export const CheckoutStep = ({ bookingId, paySignal = 0 }: CheckoutStepProps) =>
   const { t } = useTranslation();
 
   const [actionError, setActionError] = useState<string | null>(null);
-  // Display-only MOCK voucher: no BE call, never changes real tender.
+  // REAL discount: POST/DELETE /orders/:id/discount. The applied amount lives on
+  // the ORDER (`discount_amount`), so it survives a reload; this state only holds
+  // what the customer is typing and the code string the apply call echoed back.
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
-  const [voucherInvalid, setVoucherInvalid] = useState(false);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
   // Gateway picked by the user (backend default when empty).
   const [pickedProvider, setPickedProvider] = useState<string | null>(null);
 
   const order = useOrderDetail(bookingId);
   const pay = usePayOrder();
+  const applyDiscount = useApplyDiscount(bookingId);
+  const removeDiscount = useRemoveDiscount(bookingId);
+  // Snacks are a SEPARATE order the gateway never charges for (see the note
+  // rendered below). Shown here only so the customer is not surprised at the
+  // counter by a bill they never saw on the payment screen.
+  const { comboOrder } = useComboOrderForBooking(bookingId);
 
   const isPending = order.data?.status === 'pending';
   // Payment state on entry (e.g. a failed attempt returning here) - no polling
@@ -99,13 +109,39 @@ export const CheckoutStep = ({ bookingId, paySignal = 0 }: CheckoutStepProps) =>
 
   const o = order.data;
 
-  const appliedVoucher = appliedCode ? calcMockVoucher(o.total_amount, appliedCode) : null;
-  const payable = o.total_amount - (appliedVoucher?.discount ?? 0);
+  // Authoritative, straight off the order - not recomputed on the client, because
+  // the gateway charges `payable_amount` and the screen must show that number.
+  const discount = o.discount_amount;
+  const payable = o.payable_amount;
+  const hasDiscount = discount > 0;
+  // A discount can only be touched while the order is still pending and unpaid.
+  const canEditDiscount = isPending && !expired && !o.paid_at;
 
-  const applyVoucher = () => {
-    const found = calcMockVoucher(o.total_amount, voucherInput);
-    setVoucherInvalid(!found);
-    if (found) setAppliedCode(found.code);
+  const applyVoucher = async () => {
+    const code = voucherInput.trim();
+    if (!code) return;
+    setVoucherError(null);
+    try {
+      const result = await applyDiscount.mutateAsync(code);
+      setAppliedCode(result.code ?? code.toUpperCase());
+      setVoucherInput('');
+    } catch (error) {
+      // Every refusal is 400/40001 with its own sentence (unknown, expired,
+      // below minimum, fully redeemed) - the code cannot tell them apart, so the
+      // MESSAGE is the signal. Translated locally; see discountErrors.ts.
+      setVoucherError(discountErrorMessage(error, t, t('customer.voucherInvalid')));
+    }
+  };
+
+  const clearVoucher = async () => {
+    setVoucherError(null);
+    try {
+      await removeDiscount.mutateAsync();
+      setAppliedCode(null);
+      setVoucherInput('');
+    } catch (error) {
+      setVoucherError(discountErrorMessage(error, t, t('common.somethingWrong')));
+    }
   };
 
   return (
@@ -156,86 +192,95 @@ export const CheckoutStep = ({ bookingId, paySignal = 0 }: CheckoutStepProps) =>
       ) : null}
 
       <section className="mb-6.5">
-        {/* Display-only mock voucher - TRANSPARENT, no box. */}
+        {/* Real discount code - TRANSPARENT, no box. */}
         <p className="mt-0 mb-2.5 text-sm font-bold">{t('customer.voucherTitle')}</p>
-        {appliedVoucher ? (
+        {hasDiscount ? (
           <div className="flex items-center justify-between gap-2.5">
             <span className="rounded-md bg-brand px-2 py-0.5 font-mono text-xs font-bold text-on-brand">
-              {appliedVoucher.code}
+              {/* After a reload the code string is gone (the order carries the
+                  amount, not the code), so fall back to a generic label. */}
+              {appliedCode ?? t('customer.voucherApplied')}
             </span>
             <span className="text-sm font-bold text-brand tabular-nums">
-              −{formatVND(appliedVoucher.discount)}
+              −{formatVND(discount)}
             </span>
             <Button
               variant="ghost"
               aria-label={t('customer.voucherRemove')}
-              onClick={() => {
-                setAppliedCode(null);
-                setVoucherInput('');
-                setVoucherInvalid(false);
-              }}
+              disabled={!canEditDiscount || removeDiscount.isPending}
+              onClick={() => void clearVoucher()}
             >
               ✕
             </Button>
           </div>
         ) : (
-          <>
-            <div className="flex gap-2">
-              <div className="min-w-0 flex-1">
-                <FieldInput
-                  id="checkout-voucher"
-                  label={t('customer.voucherPlaceholder')}
-                  value={voucherInput}
-                  maxLength={32}
-                  onChange={(event) => {
-                    setVoucherInput(event.target.value);
-                    setVoucherInvalid(false);
-                  }}
-                  error={voucherInvalid ? t('customer.voucherInvalid') : undefined}
-                />
-              </div>
-              <Button className="flex-none self-end" onClick={applyVoucher}>
-                {t('customer.voucherApply')}
-              </Button>
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <FieldInput
+                id="checkout-voucher"
+                label={t('customer.voucherPlaceholder')}
+                value={voucherInput}
+                maxLength={32}
+                disabled={!canEditDiscount}
+                onChange={(event) => {
+                  setVoucherInput(event.target.value);
+                  setVoucherError(null);
+                }}
+                error={voucherError ?? undefined}
+              />
             </div>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              {MOCK_VOUCHERS.map((v) => (
-                <button
-                  key={v.code}
-                  type="button"
-                  onClick={() => {
-                    setVoucherInput(v.code);
-                    setVoucherInvalid(false);
-                  }}
-                  className="cursor-pointer rounded-md border border-dashed border-brand/50 bg-transparent px-2 py-1 font-mono text-xs font-bold text-brand"
-                >
-                  {v.code} · {v.hint}
-                </button>
-              ))}
-            </div>
-          </>
+            <Button
+              className="flex-none self-end"
+              disabled={!canEditDiscount || !voucherInput.trim() || applyDiscount.isPending}
+              onClick={() => void applyVoucher()}
+            >
+              {t('customer.voucherApply')}
+            </Button>
+          </div>
         )}
-        <p className={`mt-2.5 mb-0 text-xs ${INK_60}`}>{t('customer.voucherDemoNote')}</p>
         <div className={`my-3 h-px ${INK_BG_08}`} />
-        {/* Totals always run 3 lines: total / discount / payable. */}
+        {/* Three lines: seat subtotal / discount / what the gateway will charge.
+            `payable` is the ONLY one of these the customer actually pays. */}
         <div className="flex items-baseline justify-between gap-4 py-1 text-[15px]">
-          <span className={INK_60}>{t('customer.voucherDiscount')}</span>
-          <span className="font-semibold text-brand tabular-nums">
-            {(appliedVoucher?.discount ?? 0) > 0
-              ? `−${formatVND(appliedVoucher?.discount ?? 0)}`
-              : formatVND(0)}
-          </span>
+          <span className={INK_60}>{t('customer.voucherSubtotal')}</span>
+          <span className="font-semibold tabular-nums">{formatVND(o.total_amount)}</span>
         </div>
         <div className="flex items-baseline justify-between gap-4 py-1 text-[15px]">
           <span className={INK_60}>{t('customer.voucherDiscount')}</span>
           <span className="font-semibold text-brand tabular-nums">
-            −{formatVND(appliedVoucher?.discount ?? 0)}
+            {hasDiscount ? `−${formatVND(discount)}` : formatVND(0)}
           </span>
         </div>
         <div className="flex items-baseline justify-between gap-4 text-xl font-bold">
           <span>{t('customer.voucherPayable')}</span>
           <span className="tabular-nums">{formatVND(payable)}</span>
         </div>
+
+        {/* Snacks sit OUTSIDE the total above on purpose: POST /combo-orders is
+            an order of its own and the gateway is only ever asked for the ticket
+            amount. Saying so here is the difference between a clear pickup note
+            and a surprise at the counter. */}
+        {comboOrder && comboOrder.items.length > 0 ? (
+          <div className={`mt-4 rounded-xl border p-3 ${INK_BORDER_14} ${INK_BG_035}`}>
+            <p className="mt-0 mb-2 text-sm font-bold">{t('customer.comboSummaryTitle')}</p>
+            {comboOrder.items.map((item) => (
+              <div
+                key={item.combo_id}
+                className="flex items-baseline justify-between gap-4 py-0.5 text-sm"
+              >
+                <span className={INK_60}>
+                  {item.combo_name} × {item.quantity}
+                </span>
+                <span className="tabular-nums">{formatVND(item.subtotal)}</span>
+              </div>
+            ))}
+            <div className="mt-2 flex items-baseline justify-between gap-4 text-sm font-bold">
+              <span>{t('customer.comboSummaryTotal')}</span>
+              <span className="tabular-nums">{formatVND(comboOrder.total)}</span>
+            </div>
+            <p className={`mt-2 mb-0 text-xs ${INK_60}`}>{t('customer.comboPayAtCounter')}</p>
+          </div>
+        ) : null}
       </section>
 
       {/* Payment method: card section (icon header + radio list). Only this block is a card - voucher/totals stay bare. Pick here, sidebar pays with it. */}

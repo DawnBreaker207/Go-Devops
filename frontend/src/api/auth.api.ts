@@ -1,6 +1,13 @@
 import { apiClient, unwrap } from './client';
 import { getDeviceId } from '@/utils/deviceId';
-import type { ApiResponse, LoginRequest, LoginResponse, RegisterRequest, User } from '@/types';
+import type {
+  ApiResponse,
+  LoginRequest,
+  LoginResponse,
+  RegisterRequest,
+  TokenPair,
+  User,
+} from '@/types';
 
 export const authApi = {
   /** Attach browser device_id so the session can be listed/revoked via /users/me/sessions. */
@@ -32,6 +39,32 @@ export const authApi = {
   register: (payload: RegisterRequest) =>
     apiClient
       .post<ApiResponse<User>>('/auth/register', payload, { skipAuthRefresh: true })
+      .then(unwrap),
+
+  /** Revokes the WHOLE refresh-token family, so every device on that family is
+   *  signed out server-side. `skipAuthRefresh` because a 401 here must not kick
+   *  the interceptor into refreshing a token we are in the middle of revoking. */
+  logout: (refreshToken: string) =>
+    apiClient
+      .post<ApiResponse<void>>(
+        '/auth/logout',
+        { refresh_token: refreshToken },
+        { skipAuthRefresh: true }
+      )
+      .then(() => undefined),
+
+  /** Returns a FRESH token pair, and the caller MUST store it.
+   *
+   *  The backend revokes every refresh token the user has (RevokeUser) before
+   *  issuing this pair, so keeping the old one leaves the session alive only
+   *  until the current access token expires and then dies at the first refresh.
+   *  Signing the user out of their other devices is the intended behaviour. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient
+      .put<ApiResponse<TokenPair>>('/users/me/password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+      })
       .then(unwrap),
 
   me: () => apiClient.get<ApiResponse<User>>('/users/me').then(unwrap),

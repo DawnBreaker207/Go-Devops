@@ -18,6 +18,8 @@ const ProfilePage = lazy(() => import('@/features/profile/ProfilePage'));
 const MoviesPage = lazy(() => import('@/features/movie/MoviesPage'));
 const ShowtimesPage = lazy(() => import('@/features/showtime/ShowtimesPage'));
 const HallsPage = lazy(() => import('@/features/hall/HallsPage'));
+const ConcessionsPage = lazy(() => import('@/features/concession/ConcessionsPage'));
+const DiscountsPage = lazy(() => import('@/features/discount/DiscountsPage'));
 const BookingsPage = lazy(() => import('@/features/booking/BookingsPage'));
 const UsersPage = lazy(() => import('@/features/user/UsersPage'));
 const ReportsPage = lazy(() => import('@/features/report/ReportsPage'));
@@ -52,12 +54,14 @@ export const router = createBrowserRouter([
       { path: PATHS.offers, element: <OffersPage /> },
       { path: PATHS.account, element: <AccountPage /> },
       // Single `/select-seat/:showtimeId` route, internal step state.
-      // Panel follows the page theme (INK + `--cp-seat-*` flip per mode, see CustomerLayout).
-      { path: PATHS.selectSeat, element: <BookingFlowPage /> },
+      // `handle.forceDark` pins the whole booking flow to dark whatever the customer's switch says:
+      // the seat palette (white screen bar, pale-grey free seats) is specified against the dark
+      // backdrop, and light mode can only approximate it with substitutions.
+      { path: PATHS.selectSeat, element: <BookingFlowPage />, handle: { forceDark: true } },
       // Post-payment landing: separate page outside the flow; clears stale flow store on mount.
-      { path: PATHS.bookingSuccess, element: <BookingSuccessPage /> },
+      { path: PATHS.bookingSuccess, element: <BookingSuccessPage />, handle: { forceDark: true } },
       // 303 redirect from the gateway: verify, then confirm.
-      { path: PATHS.paymentResult, element: <PaymentResultPage /> },
+      { path: PATHS.paymentResult, element: <PaymentResultPage />, handle: { forceDark: true } },
       // Legacy /my-tickets route: tickets now live in Account, redirect keeps old bookmarks working.
       { path: '/my-tickets', element: <Navigate to={accountTicketsPath()} replace /> },
       // Customer account screen (Figma 77-626) sits in CustomerLayout to share
@@ -99,6 +103,7 @@ export const router = createBrowserRouter([
               { path: PATHS.movies, element: <MoviesPage /> },
               { path: PATHS.showtimes, element: <ShowtimesPage /> },
               { path: PATHS.halls, element: <HallsPage /> },
+              { path: PATHS.concessions, element: <ConcessionsPage /> },
               { path: PATHS.boxOffice, element: <BoxOfficePage /> },
               { path: PATHS.customerLookup, element: <CustomerLookupPage /> },
             ],
@@ -108,6 +113,7 @@ export const router = createBrowserRouter([
             children: [
               { path: PATHS.bookings, element: <BookingsPage /> },
               { path: PATHS.users, element: <UsersPage /> },
+              { path: PATHS.discounts, element: <DiscountsPage /> },
               { path: PATHS.reports, element: <ReportsPage /> },
               { path: PATHS.auditLogs, element: <AuditLogPage /> },
               { path: PATHS.batchJobs, element: <BatchJobsPage /> },

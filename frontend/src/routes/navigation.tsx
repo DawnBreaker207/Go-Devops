@@ -1,6 +1,8 @@
 import { useMemo, type ReactNode } from 'react';
 import {
   CalendarOutlined,
+  CoffeeOutlined,
+  TagOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   LayoutOutlined,
@@ -63,6 +65,13 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'operations',
   },
   {
+    path: PATHS.concessions,
+    i18nKey: 'concessions',
+    icon: <CoffeeOutlined />,
+    roles: ROLES_OPERATOR,
+    group: 'operations',
+  },
+  {
     path: PATHS.boxOffice,
     i18nKey: 'boxOffice',
     icon: <ShopOutlined />,
@@ -87,6 +96,14 @@ export const NAV_ITEMS: NavItem[] = [
     path: PATHS.users,
     i18nKey: 'users',
     icon: <TeamOutlined />,
+    roles: ROLES_ADMIN,
+    group: 'management',
+  },
+  {
+    // ADMIN-ONLY, unlike Bap nuoc next door: a code moves revenue.
+    path: PATHS.discounts,
+    i18nKey: 'discounts',
+    icon: <TagOutlined />,
     roles: ROLES_ADMIN,
     group: 'management',
   },

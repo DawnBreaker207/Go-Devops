@@ -13,7 +13,11 @@ export const buildTheme = (mode: ThemeMode): ThemeConfig => {
     algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: {
       colorPrimary: brand.base,
-      colorInfo: brand.base,
+      // NOT brand.base. It was, and that read fine while the brand was green -
+      // but the brand is red now, so every `type="info"` Alert/Tag/Badge came out
+      // looking like an error. semantic.info exists for exactly this: neutral
+      // blue for non-bad news, distinct from semantic.danger.
+      colorInfo: semantic.info,
       colorError: semantic.danger,
       colorWarning: semantic.warning,
       colorSuccess: semantic.success,

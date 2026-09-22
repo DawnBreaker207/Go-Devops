@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import {
+  Alert,
   App,
   Avatar,
   Button,
@@ -12,7 +14,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { IdcardOutlined, LaptopOutlined } from '@ant-design/icons';
+import { IdcardOutlined, LaptopOutlined, LockOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useRevokeSession, useSessions, useUpdateProfile } from '@/hooks/useAccount';
@@ -76,6 +78,90 @@ const ProfileTab = () => {
         <Input />
       </Form.Item>
       <Button type="primary" htmlType="submit" loading={updateProfile.isPending}>
+        {t('common.save')}
+      </Button>
+    </Form>
+  );
+};
+
+interface PasswordFormValues {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+/** Change password. The store keeps the fresh token pair the backend returns -
+ *  see authStore.changePassword for why dropping it would sign this device out. */
+const PasswordTab = () => {
+  const { t } = useTranslation();
+  const { message } = App.useApp();
+  const [form] = Form.useForm<PasswordFormValues>();
+  const changePassword = useAuthStore((s) => s.changePassword);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (values: PasswordFormValues) => {
+    setSubmitting(true);
+    try {
+      await changePassword(values.current_password, values.new_password);
+      form.resetFields();
+      message.success(t('customer.passwordChanged'));
+    } catch (error) {
+      // A wrong current password is 401, not a field error, so it has no
+      // `details` map to bind - it can only be shown as a message.
+      message.error(errorMessage(error, t('common.somethingWrong')));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Form<PasswordFormValues>
+      form={form}
+      layout="vertical"
+      onFinish={submit}
+      style={{ maxWidth: 420 }}
+    >
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message={t('customer.passwordSignsOutOthers')}
+      />
+      <Form.Item
+        name="current_password"
+        label={t('customer.passwordCurrent')}
+        rules={[{ required: true, message: t('common.requiredField') }]}
+      >
+        <Input.Password autoComplete="current-password" />
+      </Form.Item>
+      <Form.Item
+        name="new_password"
+        label={t('customer.passwordNew')}
+        extra={t('user.passwordHint')}
+        rules={[
+          { required: true, message: t('common.requiredField') },
+          { min: 6, max: 72 },
+        ]}
+      >
+        <Input.Password autoComplete="new-password" />
+      </Form.Item>
+      <Form.Item
+        name="confirm_password"
+        label={t('customer.passwordConfirm')}
+        dependencies={['new_password']}
+        rules={[
+          { required: true, message: t('common.requiredField') },
+          ({ getFieldValue }) => ({
+            validator: (_, value) =>
+              !value || getFieldValue('new_password') === value
+                ? Promise.resolve()
+                : Promise.reject(new Error(t('customer.passwordMismatch'))),
+          }),
+        ]}
+      >
+        <Input.Password autoComplete="new-password" />
+      </Form.Item>
+      <Button type="primary" htmlType="submit" loading={submitting}>
         {t('common.save')}
       </Button>
     </Form>
@@ -171,6 +257,19 @@ export const ProfilePage = () => {
               children: (
                 <div style={{ padding: 24 }}>
                   <ProfileTab />
+                </div>
+              ),
+            },
+            {
+              key: 'password',
+              label: (
+                <span>
+                  <LockOutlined /> {t('customer.accountTab_password')}
+                </span>
+              ),
+              children: (
+                <div style={{ padding: 24 }}>
+                  <PasswordTab />
                 </div>
               ),
             },

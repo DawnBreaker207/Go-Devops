@@ -1,7 +1,7 @@
 import { App, DatePicker, Form, Modal, Select } from 'antd';
 import type dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
-import type { Showtime, ShowtimePayload, ShowtimeStatus } from '@/types';
+import type { Showtime, ShowtimePayload } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { applyApiFieldErrors } from '@/utils/form';
 import { fromApiInstant, toApiInstant } from '@/utils/format';
@@ -11,7 +11,10 @@ interface FormValues {
   movie_id: string;
   hall_id: string;
   start_at: dayjs.Dayjs;
-  status: ShowtimeStatus;
+  /** Only the SETTABLE statuses: the select offers SHOWTIME_STATUSES, and a
+   *  full-replace PUT carrying 'cancelled' would mark a showtime cancelled while
+   *  leaving its paid bookings alone. Cancelling goes through its own endpoint. */
+  status: 'open' | 'closed';
 }
 
 interface ShowtimeFormModalProps {
@@ -46,7 +49,9 @@ export const ShowtimeFormModal = ({
         movie_id: showtime.movie_id,
         hall_id: showtime.hall_id,
         start_at: fromApiInstant(showtime.start_at),
-        status: showtime.status,
+        // A cancelled showtime is terminal; the select cannot show that value,
+        // and the form is disabled for it anyway (see ShowtimesPage).
+        status: showtime.status === 'cancelled' ? 'closed' : showtime.status,
       }
     : { status: 'open' };
 

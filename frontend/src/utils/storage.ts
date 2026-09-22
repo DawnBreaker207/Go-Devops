@@ -3,7 +3,11 @@ const REFRESH_TOKEN_KEY = 'cp_refresh_token';
 
 /** Shared by appStore AND locales/i18n (read during i18next init, before any store exists); kept here to avoid an import cycle. */
 export const LANG_STORAGE_KEY = 'cp_language';
+/** Operator zone (antd algorithm). */
 export const THEME_STORAGE_KEY = 'cp_theme';
+/** Customer zone, deliberately a SEPARATE key: the two zones have independent switches and defaults
+ *  (operator light, customer dark), so one must never overwrite the other. */
+export const CUSTOMER_THEME_STORAGE_KEY = 'cp_customer_theme';
 
 /** Access-token key, exported so multi-tab `storage`-event sync doesn't guess the string. */
 export const ACCESS_TOKEN_STORAGE_KEY = ACCESS_TOKEN_KEY;

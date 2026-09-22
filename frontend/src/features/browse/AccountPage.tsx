@@ -5,6 +5,7 @@ import DeleteAccountDialog from './components/account/DeleteAccountDialog';
 import MembershipTeaser from './components/account/MembershipTeaser';
 import NotificationsSection from './components/account/NotificationsSection';
 import ProfileSection from './components/account/ProfileSection';
+import PasswordSection from './components/account/PasswordSection';
 import SessionsSection from './components/account/SessionsSection';
 import TicketsSection from './components/account/TicketsSection';
 import TransactionsSection from './components/account/TransactionsSection';
@@ -23,7 +24,8 @@ import {
   TRANSITION_FAST,
 } from '@/theme/customerTw';
 
-type Tab = 'profile' | 'tickets' | 'transactions' | 'notifications' | 'sessions' | 'membership';
+type Tab =
+  'profile' | 'password' | 'tickets' | 'transactions' | 'notifications' | 'sessions' | 'membership';
 
 const IdCardIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -76,6 +78,27 @@ const DevicesIcon = () => (
   </svg>
 );
 
+const LockIcon = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect
+      x="4"
+      y="10"
+      width="16"
+      height="10"
+      rx="2"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M8 10V7a4 4 0 1 1 8 0v3"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
 const CrownIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
@@ -106,6 +129,7 @@ const TicketIcon = () => (
 
 const TAB_ICON: Record<Tab, () => React.JSX.Element> = {
   profile: IdCardIcon,
+  password: LockIcon,
   tickets: TicketIcon,
   transactions: HistoryIcon,
   notifications: BellIcon,
@@ -115,6 +139,7 @@ const TAB_ICON: Record<Tab, () => React.JSX.Element> = {
 
 const TABS: Tab[] = [
   'profile',
+  'password',
   'tickets',
   'transactions',
   'notifications',
@@ -223,6 +248,7 @@ export const AccountPage = () => {
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
           {tab === 'profile' ? <ProfileSection user={user} /> : null}
+          {tab === 'password' ? <PasswordSection /> : null}
           {tab === 'tickets' ? <TicketsSection /> : null}
           {tab === 'transactions' ? <TransactionsSection /> : null}
           {tab === 'notifications' ? <NotificationsSection /> : null}

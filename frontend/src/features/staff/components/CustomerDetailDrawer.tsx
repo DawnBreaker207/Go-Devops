@@ -54,8 +54,9 @@ export const CustomerDetailDrawer = ({ customerId, onClose }: CustomerDetailDraw
     },
     {
       title: t('booking.total'),
-      dataIndex: 'total_amount',
-      key: 'total_amount',
+      // What the customer was charged, not the undiscounted seat subtotal.
+      dataIndex: 'payable_amount',
+      key: 'payable_amount',
       width: 120,
       align: 'right',
       render: (value: number) => <span className="tabular-nums">{formatVND(value)}</span>,

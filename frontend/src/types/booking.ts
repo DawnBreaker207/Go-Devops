@@ -62,7 +62,14 @@ export interface OrderStatus {
   showtime_id: string;
   status: BookingStatus;
   status_reason?: BookingStatusReason;
+  /** SEAT SUBTOTAL, before any discount. NOT the amount due - rendering this as
+   *  "amount to pay" shows the wrong number on a discounted order. */
   total_amount: number;
+  /** What a discount code took off. 0 when none is applied. */
+  discount_amount: number;
+  /** total_amount - discount_amount: what the gateway will actually charge.
+   *  Always present (no omitempty on the backend), so it never silently reads 0. */
+  payable_amount: number;
   created_at: string;
   expires_at?: string;
   paid_at?: string;

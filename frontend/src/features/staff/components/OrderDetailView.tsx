@@ -94,7 +94,7 @@ export const OrderDetailView = ({ order }: OrderDetailViewProps) => {
           {formatDateTime(order.created_at)}
         </Descriptions.Item>
         <Descriptions.Item label={t('booking.total')}>
-          <span className="tabular-nums">{formatVND(order.total_amount)}</span>
+          <span className="tabular-nums">{formatVND(order.payable_amount)}</span>
         </Descriptions.Item>
       </Descriptions>
 

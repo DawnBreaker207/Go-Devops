@@ -8,6 +8,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isBootstrapping: boolean;
   login: (payload: LoginRequest) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
   bootstrap: () => Promise<void>;
 }
@@ -23,9 +24,30 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: result.user, isAuthenticated: true, isBootstrapping: false });
   },
 
+  /** Stores the FRESH pair the backend returns. Skipping that would sign the
+   *  user out of THIS device too at the next refresh, because changing a password
+   *  revokes every refresh token the account has. Other devices are meant to be
+   *  signed out; the one doing the changing is not. */
+  changePassword: async (currentPassword, newPassword) => {
+    const pair = await authApi.changePassword(currentPassword, newPassword);
+    tokenStorage.set(pair.access_token, pair.refresh_token);
+  },
+
+  /** Clears local state IMMEDIATELY, then tells the server.
+   *
+   *  Order matters: the user is signed out of this tab whatever the network
+   *  does, and a failed call must never leave them stuck on a screen they think
+   *  they left. But the call has to happen — without it the refresh token stays
+   *  valid for its full TTL and the device keeps showing as active under
+   *  /users/me/sessions, which is exactly what that screen is for. */
   logout: () => {
+    const refreshToken = tokenStorage.getRefreshToken();
     tokenStorage.clear();
     set({ user: null, isAuthenticated: false, isBootstrapping: false });
+    if (!refreshToken) return;
+    // Fire-and-forget: revocation is best-effort from the client's side, and the
+    // token is already gone locally either way.
+    void authApi.logout(refreshToken).catch(() => undefined);
   },
 
   /** One-time app start: re-fetch user when a token exists. */

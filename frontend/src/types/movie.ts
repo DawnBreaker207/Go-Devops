@@ -36,3 +36,16 @@ export interface MoviePayload {
   release_date: string;
   status: MovieStatus;
 }
+
+/** dto.UploadResponse from POST /admin/uploads/poster. `url` is what goes into
+ *  `poster_url`; it is served from /media/* which sits OUTSIDE the /api/v1 prefix. */
+export interface UploadResult {
+  url: string;
+  content_type: string;
+  size: number;
+}
+
+/** Backend limits, mirrored so the form can refuse before spending the upload.
+ *  Size is `storage.max_upload_mb` in config.yaml (5 today). */
+export const POSTER_MAX_BYTES = 5 * 1024 * 1024;
+export const POSTER_ACCEPT = ['image/jpeg', 'image/png', 'image/webp'] as const;
