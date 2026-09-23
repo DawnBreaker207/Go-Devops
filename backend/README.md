@@ -16,7 +16,8 @@ API service của **Cinema Project**, viết bằng Go + Gin + GORM + PostgreSQL
 ## Chạy dev
 
 ```bash
-cp .env.example .env                       # sửa DATABASE_* và JWT_* cho phù hợp
+cp ../.env.example ../.env               # cho `docker compose` o root (sửa DATABASE_* và JWT_* cho phù hợp)
+cp ../.env.example .env                  # cho `make run` trong backend/
 openssl rand -hex 32                       # sinh secret cho JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
 
 docker compose up -d postgres            # hoặc dùng Postgres sẵn có

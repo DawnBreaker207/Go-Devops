@@ -22,7 +22,7 @@ test: ## Chay toan bo test (can Postgres + RabbitMQ: docker compose up -d postgr
 	go test ./... -count=1
 
 test-system: ## Bring the real stack up (postgres + rabbitmq) and run the full suite against it
-	docker compose up -d postgres rabbitmq
+	docker compose -f ../docker-compose.yml up -d postgres rabbitmq
 	go test ./... -count=1
 
 chaos: ## Real fault injection: builds cmd/server, runs it as a real OS process, hard-kills and restarts it mid-hold, checks recovery over HTTP + SQL (needs postgres on localhost:5432 + the migrate CLI on PATH)
@@ -64,11 +64,11 @@ migrate-down: ## Roll back 1 schema step
 migrate-seed: ## Apply idempotent SQL scripts from migrations/seed (in order)
 	@for f in migrations/seed/*.sql; do \
 		echo "== applying $$f"; \
-		docker compose exec -T postgres psql -U $(DATABASE_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 < $$f; \
+		docker compose -f ../docker-compose.yml exec -T postgres psql -U $(DATABASE_USER) -d $(DATABASE_NAME) -v ON_ERROR_STOP=1 < $$f; \
 	done
 
 migrate-db-reset: ## Drop & recreate the dev DB, then apply schema + seed (destroys all data!)
-	docker compose exec -T postgres psql -U $(DATABASE_USER) -c "DROP DATABASE IF EXISTS $(DATABASE_NAME) WITH (FORCE);" -c "CREATE DATABASE $(DATABASE_NAME);"
+	docker compose -f ../docker-compose.yml exec -T postgres psql -U $(DATABASE_USER) -c "DROP DATABASE IF EXISTS $(DATABASE_NAME) WITH (FORCE);" -c "CREATE DATABASE $(DATABASE_NAME);"
 	migrate -path migrations/schema -database "$(MIGRATE_URL)" up
 	$(MAKE) migrate-seed
 
@@ -82,10 +82,10 @@ migrate-create-seed: ## Scaffold a seed script: make migrate-create-seed name=sa
 	echo created migrations/seed/$$f
 
 docker-up: ## Build and start postgres + rabbitmq + migrate + backend (set secrets or APP_ENV=development in .env)
-	docker compose up -d --build
+	docker compose -f ../docker-compose.yml up -d --build
 
 docker-down: ## Dung va xoa container
-	docker compose down
+	docker compose -f ../docker-compose.yml down
 
 clean: ## Xoa binary da build
 	rm -rf $(BIN_DIR)

@@ -1,0 +1,2 @@
+# Local env for `docker compose` at repo root. Never commit this file.
+.env

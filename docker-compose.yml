@@ -1,0 +1,130 @@
+# Root compose: run from repo root. All values from root .env, no defaults.
+# `name: backend` keeps old volumes/network names, moving the file loses no dev DB.
+name: backend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: cp-rabbitmq
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_UI_PORT}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Fast cache for hot public reads; optional (server runs without it).
+  redis:
+    image: redis:7-alpine
+    container_name: cp-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Run migrations before backend starts (URL-encode a password with special chars).
+  migrate:
+    image: migrate/migrate:v4.18.3
+    volumes:
+      - ./backend/migrations/schema:/migrations:ro
+    command:
+      - "-path"
+      - "/migrations"
+      - "-database"
+      - "postgres://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    # Local tag; prod overlay swaps in registry :sha images.
+    image: cinema-backend:local
+    container_name: cp-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      # redis is fail-open: started (not healthy) so a dead cache never blocks backend.
+      redis:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    # Secrets/config from root .env. Internal addresses pinned here
+    # (environment wins over env_file) so hosts are never wrong.
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: 8080
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_SSLMODE: disable
+      QUEUE_URL: amqp://guest:guest@rabbitmq:5672/
+      REDIS_ADDR: redis:6379
+    volumes:
+      - app_data:/app/data
+    ports:
+      - "${BACKEND_PORT}:8080"
+
+  # Local image registry (self-hosted registry equivalent): deploy pushes
+  # immutable :sha images here and pulls them back. Loopback needs no TLS.
+  registry:
+    image: registry:2
+    container_name: cp-registry
+    restart: unless-stopped
+    volumes:
+      - registry_data:/var/lib/registry
+    ports:
+      - "${REGISTRY_PORT}:5000"
+
+  # Single hostname (cloudflared -> :80): nginx serves SPA, /api/* proxies to backend.
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Vite bakes this at build time, from root .env.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    image: cinema-frontend:local
+    container_name: cp-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "${FRONTEND_PORT}:80"
+
+volumes:
+  postgres_data:
+  app_data:
+  registry_data:

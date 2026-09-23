@@ -1,0 +1,8 @@
+# Prod overlay: run immutable registry images, one per commit sha.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# IMAGE_TAG comes from CI shell env (commit sha); rollback = older sha.
+services:
+  backend:
+    image: localhost:5000/cinema-backend:${IMAGE_TAG}
+  frontend:
+    image: localhost:5000/cinema-frontend:${IMAGE_TAG}
