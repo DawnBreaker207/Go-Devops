@@ -1,0 +1,284 @@
+/* TAILWIND: theme + utilities only, NO preflight (resets defaults on top of antd, breaks admin screens). antd reset must sit layered BELOW utilities (unlayered JS import beats layered utilities on form elements); layer order = first-appearance order. */
+@import 'antd/dist/reset.css' layer(antd-reset);
+
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* DESIGN TOKENS mirror of src/theme/tokens.ts (parity test fails on drift). No hardcoded colors: var(--cp-*) in CSS, TS imports from '@/theme'. */
+:root {
+  /* Brand red. */
+  --cp-brand: #e4002b;
+  --cp-brand-hover: #e93355;
+  --cp-brand-active: #c20025;
+  --cp-brand-soft: #fbd9df;
+  --cp-brand-softer: #fdedf0;
+  --cp-text-on-brand: #ffffff;
+
+  /* Dark backdrop, red-shifted to match brand. */
+  --cp-backdrop-base: #070001;
+  --cp-backdrop-mid: #220006;
+  --cp-backdrop-glow: #50000f;
+  --cp-light-canvas: #f7f6f4;
+
+  --cp-danger: #d22f27;
+  --cp-warning: #d97706;
+  --cp-info: #2563eb;
+
+  /* Seat states: available=gray, selected=blue, held=amber, sold=red. */
+  --cp-seat-available: #d1d5db;
+  --cp-seat-available-text: #1f2937;
+  --cp-seat-selected: #2563eb;
+  --cp-seat-selected-text: #ffffff;
+  --cp-seat-sold: #dc2626;
+  --cp-seat-sold-text: #ffffff;
+  --cp-seat-held: #d97706;
+  --cp-seat-held-text: #1a1200;
+  /* Available-seat hover turns green per spec (differs from selected blue). */
+  --cp-seat-available-hover: #22c55e;
+  --cp-surface-base: #ffffff;
+  --cp-surface-border: #bfbfbf;
+
+  --cp-seat-screen: #ffffff;
+
+  /* Seat types, admin grid editor on light bg only. */
+  --cp-seat-type-standard: #edf0ee;
+  --cp-seat-type-standard-text: #3a3f3c;
+  --cp-seat-type-vip: #fbd9df;
+  --cp-seat-type-vip-text: #720016;
+  --cp-seat-type-couple: #fde8ce;
+  --cp-seat-type-couple-text: #7a4405;
+  --cp-seat-type-recliner: #dde7fe;
+  --cp-seat-type-recliner-text: #1e3a8a;
+
+  /* Age badges ascending restriction green (P) -> dark red (T18). Never --cp-brand: brand is identity, ratings must not read as branding. */
+  --cp-rating-p: #2e7d32;
+  --cp-rating-p-text: #ffffff;
+  --cp-rating-k: #1d4ed8;
+  --cp-rating-k-text: #ffffff;
+  --cp-rating-t13: #fdb813;
+  --cp-rating-t13-text: #402d00;
+  --cp-rating-t16: #c2410c;
+  --cp-rating-t16-text: #ffffff;
+  --cp-rating-t18: #8b0000;
+  --cp-rating-t18-text: #ffffff;
+}
+
+/* CUSTOMER LIGHT/DARK, independent from antd dark mode (admin zone). Default DARK; `.cp-customer--light` is opt-in (not on force-dark screens: white seats only read on dark). `--cp-ink-rgb` holds THREE rgb numbers so `rgba(var(--cp-ink-rgb), X)` keeps per-element opacity while swapping hue. */
+:root {
+  --cp-ink-rgb: 255, 255, 255;
+  --cp-canvas: var(--cp-backdrop-base);
+  --cp-chrome-bg: rgba(0, 0, 0, 0.55);
+  --cp-chrome-bg-strong: rgba(0, 0, 0, 0.9);
+  --cp-chrome-border: rgba(255, 255, 255, 0.08);
+}
+
+.cp-customer.cp-customer--light {
+  --cp-ink-rgb: 20, 20, 20;
+  --cp-canvas: var(--cp-light-canvas);
+  --cp-chrome-bg: rgba(247, 246, 244, 0.75);
+  --cp-chrome-bg-strong: rgba(247, 246, 244, 0.94);
+  --cp-chrome-border: rgba(20, 20, 20, 0.1);
+  background-color: var(--cp-canvas);
+  background-image: none;
+  /* White seats only read on dark; light mode substitutes dark gray.
+     Selected blue, held amber, sold red read on both, unchanged. */
+  --cp-seat-available: #4b5563;
+  --cp-seat-available-hover: #16a34a;
+  /* The fill above flips dark, so the number on it must flip light. Reuses an existing token rather
+     than inventing a second near-white. */
+  --cp-seat-available-text: var(--cp-seat-selected-text);
+  /* The screen bar is `seat.screen` = #ffffff, which vanishes on the light canvas (#f7f6f4).
+     The booking flow is force-dark so this is a fallback, not the normal path. */
+  --cp-seat-screen: #4b5563;
+}
+
+/* TAILWIND BRIDGE: alias --cp-* via `inline`, no new colors (one color keeps one definition). Enables bg-brand, text-brand, border-danger, ... utilities. */
+@theme inline {
+  --color-brand: var(--cp-brand);
+  --color-brand-hover: var(--cp-brand-hover);
+  --color-brand-active: var(--cp-brand-active);
+  --color-brand-soft: var(--cp-brand-soft);
+  --color-brand-softer: var(--cp-brand-softer);
+  /* Bridge name must be `--color-on-brand`: Tailwind derives `text-{name}` from `--color-{name}`; a wrong name leaves `text-on-brand` ungenerated. Source `--cp-text-on-brand` stays as-is. */
+  --color-on-brand: var(--cp-text-on-brand);
+  --color-danger: var(--cp-danger);
+  --color-warning: var(--cp-warning);
+  --color-info: var(--cp-info);
+}
+
+/* Radius names (radius-card/-btn); values reuse customer-zone radii (12px card/poster, 8px button). */
+@theme {
+  --radius-card: 12px;
+  --radius-btn: 8px;
+}
+
+/* "Two-Family Rule": body text uses the default font (Inter on admin);
+ * MACHINE-PRINTED values (prices, ticket codes, countdowns) use a separate
+ * mono font, never body text. System stack (no webfont cost). Declared outside
+ * @layer so it beats Tailwind's default `--font-mono` (layered theme loses to
+ * unlayered regardless of order). */
+:root {
+  --font-mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
+  /* Body text (not figures): `display` for headings, `body` for content. Google Fonts <link> in index.html. Customer zone ONLY; admin keeps Inter. */
+  --font-display: 'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* Fixed bottom-bar clearance for <main> bottom padding (sub-900px only). */
+:root {
+  --cp-bottomnav-height: 60px;
+}
+
+.cp-customer {
+  font-family: var(--font-body);
+}
+
+.cp-customer h1,
+.cp-customer h2,
+.cp-customer h3,
+.cp-customer h4 {
+  font-family: var(--font-display);
+}
+
+/* antd injects CSS-in-JS at runtime AFTER static Tailwind: at equal specificity later wins, so MainLayout `h-20`/`px-6` can lose to antd Header defaults with no error. Reset to neutral and let Tailwind/inline decide. `background` is EXCLUDED: dark colors come from darkAlgorithm tokens with no .dark class to key on; resetting it would erase both modes. Unlayered to beat later-injected antd rules without per-call !important. */
+.ant-layout,
+.ant-layout-header,
+.ant-layout-sider,
+.ant-layout-content {
+  height: auto !important;
+  line-height: inherit !important;
+  padding: 0 !important;
+}
+
+/* antd never hides group titles when `inlineCollapsed`: keep grouped items in both states and hide titles via CSS (restructuring would remount and flicker). */
+.ant-menu-inline-collapsed .ant-menu-item-group-title {
+  display: none;
+}
+
+/* Selected-item indicator moved left (project requirement), antd default is right `border-right`. */
+.ant-menu-inline .ant-menu-item::after {
+  left: 0;
+  right: auto;
+  border-right: none;
+  border-left: 3px solid var(--cp-brand);
+}
+
+/* All customer links are brand (UI decision); unlayered to beat runtime-injected antd `a{color}` at equal specificity. */
+.cp-customer a {
+  color: var(--cp-brand);
+}
+
+/* MOTION TOKENS mirror of src/motion.ts (parity test fails on drift). Use var(--motion-*) in CSS, motion.ts in TS; never hardcode. */
+:root {
+  --motion-duration-instant: 100ms;
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-moderate: 300ms;
+  --motion-duration-slow: 450ms;
+  --motion-duration-decorative: 600ms;
+
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-ease-linear: linear;
+
+  --motion-distance-lift: 4px;
+  --motion-distance-shift: 12px;
+  --motion-distance-reveal: 16px;
+
+  --motion-scale-enter: 0.96;
+  --motion-scale-press: 0.98;
+  --motion-scale-zoom: 1.05;
+  --motion-scale-pop: 1.08;
+
+  --motion-stagger-step: 50ms;
+  --motion-stagger-max: 6;
+}
+
+/* Motion bridge: `duration-fast`, `ease-out`, ... alias the tokens above (single source with plain CSS and motion.ts). */
+@theme inline {
+  --duration-fast: var(--motion-duration-fast);
+  --duration-base: var(--motion-duration-base);
+  --duration-moderate: var(--motion-duration-moderate);
+  --ease-out: var(--motion-ease-out);
+  --ease-in: var(--motion-ease-in);
+}
+
+/* Reduced motion: drop travel, zoom, parallax, autoplay; fades only (<= fast).
+ * Motion (JS) is handled separately via MotionConfig reducedMotion="user" in App. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: 1ms;
+    --motion-duration-fast: 150ms;
+    --motion-duration-base: 150ms;
+    --motion-duration-moderate: 150ms;
+    --motion-duration-slow: 150ms;
+    --motion-duration-decorative: 150ms;
+
+    --motion-distance-lift: 0px;
+    --motion-distance-shift: 0px;
+    --motion-distance-reveal: 0px;
+
+    --motion-scale-enter: 1;
+    --motion-scale-press: 1;
+    --motion-scale-zoom: 1;
+    --motion-scale-pop: 1;
+
+    --motion-stagger-step: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Machine-printed values (money, codes, countdowns, stats): tabular figures (no tick jitter) + separate mono family. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  font-family: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 4px;
+}
+
+/* CUSTOM TAILWIND VARIANTS. Last in file: the motion test reads the :root...@media span by naive string slicing, so @media placed earlier breaks its parse. */
+
+/* `hover-fine:`: hover only on true pointer devices, never sticky on touch.
+ * Plain `hover:` lacks this; define once, reuse. */
+@custom-variant hover-fine {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
+}

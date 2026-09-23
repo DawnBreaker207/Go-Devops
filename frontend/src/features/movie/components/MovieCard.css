@@ -1,0 +1,113 @@
+/* Card motion: animate transform + opacity only (shadow fades on its own layer, never animate box-shadow). Every value is a var(--motion-*) token. */
+
+.movie-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--movie-card-radius, 8px);
+  overflow: hidden;
+  background: var(--movie-card-bg, var(--cp-surface-base));
+  cursor: pointer;
+  /* Listed per property - no catch-all shorthand */
+  transition: transform var(--motion-duration-base) var(--motion-ease-out);
+}
+
+/* Separate shadow layer: animate opacity, never box-shadow. */
+.movie-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-duration-base) var(--motion-ease-out);
+}
+
+.movie-card__media {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  background: var(--movie-card-placeholder, rgb(128 128 128 / 0.16));
+}
+
+.movie-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--motion-duration-base) var(--motion-ease-out);
+}
+
+/* Overlay + buttons: ALWAYS VISIBLE. Touch has no hover, so never hide actions behind it; only real-mouse devices fade them out/in. */
+.movie-card__overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.78), rgb(0 0 0 / 0));
+  opacity: 1;
+  transition: opacity var(--motion-duration-base) var(--motion-ease-out);
+}
+
+.movie-card__body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.movie-card__title {
+  font-weight: 600;
+  line-height: 1.35;
+  /* Fixed 2 lines: card height never shifts on varying titles, no layout shift on list load. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.7em;
+}
+
+.movie-card__meta {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+/* Hover for real-mouse devices only. Hand-scoped (no Tailwind here). Every hover has a matching :focus-within for keyboard. */
+@media (hover: hover) and (pointer: fine) {
+  .movie-card__overlay {
+    opacity: 0;
+  }
+
+  .movie-card:hover,
+  .movie-card:focus-within {
+    transform: translateY(calc(-1 * var(--motion-distance-lift)));
+  }
+
+  .movie-card:hover::after,
+  .movie-card:focus-within::after {
+    opacity: 1;
+  }
+
+  .movie-card:hover .movie-card__media img,
+  .movie-card:focus-within .movie-card__media img {
+    transform: scale(var(--motion-scale-zoom));
+  }
+
+  .movie-card:hover .movie-card__overlay,
+  .movie-card:focus-within .movie-card__overlay {
+    opacity: 1;
+  }
+}
+
+/* Pressed state. Kept on touch too. */
+.movie-card:active {
+  transform: scale(var(--motion-scale-press));
+}
+
+/* Visible focus while the card moves. Focus ring follows brand, never a second red per screen. */
+.movie-card:focus-visible {
+  outline: 2px solid var(--movie-card-focus, var(--cp-brand));
+  outline-offset: 2px;
+}

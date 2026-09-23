@@ -1,0 +1,25 @@
+/* Two effects awkward in JS: "x" button on cell hover/focus, and blinking on merge-pending seats. Colors stay in TSX inline styles - this file is hover/animation only, no hardcoded colors. */
+
+.seat-cell .seat-x {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.seat-cell:hover .seat-x,
+.seat-cell:focus-within .seat-x {
+  opacity: 1;
+}
+
+@keyframes seat-pending-merge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.seat-pending-merge {
+  animation: seat-pending-merge-pulse 1s ease-in-out infinite;
+}
