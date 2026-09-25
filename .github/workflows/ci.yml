@@ -82,7 +82,7 @@ jobs:
         run: |
           docker compose -f ${{ env.COMPOSE_FILE }} -f docker-compose.prod.yml pull
           docker compose -f ${{ env.COMPOSE_FILE }} -f docker-compose.prod.yml up -d
-          set -a; . ./.env; set +a
+          BACKEND_PORT=$(grep -E '^BACKEND_PORT=' .env | cut -d= -f2 | tr -d '\r')
           for i in $(seq 1 12); do
             curl -fsS http://localhost:${BACKEND_PORT}/healthz && exit 0 || sleep 10
           done
