@@ -1,9 +1,5 @@
-# Test overlay: test stages carry a CMD that runs the suite when the
-# container starts, so verify with `run` (it exits with the suite's code),
-# never bare `build`. Always pass --build: `run` alone reuses stale images.
-# Deps must be up first:
-#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --wait postgres rabbitmq redis
-#   docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm --build backend-test
+# Test stages run the suite via CMD at container start: verify with `run --build`, never bare `build`.
+# Deps first: docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --wait postgres rabbitmq redis
 services:
   backend-test:
     build:

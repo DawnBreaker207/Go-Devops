@@ -1,5 +1,4 @@
-# Root compose: run from repo root. All values from root .env, no defaults.
-# `name: backend` keeps old volumes/network names, moving the file loses no dev DB.
+# `name: backend` pins volumes/networks, moving the file loses no dev DB.
 name: backend
 
 services:
@@ -37,7 +36,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Fast cache for hot public reads; optional (server runs without it).
   redis:
     image: redis:7-alpine
     container_name: cp-redis
@@ -50,7 +48,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Run migrations before backend starts (URL-encode a password with special chars).
+  # URL-encode the DB password if it has special chars.
   migrate:
     image: migrate/migrate:v4.18.3
     volumes:
@@ -81,8 +79,7 @@ services:
         condition: service_started
       migrate:
         condition: service_completed_successfully
-    # Secrets/config from root .env. Internal addresses pinned here
-    # (environment wins over env_file) so hosts are never wrong.
+    # Internal hosts pinned here (environment wins over env_file).
     env_file:
       - .env
     environment:
@@ -97,8 +94,7 @@ services:
     ports:
       - "${BACKEND_PORT}:8080"
 
-  # Local image registry (self-hosted registry equivalent): deploy pushes
-  # immutable :sha images here and pulls them back. Loopback needs no TLS.
+  # Local registry for immutable :sha images; loopback needs no TLS.
   registry:
     image: registry:2
     container_name: cp-registry
@@ -108,7 +104,7 @@ services:
     ports:
       - "${REGISTRY_PORT}:5000"
 
-  # Single hostname (cloudflared -> :80): nginx serves SPA, /api/* proxies to backend.
+  # nginx serves SPA; /api/* proxies to backend.
   frontend:
     build:
       context: ./frontend

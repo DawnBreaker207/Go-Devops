@@ -14,7 +14,6 @@ FROM deps AS test
 
 COPY . .
 
-# Tests run when the container starts (`docker compose run`).
 CMD ["sh", "-c", "npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test"]
 
 # ---------- build stage ----------

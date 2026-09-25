@@ -10,7 +10,7 @@ import { tokenStorage } from '@/utils/storage';
 /** Fired on expired session; App listens and routes to /login. */
 export const UNAUTHORIZED_EVENT = 'cp:unauthorized';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 interface RetriableConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;

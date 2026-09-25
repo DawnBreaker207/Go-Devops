@@ -1,2 +1,3 @@
-# Local env for `docker compose` at repo root. Never commit this file.
+# Local env files. Never commit either one.
 .env
+.env.deploy

@@ -1,7 +1,13 @@
-.PHONY: dev down logs ps build prod
+.PHONY: dev down logs ps build prod run migrate-up
 
 dev: ## Full stack local (build + up)
 	docker compose up -d --build
+
+run: ## Start stack without rebuilding
+	docker compose up -d
+
+migrate-up: ## Apply database migrations only
+	docker compose up migrate
 
 build: ## Build images only
 	docker compose build

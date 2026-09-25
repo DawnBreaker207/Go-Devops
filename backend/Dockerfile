@@ -16,9 +16,7 @@ FROM deps AS test
 
 COPY . .
 
-# Tests run when the container starts (`docker compose run`), so this stage
-# works with any builder — no custom build network needed. Fails CI when
-# vet or any test fails (nonzero exit propagates through `run`).
+# Suite runs at container start; nonzero exit fails CI through `docker compose run`.
 CMD ["sh", "-c", "go vet ./... && go test ./... -count=1"]
 
 # ---------- build stage ----------
