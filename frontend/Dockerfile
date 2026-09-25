@@ -1,10 +1,25 @@
-# ---------- build stage ----------
-FROM node:22-alpine AS builder
+# syntax=docker/dockerfile:1
+# ---------- deps stage ----------
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
+# Plain RUN (no cache mount): node_modules must live IN the image because
+# the test stage below executes at container runtime, not at build time.
 RUN npm ci
+
+# ---------- test stage (CI) ----------
+FROM deps AS test
+
+COPY . .
+
+# Tests run when the container starts (`docker compose run`).
+CMD ["sh", "-c", "npx tsc --noEmit -p tsconfig.app.json && npm run lint && npm test"]
+
+# ---------- build stage ----------
+FROM deps AS builder
+
 COPY . .
 
 ARG VITE_API_BASE_URL

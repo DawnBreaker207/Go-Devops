@@ -21,63 +21,35 @@ env:
 
 jobs:
   backend:
-    # Odd TEST_* ports dodge the dev stack (5432/5672/6379).
     runs-on: self-hosted
-    defaults:
-      run:
-        working-directory: backend
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cinema
-        ports: ["5433:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres -d cinema"
-          --health-interval 10s --health-timeout 5s --health-retries 5
-      rabbitmq:
-        image: rabbitmq:3.13-management-alpine
-        ports: ["5673:5672"]
-      redis:
-        image: redis:7-alpine
-        ports: ["6380:6379"]
     steps:
       - uses: actions/checkout@v4
+      # .env feeds compose interpolation (base file has no defaults).
       - name: Write .env
         run: |
           printf '%s' "${{ secrets.ENV_FILE }}" > .env
-          grep -v '^#' .env | grep -v '^$' >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-          cache-dependency-path: backend/go.sum
-      - run: go vet ./...
-      - run: go build ./...
-      - run: go test ./... -count=1
+          test -s .env || { echo "::error::Secrets ENV_FILE is empty"; exit 1; }
+      - uses: docker/setup-buildx-action@v3
+      - name: Start test dependencies
+        run: docker compose -f ${{ env.COMPOSE_FILE }} -f docker-compose.test.yml up -d --wait postgres rabbitmq redis
+      - name: Vet and test in container (nonzero exit fails the job)
+        run: docker compose -f ${{ env.COMPOSE_FILE }} -f docker-compose.test.yml run --rm --build backend-test
+      - name: Verify production build
+        run: docker compose -f ${{ env.COMPOSE_FILE }} build backend
 
   frontend:
     runs-on: self-hosted
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - name: Write .env
         run: |
           printf '%s' "${{ secrets.ENV_FILE }}" > .env
-          grep -v '^#' .env | grep -v '^$' >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit -p tsconfig.app.json
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+          test -s .env || { echo "::error::Secrets ENV_FILE is empty"; exit 1; }
+      - uses: docker/setup-buildx-action@v3
+      - name: Lint, typecheck and test in container (nonzero exit fails the job)
+        run: docker compose -f ${{ env.COMPOSE_FILE }} -f docker-compose.test.yml run --rm --build frontend-test
+      - name: Verify production build
+        run: docker compose -f ${{ env.COMPOSE_FILE }} build frontend
 
   deploy:
     needs: [backend, frontend]
@@ -112,5 +84,6 @@ jobs:
           docker compose -f ${{ env.COMPOSE_FILE }} -f docker-compose.prod.yml up -d
           set -a; . ./.env; set +a
           for i in $(seq 1 12); do
-            curl -fsS http://localhost:${BACKEND_PORT}/healthz && break || sleep 10
+            curl -fsS http://localhost:${BACKEND_PORT}/healthz && exit 0 || sleep 10
           done
+          exit 1

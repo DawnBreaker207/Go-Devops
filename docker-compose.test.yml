@@ -1,0 +1,30 @@
+# Test overlay: test stages carry a CMD that runs the suite when the
+# container starts, so verify with `run` (it exits with the suite's code),
+# never bare `build`. Always pass --build: `run` alone reuses stale images.
+# Deps must be up first:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --wait postgres rabbitmq redis
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm --build backend-test
+services:
+  backend-test:
+    build:
+      context: ./backend
+      target: test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      TEST_DB_HOST: postgres
+      TEST_DB_PORT: 5432
+      TEST_DB_USER: ${DATABASE_USER}
+      TEST_DB_PASSWORD: ${DATABASE_PASSWORD}
+      QUEUE_TEST_URL: amqp://guest:guest@rabbitmq:5672/
+      TEST_REDIS_ADDR: redis:6379
+
+  frontend-test:
+    build:
+      context: ./frontend
+      target: test

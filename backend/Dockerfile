@@ -1,15 +1,33 @@
-# ---------- build stage ----------
-FROM golang:1.26-alpine AS builder
+# syntax=docker/dockerfile:1
+# ---------- deps stage ----------
+FROM golang:1.26-alpine AS deps
 
 WORKDIR /src
 
 RUN apk add --no-cache git
 
 COPY go.mod go.sum ./
-RUN go mod download
+# `all` (not bare): test-only transitive deps must also live IN the image,
+# otherwise `go test` re-downloads them at container runtime.
+RUN go mod download all
+
+# ---------- test stage (CI) ----------
+FROM deps AS test
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/backend-cp ./cmd/server
+
+# Tests run when the container starts (`docker compose run`), so this stage
+# works with any builder — no custom build network needed. Fails CI when
+# vet or any test fails (nonzero exit propagates through `run`).
+CMD ["sh", "-c", "go vet ./... && go test ./... -count=1"]
+
+# ---------- build stage ----------
+FROM deps AS builder
+
+COPY . .
+# GOCACHE mount only speeds rebuilds; modules already live in the image.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/backend-cp ./cmd/server
 
 # ---------- runtime stage ----------
 FROM alpine:3.20 AS runner
