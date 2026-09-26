@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { FormInstance } from 'antd';
 import { App, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Upload } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -32,6 +33,93 @@ interface MovieFormModalProps {
 const isFormValidationError = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'errorFields' in error;
 
+type ImageField = 'poster_url' | 'backdrop_url';
+
+interface ImageUrlFieldProps {
+  form: FormInstance<FormValues>;
+  name: ImageField;
+  label: string;
+  extra: string;
+}
+
+/** A url input with its own upload button.
+ *
+ *  Extracted rather than copy-pasted for the second image: the original block hardcoded
+ *  `poster_url` in two places and shared ONE `uploading` boolean, so a duplicated copy would have
+ *  written the backdrop into the poster field and spun both spinners at once. The field name is a
+ *  prop and the busy flag is local, which makes both mistakes impossible. */
+const ImageUrlField = ({ form, name, label, extra }: ImageUrlFieldProps) => {
+  const { t } = useTranslation();
+  const { message } = App.useApp();
+  const [uploading, setUploading] = useState(false);
+
+  /** Uploads and writes the returned URL straight into the field, so the operator
+   *  never has to host the image anywhere else first. */
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const result = await mediaApi.uploadPoster(file);
+      form.setFieldValue(name, result.url);
+      // validateFields on one field: the url rule must re-run now that the value
+      // changed programmatically rather than by typing.
+      await form.validateFields([name]);
+      message.success(t('movie.posterUploaded'));
+    } catch (error) {
+      message.error(errorMessage(error, t('common.somethingWrong')));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    // Backend binds `url`: relative paths like /media/x.jpg are rejected with 400.
+    // The upload returns an ABSOLUTE url built from storage.public_base_url,
+    // so what it hands back is directly valid here.
+    <Form.Item
+      name={name}
+      label={label}
+      extra={extra}
+      rules={[{ type: 'url', message: t('movie.urlInvalid') }]}
+    >
+      <Input
+        placeholder="https://..."
+        maxLength={512}
+        addonAfter={
+          <Upload
+            accept={POSTER_ACCEPT.join(',')}
+            showUploadList={false}
+            // customRequest, not `action`: antd's own uploader would bypass
+            // the shared client and send no Authorization header.
+            beforeUpload={(file) => {
+              if (!POSTER_ACCEPT.includes(file.type as (typeof POSTER_ACCEPT)[number])) {
+                message.error(t('movie.posterTypeInvalid'));
+                return Upload.LIST_IGNORE;
+              }
+              if (file.size > POSTER_MAX_BYTES) {
+                message.error(t('movie.posterTooLarge'));
+                return Upload.LIST_IGNORE;
+              }
+              void handleUpload(file);
+              // Always false: the upload is done by handleUpload above.
+              return false;
+            }}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<UploadOutlined />}
+              loading={uploading}
+              // Both fields use this control; the label alone would give two buttons the same
+              // accessible name, so the field's own label disambiguates them.
+              aria-label={`${t('movie.posterUpload')}: ${label}`}
+            />
+          </Upload>
+        }
+      />
+    </Form.Item>
+  );
+};
+
 export const MovieFormModal = ({
   open,
   movie,
@@ -42,27 +130,10 @@ export const MovieFormModal = ({
   const { t } = useTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
-  const [uploading, setUploading] = useState(false);
-
-  /** Uploads and writes the returned URL straight into the field, so the operator
-   *  never has to host the image anywhere else first. */
-  const handleUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const result = await mediaApi.uploadPoster(file);
-      form.setFieldValue('poster_url', result.url);
-      // validateFields on one field: the url rule must re-run now that the value
-      // changed programmatically rather than by typing.
-      await form.validateFields(['poster_url']);
-      message.success(t('movie.posterUploaded'));
-    } catch (error) {
-      message.error(errorMessage(error, t('common.somethingWrong')));
-    } finally {
-      setUploading(false);
-    }
-  };
 
   // Seed via initialValues only; saving replaces the record so list every field.
+  // `backdrop_url` MUST be here: PUT /movies/:id is a full replace, so a field the form does not
+  // send is written back as "" — the bug that already ate trailer_url, cast and age_rating once.
   const initialValues: Partial<FormValues> = movie
     ? {
         title: movie.title,
@@ -71,6 +142,7 @@ export const MovieFormModal = ({
         director: movie.director,
         description: movie.description,
         poster_url: movie.poster_url,
+        backdrop_url: movie.backdrop_url,
         trailer_url: movie.trailer_url,
         cast: movie.cast,
         age_rating: movie.age_rating,
@@ -148,59 +220,33 @@ export const MovieFormModal = ({
           <Select options={MOVIE_AGE_RATINGS.map((value) => ({ value, label: value }))} />
         </Form.Item>
 
+        {/* `coming_soon` was missing here while MovieStatus and the Go binding both carry it, so
+            editing a coming-soon film opened a Select with no matching option and a save silently
+            moved it to another status. Unrelated to the backdrop work; fixed while in the file. */}
         <Form.Item name="status" label={t('movie.status')} rules={[required]}>
           <Select
             options={[
               { value: 'draft', label: t('movie.statusDraft') },
+              { value: 'coming_soon', label: t('movie.statusComing_soon') },
               { value: 'showing', label: t('movie.statusShowing') },
               { value: 'ended', label: t('movie.statusEnded') },
             ]}
           />
         </Form.Item>
 
-        {/* Backend binds `url`: relative paths like /media/x.jpg are rejected with 400.
-            The upload returns an ABSOLUTE url built from storage.public_base_url,
-            so what it hands back is directly valid here. */}
-        <Form.Item
+        <ImageUrlField
+          form={form}
           name="poster_url"
           label={t('movie.posterUrl')}
           extra={t('movie.posterUploadHint')}
-          rules={[{ type: 'url', message: t('movie.urlInvalid') }]}
-        >
-          <Input
-            placeholder="https://..."
-            maxLength={512}
-            addonAfter={
-              <Upload
-                accept={POSTER_ACCEPT.join(',')}
-                showUploadList={false}
-                // customRequest, not `action`: antd's own uploader would bypass
-                // the shared client and send no Authorization header.
-                beforeUpload={(file) => {
-                  if (!POSTER_ACCEPT.includes(file.type as (typeof POSTER_ACCEPT)[number])) {
-                    message.error(t('movie.posterTypeInvalid'));
-                    return Upload.LIST_IGNORE;
-                  }
-                  if (file.size > POSTER_MAX_BYTES) {
-                    message.error(t('movie.posterTooLarge'));
-                    return Upload.LIST_IGNORE;
-                  }
-                  void handleUpload(file);
-                  // Always false: the upload is done by handleUpload above.
-                  return false;
-                }}
-              >
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<UploadOutlined />}
-                  loading={uploading}
-                  aria-label={t('movie.posterUpload')}
-                />
-              </Upload>
-            }
-          />
-        </Form.Item>
+        />
+
+        <ImageUrlField
+          form={form}
+          name="backdrop_url"
+          label={t('movie.backdropUrl')}
+          extra={t('movie.backdropUploadHint')}
+        />
 
         <Form.Item
           name="trailer_url"

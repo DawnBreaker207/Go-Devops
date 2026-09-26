@@ -4,21 +4,21 @@
 /* 1. Brand                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** Brand red (deliberate detour from the source Figma) - one color for admin and customer. Variants below mix per the old formula (20% white / 15% black / 85% / 93% white). */
+/** Brand pink-red #D33B56 (deliberate detour from the source Figma) - one color for admin and customer. Variants below mix per the old formula (20% white / 15% black / 85% / 93% white). */
 export const brand = {
-  /** Brand red. */
-  base: '#E4002B',
-  /** DERIVED - #E4002B + 20% white, for hover. */
-  hover: '#E93355',
-  /** DERIVED - #E4002B + 15% black, for :active and badge borders. */
-  active: '#C20025',
-  /** DERIVED - #E4002B + 85% white, selected-menu background in sider. */
-  soft: '#FBD9DF',
-  /** DERIVED - #E4002B + 93% white, paler than `soft` for tags/light selections. */
-  softer: '#FDEDF0',
+  /** Brand pink-red. */
+  base: '#D33B56',
+  /** DERIVED - #D33B56 + 20% white, for hover. */
+  hover: '#DC6278',
+  /** DERIVED - #D33B56 + 15% black, for :active and badge borders. */
+  active: '#B33249',
+  /** DERIVED - #D33B56 + 85% white, selected-menu background in sider. */
+  soft: '#F8E2E6',
+  /** DERIVED - #D33B56 + 93% white, paler than `soft` for tags/light selections. */
+  softer: '#FCF1F3',
 } as const;
 
-/** White text on brand.base (~4.85:1, passes WCAG 4.5:1 - see design-tokens.test.ts). */
+/** White text on brand.base (~4.64:1, passes WCAG 4.5:1 - see design-tokens.test.ts). */
 export const textOnBrand = '#FFFFFF';
 
 /** brand.base at a given alpha - computed from source so it can't drift (parity test can't see hand-written rgba strings). */
@@ -34,11 +34,11 @@ export const brandAlpha = (alpha: number): string => {
 /** Dark customer backdrop: brand.base toward black (DERIVED, base -> glow). */
 export const cinemaBackdrop = {
   /** DERIVED - brand.base + 97% black. Darkest point, near-black. */
-  base: '#070001',
+  base: '#060203',
   /** DERIVED - brand.base + 85% black. Mid glow. */
-  mid: '#220006',
+  mid: '#20090D',
   /** DERIVED - brand.base + 65% black. Brightest glow, and toolbar bg under Select Seat. */
-  glow: '#50000F',
+  glow: '#4A151E',
 } as const;
 
 /** Customer light canvas (detour: #f7f6f4). Browse screens + header/nav/footer only; seats/payment/tickets are ALWAYS dark since white seats only read on dark. */

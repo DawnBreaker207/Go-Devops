@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Movie } from '@/types';
-import { useSoonToast } from '@/hooks/useSoonToast';
-import SoonToast from '@/components/ui/SoonToast';
+import { formatDuration } from '@/utils/format';
+import { movieBackdrop, movieYear } from '../movieImage';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
+import { FOCUS_RING, HOME_SECTION } from '@/theme/customerTw';
 
 interface BannerCarouselProps {
   movies: Movie[];
-  /** Opens BookingModal for the active movie; same action as PosterCard "Book" (see HomePage), no separate route. */
+  /** Opens BookingModal for the active movie; same action as the card "Book" (see HomePage), no separate route. */
   onBook: (movie: Movie) => void;
 }
 
@@ -14,22 +16,29 @@ const AUTO_ADVANCE_MS = 5000;
 /** Max 5 slides. */
 const MAX_SLIDES = 5;
 
-const TicketIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a1.5 1.5 0 0 0 0 3v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a1.5 1.5 0 0 0 0-3V8Z"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinejoin="round"
-    />
-    <path d="M10 6.5v11" stroke="currentColor" strokeWidth="1.7" strokeDasharray="2.2 2.2" />
+const CalendarIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.7" />
+    <path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
   </svg>
 );
 
-const PlayIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+const ClockIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" />
-    <path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+    <path d="M12 7v5.2l3.2 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  </svg>
+);
+
+const ArrowIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M5 12h13m0 0-5-5m5 5-5 5"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
@@ -58,21 +67,41 @@ const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
   </svg>
 );
 
-/** Home hero carousel. No banner endpoint/field exists, so the first 5 "showing" movies stand in; hidden when empty, never an empty frame. Always-dark card (fixed bg-black), never --cp-ink-rgb. Same max-w container as the page below, not full-bleed. "Watch trailer" is a stub toast (trailer_url exists but video UI is out of scope). Extras: taller (420/500/560px), arrow buttons, crossfade slides (stacked absolute layers; only active is opacity-100 + interactive). */
+/** Home hero, rebuilt to QVisionShow frame 1-101: a FULL-BLEED backdrop with the title, a
+ *  `genre | genre` line, a year/duration meta row, three lines of synopsis and one pill call to
+ *  action. The route carries `handle.fullBleed` so this can reach the viewport edges; every section
+ *  below therefore supplies its own `HOME_SECTION` container.
+ *
+ *  No banner endpoint exists, so the first 5 `showing` movies stand in; hidden entirely when empty,
+ *  never an empty frame. Always-dark (fixed `bg-black`/white text), never `--cp-ink-rgb`, because a
+ *  photographic backdrop is dark in both of the customer zone's themes.
+ *
+ *  The image is `backdrop_url` with `poster_url` as the fallback — before migration 000011 there was
+ *  no landscape field at all and this hero stretched a 2:3 portrait across the full width.
+ *
+ *  Kept from the previous version and NOT in the frame: the arrows, the dots, and the autoplay
+ *  pause/play toggle. The toggle is the viewer's only control over an animation that moves by
+ *  itself, so it stays regardless of what the design shows. The old "Watch trailer" button is gone:
+ *  it was a stub toast, and there is now a real Trailers section further down the page. */
 export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const [autoPlay, setAutoPlay] = useState(true);
-  const { toastMessage, showSoon } = useSoonToast();
+  // motion.md: "no autoplay" under reduced motion. The toggle still works, so someone who wants the
+  // carousel moving can still ask for it - this only decides what happens without being asked.
+  const reducedMotion = usePrefersReducedMotion();
+  const autoAdvancing = autoPlay && !reducedMotion;
   const slides = movies.slice(0, MAX_SLIDES);
 
   useEffect(() => {
-    if (!autoPlay || slides.length < 2) return;
+    if (!autoAdvancing || slides.length < 2) return;
     const timer = window.setInterval(() => {
-      setIndex((i) => (i + 1) % slides.length);
+      // Clamp before advancing: a raw stale index (left over from a longer list) would skip a slide
+      // on the first tick, landing somewhere other than the one after the visible slide.
+      setIndex((i) => ((i < slides.length ? i : 0) + 1) % slides.length);
     }, AUTO_ADVANCE_MS);
     return () => window.clearInterval(timer);
-  }, [autoPlay, slides.length]);
+  }, [autoAdvancing, slides.length]);
 
   if (slides.length === 0) return null;
 
@@ -83,115 +112,147 @@ export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
   const goNext = () => setIndex((activeIndex + 1) % slides.length);
 
   return (
-    <div className="mb-6 overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl">
-      <div className="relative h-105 w-full sm:h-125 md:h-140">
-        {slides.map((movie, i) => {
-          const isActive = i === activeIndex;
-          return (
-            <div
-              key={movie.id}
-              aria-hidden={!isActive}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                isActive ? 'z-10 opacity-100' : 'pointer-events-none z-0 opacity-0'
-              }`}
-            >
-              {movie.poster_url ? (
-                <img
-                  className="absolute inset-0 h-full w-full object-cover"
-                  src={movie.poster_url}
-                  alt=""
-                  loading={i === 0 ? 'eager' : 'lazy'}
-                />
-              ) : null}
-              <div
-                className="pointer-events-none absolute inset-0 bg-linear-to-t from-black via-black/75 to-black/15"
-                aria-hidden="true"
-              />
+    // `z-0` is load-bearing: it gives the hero its own stacking context, so the slide layers and the
+    // dots (z-10/z-20 INSIDE it) can never paint over the sticky header, which is also z-20 but comes
+    // earlier in the DOM and would otherwise lose the tie.
+    <div className="relative z-0 h-140 w-full overflow-hidden bg-black sm:h-160 md:h-180 lg:h-195">
+      {slides.map((movie, i) => {
+        const isActive = i === activeIndex;
+        const image = movieBackdrop(movie);
+        const year = movieYear(movie);
+        // Genre is one free-text field ("Action, Adventure"); the frame separates them with pipes.
+        const genres = movie.genre
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .join(' | ');
 
-              <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-8 md:p-10">
-                <div className="max-w-2xl">
-                  <h1 className="mb-2.5 text-xl leading-tight font-extrabold text-white sm:text-3xl md:text-4xl">
+        return (
+          <div
+            key={movie.id}
+            aria-hidden={!isActive}
+            // duration-moderate, not a raw 700ms: motion.md forbids hardcoded numbers, and 700
+            // also escaped the reduced-motion clamp, which only rewrites the tokens.
+            className={`absolute inset-0 transition-opacity duration-moderate ease-out ${
+              isActive ? 'z-10 opacity-100' : 'pointer-events-none z-0 opacity-0'
+            }`}
+          >
+            {image ? (
+              <img
+                className="absolute inset-0 h-full w-full object-cover"
+                src={image}
+                alt=""
+                loading={i === 0 ? 'eager' : 'lazy'}
+              />
+            ) : null}
+            {/* Two scrims, as the frame has: one up from the bottom for the page seam, one in from
+                the left so the copy stays legible over a bright backdrop. */}
+            <div
+              className="pointer-events-none absolute inset-0 bg-linear-to-t from-black via-black/55 to-black/10"
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute inset-0 bg-linear-to-r from-black/85 via-black/35 to-transparent"
+              aria-hidden="true"
+            />
+
+            <div className="absolute inset-0 flex items-end pb-16 sm:pb-20 md:items-center md:pb-0">
+              <div className={HOME_SECTION}>
+                <div className="max-w-xl">
+                  <h1 className="mb-3 text-3xl leading-[1.05] font-extrabold text-white sm:text-5xl md:text-6xl">
                     {movie.title}
                   </h1>
+
+                  {genres ? (
+                    <p className="mb-3 text-sm text-white/85 sm:text-base">{genres}</p>
+                  ) : null}
+
+                  <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/80">
+                    {year ? (
+                      <span className="inline-flex items-center gap-2">
+                        <CalendarIcon />
+                        {year}
+                      </span>
+                    ) : null}
+                    {movie.duration ? (
+                      <span className="inline-flex items-center gap-2">
+                        <ClockIcon />
+                        {formatDuration(movie.duration)}
+                      </span>
+                    ) : null}
+                  </div>
+
                   {movie.description ? (
-                    <p className="mb-5 line-clamp-2 max-w-xl text-[13px] text-white/90 sm:text-sm md:text-base">
+                    <p className="mb-7 line-clamp-3 max-w-lg text-[13px] leading-relaxed text-white/75 sm:text-sm">
                       {movie.description}
                     </p>
                   ) : null}
 
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => onBook(movie)}
-                      className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border-none bg-brand px-5 text-[13px] font-semibold text-on-brand transition-colors duration-fast ease-out hover-fine:bg-brand-hover sm:text-sm"
-                    >
-                      <TicketIcon />
-                      {t('customer.bannerBookNow')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={showSoon}
-                      className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-white/40 bg-transparent px-5 text-[13px] font-semibold text-white transition-colors duration-fast ease-out hover-fine:border-brand hover-fine:text-brand sm:text-sm"
-                    >
-                      <PlayIcon />
-                      {t('customer.bannerWatchTrailer')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAutoPlay((value) => !value)}
-                      aria-label={t(
-                        autoPlay ? 'customer.bannerAutoplayOn' : 'customer.bannerAutoplayOff'
-                      )}
-                      aria-pressed={autoPlay}
-                      className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg border border-white/40 bg-transparent text-white transition-colors duration-fast ease-out hover-fine:border-brand hover-fine:text-brand"
-                    >
-                      {autoPlay ? <PauseIcon /> : <PlayGlyphIcon />}
-                    </button>
-                  </div>
+                  {/* tabIndex -1 while hidden: the slide is aria-hidden, and a focusable element
+                      inside an aria-hidden container is an accessibility violation - the keyboard
+                      lands on a button no screen reader can announce. */}
+                  <button
+                    type="button"
+                    onClick={() => onBook(movie)}
+                    tabIndex={isActive ? undefined : -1}
+                    className={`inline-flex min-h-12 cursor-pointer items-center gap-3 rounded-full border-none bg-brand px-7 text-sm font-bold text-on-brand transition-colors duration-fast ease-out hover-fine:bg-brand-hover ${FOCUS_RING}`}
+                  >
+                    {t('customer.bannerBookNow')}
+                    <ArrowIcon />
+                  </button>
                 </div>
               </div>
             </div>
-          );
-        })}
+          </div>
+        );
+      })}
 
-        {slides.length > 1 ? (
-          <>
+      {slides.length > 1 ? (
+        <>
+          <button
+            type="button"
+            onClick={goPrev}
+            aria-label={t('customer.bannerPrev')}
+            className={`absolute top-1/2 left-3 z-20 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-white transition-colors duration-fast ease-out hover-fine:bg-black/65 sm:h-11 sm:w-11 ${FOCUS_RING}`}
+          >
+            <ChevronIcon direction="left" />
+          </button>
+          <button
+            type="button"
+            onClick={goNext}
+            aria-label={t('customer.bannerNext')}
+            className={`absolute top-1/2 right-3 z-20 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-white transition-colors duration-fast ease-out hover-fine:bg-black/65 sm:h-11 sm:w-11 ${FOCUS_RING}`}
+          >
+            <ChevronIcon direction="right" />
+          </button>
+
+          <div className="absolute inset-x-0 bottom-5 z-20 flex items-center justify-center gap-1.5">
+            {slides.map((movie, i) => (
+              <button
+                key={movie.id}
+                type="button"
+                className={`h-1 cursor-pointer rounded-full border-none p-0 transition-[width,background-color] duration-fast ease-out ${FOCUS_RING} ${
+                  i === activeIndex ? 'w-6 bg-brand' : 'w-2 bg-white/50'
+                }`}
+                aria-label={t('customer.bannerGoTo', { title: movie.title })}
+                aria-current={i === activeIndex}
+                onClick={() => setIndex(i)}
+              />
+            ))}
             <button
               type="button"
-              onClick={goPrev}
-              aria-label={t('customer.bannerPrev')}
-              className="absolute top-1/2 left-3 z-20 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-white transition-colors duration-fast ease-out hover-fine:bg-black/65 sm:h-11 sm:w-11"
+              onClick={() => setAutoPlay((value) => !value)}
+              aria-label={t(
+                autoAdvancing ? 'customer.bannerAutoplayOn' : 'customer.bannerAutoplayOff'
+              )}
+              aria-pressed={autoAdvancing}
+              className={`ml-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-white transition-colors duration-fast ease-out hover-fine:bg-black/65 ${FOCUS_RING}`}
             >
-              <ChevronIcon direction="left" />
+              {autoAdvancing ? <PauseIcon /> : <PlayGlyphIcon />}
             </button>
-            <button
-              type="button"
-              onClick={goNext}
-              aria-label={t('customer.bannerNext')}
-              className="absolute top-1/2 right-3 z-20 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border-none bg-black/40 text-white transition-colors duration-fast ease-out hover-fine:bg-black/65 sm:h-11 sm:w-11"
-            >
-              <ChevronIcon direction="right" />
-            </button>
-
-            <div className="absolute inset-x-0 bottom-3.5 z-20 flex justify-center gap-1.5">
-              {slides.map((movie, i) => (
-                <button
-                  key={movie.id}
-                  type="button"
-                  className={`h-1 cursor-pointer rounded-full border-none p-0 transition-[width,background-color] duration-fast ease-out ${
-                    i === activeIndex ? 'w-6 bg-brand' : 'w-2 bg-white/50'
-                  }`}
-                  aria-label={t('customer.bannerGoTo', { title: movie.title })}
-                  aria-current={i === activeIndex}
-                  onClick={() => setIndex(i)}
-                />
-              ))}
-            </div>
-          </>
-        ) : null}
-      </div>
-
-      <SoonToast message={toastMessage} />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };

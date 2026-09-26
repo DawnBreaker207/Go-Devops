@@ -8,7 +8,8 @@ import Footer from './Footer';
 import { useAppStore } from '@/stores/appStore';
 import { cinemaGradient } from '@/theme';
 import { PATHS } from '@/routes/paths';
-import { INK, INK_80, INK_BORDER_10 } from '@/theme/customerTw';
+import { INK, INK_80, INK_BORDER_10, NAV_PILL, NAV_PILL_OVERLAY } from '@/theme/customerTw';
+import { useScrolled } from '@/hooks/useScrolled';
 
 /** 4 nav items shared by desktop/mobile ("Showtimes by cinema" dropped: no page yet). */
 const NAV_ITEMS: Array<{ to: string; labelKey: string }> = [
@@ -39,6 +40,10 @@ interface RouteHandle {
   fullBleed?: boolean;
   /** White seats (`seat.available`) only stand out on dark, so this screen stays dark regardless. */
   forceDark?: boolean;
+  /** The header floats ON the page's own artwork instead of sitting in its own bar, as the
+   *  QVisionShow frame draws it. Only for a screen whose first element is a full-bleed dark image;
+   *  the bar comes back as soon as the page scrolls, or the nav would be unreadable over content. */
+  overlayHeader?: boolean;
 }
 
 /** Customer shell: top bar + content, no sider, no heavy antd. Own light/dark switch, dark by default; seats/checkout/tickets stay dark. Header has logo, uppercase nav, hamburger/avatar; mobile menu expands inline. No theater-select, search, or dead links. */
@@ -55,17 +60,45 @@ export const CustomerLayout = () => {
   const forceDark = routeHandles.some((handle) => handle?.forceDark);
   const isLight = themeMode === 'light' && !forceDark;
 
-  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  // Two separate things, and keeping them separate matters.
+  //  - `overlayLayout` is decided by the route ALONE, so the header's contribution to layout never
+  //    changes while the page is open. Tying it to scroll instead made the header take its 80px back
+  //    mid-scroll and jumped the page down by exactly that much (asking for scrollY 200 landed on 280).
+  //  - `overlaying` is only the paint: transparent at the very top, the normal bar once scrolled or
+  //    while the mobile menu is open, since that panel needs a surface to sit on.
+  // The artwork underneath is always dark, so the chrome goes white while overlaying even in light
+  // mode - INK_80 would be near-black on a photograph.
+  const scrolled = useScrolled();
+  const overlayLayout = routeHandles.some((handle) => handle?.overlayHeader);
+  const overlaying = overlayLayout && !scrolled && !mobileNavOpen;
+
+  // Inside the glass pill (QVisionShow frame 1-101): each item is its own rounded chip, the active
+  // one filled with the brand rather than only recoloured, so it reads at a glance on a photo.
+  //
+  // The COLOUR lives on an inner <span>, not on the <a>. `.cp-customer a { color: var(--cp-brand) }`
+  // in index.css is unlayered, so it beats every Tailwind colour utility and would paint the whole
+  // nav brand - the frame draws these white. A direct declaration on a child always beats an
+  // inherited one, whatever the cascade layers do.
+  // The whole chip - padding, radius, fill AND colour - lives on the inner <span>. antd injects an
+  // unlayered `a { background-color: transparent }` at runtime, so `bg-brand` on the <a> parses,
+  // sits in the class list, and paints nothing: the active item was a white label on no fill.
+  const navLinkClass = 'block no-underline';
+
+  const navLabelClass = (isActive: boolean) =>
     [
-      'px-1 py-2 text-sm font-bold tracking-wide uppercase no-underline transition-colors duration-fast ease-out hover-fine:text-brand xl:text-base',
-      isActive ? 'text-brand' : INK_80,
+      'block rounded-full px-4 py-2 text-sm font-bold tracking-wide uppercase transition-colors duration-fast ease-out',
+      isActive
+        ? 'bg-brand text-on-brand'
+        : overlaying
+          ? 'text-white/85 hover-fine:text-brand'
+          : `${INK_80} hover-fine:text-brand`,
     ].join(' ');
 
-  const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
-    [
-      'block py-3 text-sm font-bold tracking-wide uppercase no-underline transition-colors duration-fast ease-out hover-fine:text-brand',
-      isActive ? 'text-brand' : INK_80,
-    ].join(' ');
+  const mobileNavLinkClass =
+    'block py-3 text-sm font-bold tracking-wide uppercase no-underline transition-colors duration-fast ease-out';
+
+  const mobileNavLabelClass = (isActive: boolean) =>
+    isActive ? 'text-brand' : `${INK_80} hover-fine:text-brand`;
 
   return (
     <div
@@ -78,12 +111,26 @@ export const CustomerLayout = () => {
         .join(' ')}
       style={isLight ? undefined : { backgroundImage: cinemaGradient }}
     >
-      {/* Real content in the shared `max-w-300` container aligned with <main> (header is just a full-bleed backdrop). */}
-      <header className="sticky top-0 z-20 border-b border-(--cp-chrome-border) bg-(--cp-chrome-bg) backdrop-blur-md">
+      {/* Real content in the shared `max-w-300` container aligned with <main> (header is just a
+          full-bleed backdrop). On an `overlayHeader` route the negative bottom margin pulls <main> up
+          by the header's own height, so the page's first element starts at y=0 and the header floats
+          on it. That margin is constant for the life of the page - only the background changes on
+          scroll - because removing it mid-scroll shifts every following pixel down by 80. */}
+      <header
+        className={[
+          'sticky top-0 z-20 border-b backdrop-blur-md transition-[background-color,border-color,color] duration-moderate ease-out',
+          overlayLayout ? '-mb-20' : '',
+          overlaying
+            ? 'border-transparent bg-transparent text-white'
+            : 'border-(--cp-chrome-border) bg-(--cp-chrome-bg)',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         <div className="mx-auto flex min-h-20 w-full max-w-300 items-center justify-between gap-4 px-4 sm:px-8">
           <Link
             to={PATHS.home}
-            className={`group inline-flex items-center gap-2 text-xl font-bold tracking-tight no-underline ${INK}`}
+            className="group inline-flex items-center gap-2 text-xl font-bold tracking-tight no-underline"
           >
             <span
               className="text-2xl leading-none text-brand transition-transform duration-fast ease-out group-hover:scale-110"
@@ -91,14 +138,20 @@ export const CustomerLayout = () => {
             >
               ◗
             </span>
-            <span className="hidden sm:inline">{t('customer.brand')}</span>
+            <span className={`hidden sm:inline ${overlaying ? 'text-white' : INK}`}>
+              {t('customer.brand')}
+            </span>
           </Link>
 
           {/* Desktop nav (>=1024px); mobile unfolds inline below the header via hamburger. */}
-          <nav className="hidden items-center gap-8 lg:flex">
+          <nav
+            className={`hidden items-center gap-1 py-1.5 lg:flex ${overlaying ? NAV_PILL_OVERLAY : NAV_PILL}`}
+          >
             {NAV_ITEMS.map((item) => (
               <NavLink key={item.to} to={item.to} className={navLinkClass}>
-                {t(item.labelKey)}
+                {({ isActive }) => (
+                  <span className={navLabelClass(isActive)}>{t(item.labelKey)}</span>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -109,7 +162,7 @@ export const CustomerLayout = () => {
               aria-label={t('customer.toggleMenu')}
               aria-expanded={mobileNavOpen}
               onClick={() => setMobileNavOpen((open) => !open)}
-              className={`flex h-9.5 w-9.5 items-center justify-center lg:hidden ${INK}`}
+              className={`flex h-9.5 w-9.5 items-center justify-center lg:hidden ${overlaying ? 'text-white' : INK}`}
             >
               <MenuIcon open={mobileNavOpen} />
             </button>
@@ -131,7 +184,9 @@ export const CustomerLayout = () => {
                     className={mobileNavLinkClass}
                     onClick={() => setMobileNavOpen(false)}
                   >
-                    {t(item.labelKey)}
+                    {({ isActive }) => (
+                      <span className={mobileNavLabelClass(isActive)}>{t(item.labelKey)}</span>
+                    )}
                   </NavLink>
                 </li>
               ))}

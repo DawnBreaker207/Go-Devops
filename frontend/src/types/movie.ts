@@ -13,6 +13,9 @@ export interface Movie {
   director: string;
   description: string;
   poster_url: string;
+  /** Landscape 3:2 art for the home hero and the wide cards. Empty on every movie created before
+   *  migration 000011, so every consumer falls back to `poster_url`. */
+  backdrop_url: string;
   trailer_url: string;
   cast: string;
   age_rating: MovieAgeRating;
@@ -22,7 +25,7 @@ export interface Movie {
   updated_at: string;
 }
 
-/** PUT /movies/:id is FULL REPLACE (empty age_rating resets to 'P'); omitted trailer_url/cast/age_rating are wiped. Always send complete. */
+/** PUT /movies/:id is FULL REPLACE (empty age_rating resets to 'P'); omitted trailer_url/cast/age_rating/backdrop_url are wiped. Always send complete. */
 export interface MoviePayload {
   title: string;
   genre: string;
@@ -30,6 +33,7 @@ export interface MoviePayload {
   director: string;
   description?: string;
   poster_url?: string;
+  backdrop_url?: string;
   trailer_url?: string;
   cast?: string;
   age_rating?: MovieAgeRating;

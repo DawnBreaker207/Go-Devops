@@ -8,18 +8,18 @@
 
 /* DESIGN TOKENS mirror of src/theme/tokens.ts (parity test fails on drift). No hardcoded colors: var(--cp-*) in CSS, TS imports from '@/theme'. */
 :root {
-  /* Brand red. */
-  --cp-brand: #e4002b;
-  --cp-brand-hover: #e93355;
-  --cp-brand-active: #c20025;
-  --cp-brand-soft: #fbd9df;
-  --cp-brand-softer: #fdedf0;
+  /* Brand pink-red. */
+  --cp-brand: #d33b56;
+  --cp-brand-hover: #dc6278;
+  --cp-brand-active: #b33249;
+  --cp-brand-soft: #f8e2e6;
+  --cp-brand-softer: #fcf1f3;
   --cp-text-on-brand: #ffffff;
 
   /* Dark backdrop, red-shifted to match brand. */
-  --cp-backdrop-base: #070001;
-  --cp-backdrop-mid: #220006;
-  --cp-backdrop-glow: #50000f;
+  --cp-backdrop-base: #060203;
+  --cp-backdrop-mid: #20090d;
+  --cp-backdrop-glow: #4a151e;
   --cp-light-canvas: #f7f6f4;
 
   --cp-danger: #d22f27;
@@ -45,7 +45,7 @@
   /* Seat types, admin grid editor on light bg only. */
   --cp-seat-type-standard: #edf0ee;
   --cp-seat-type-standard-text: #3a3f3c;
-  --cp-seat-type-vip: #fbd9df;
+  --cp-seat-type-vip: #f8e2e6;
   --cp-seat-type-vip-text: #720016;
   --cp-seat-type-couple: #fde8ce;
   --cp-seat-type-couple-text: #7a4405;

@@ -47,3 +47,38 @@ export const FOCUS_RING =
 
 /** Shared PosterCard grid for home and /films. */
 export const BROWSE_GRID = 'grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4';
+
+/* -------------------------------------------------------------------------- */
+/* Home (QVisionShow frame 1-101)                                              */
+/* -------------------------------------------------------------------------- */
+
+/** The home route is `fullBleed` so its hero can span edge to edge; every section below therefore
+ *  carries its own container. Width matches <main>'s `max-w-300` so sections stay aligned with the
+ *  header (Figma's own container is 1162 at a 1440 frame). */
+export const HOME_SECTION = 'mx-auto w-full max-w-300 px-4 sm:px-8';
+
+/** Figma: 4 columns, 30px gutter, ~42px row gap. */
+export const HOME_GRID = 'grid grid-cols-1 gap-x-7.5 gap-y-10.5 sm:grid-cols-2 lg:grid-cols-4';
+
+/** Figma: 26-28px bold section heading. */
+export const HOME_HEADING = 'text-2xl leading-tight font-bold sm:text-[26px]';
+
+/** Card title on the home grid.
+ *
+ *  `.cp-customer a { color: var(--cp-brand) }` in index.css is UNLAYERED, so it beats every Tailwind
+ *  colour utility and paints any link brand. The frame wants a white title that only turns brand on
+ *  hover, so the colour goes on a child <span>: a direct declaration always beats an inherited one,
+ *  whatever the layers do. The hover rides on the parent's `group`, pre-fused because a runtime-built
+ *  variant is invisible to Tailwind's scanner. */
+export const CARD_TITLE =
+  'text-[rgb(var(--cp-ink-rgb))] transition-colors duration-fast ease-out [@media(hover:hover)_and_(pointer:fine)]:group-hover:text-brand';
+
+/** Header nav pill: translucent with a blur, per the Figma. Uses the chrome tokens rather than a
+ *  fixed white alpha so it stays visible on the customer zone's LIGHT canvas too. */
+export const NAV_PILL =
+  'rounded-full border border-(--cp-chrome-border) bg-[rgb(var(--cp-ink-rgb))]/6 px-2 backdrop-blur-md';
+
+/** The same pill while the header floats on the hero. Fixed white alphas, not `--cp-ink-rgb`: the
+ *  artwork under it is always dark, so an ink that follows the light theme would vanish. */
+export const NAV_PILL_OVERLAY =
+  'rounded-full border border-white/15 bg-black/30 px-2 backdrop-blur-md';

@@ -33,9 +33,11 @@ import {
 import TimeFilter from './TimeFilter';
 import NowShowingGrid from './NowShowingGrid';
 import { formatNumber, formatVND } from '@/utils/format';
+import { brand } from '@/theme';
 import { safeMessage } from '@/utils/error';
 
-const PROVIDER_COLORS = ['#E4002B', '#2563EB', '#D97706', '#2E7D32', '#7A4405', '#1D4ED8'];
+// Mau dau tien lay tu token brand, khong viet lai hex (gate mau khong nhin thay hex trong component).
+const PROVIDER_COLORS = [brand.base, '#2563EB', '#D97706', '#2E7D32', '#7A4405', '#1D4ED8'];
 
 const TrendBadge = ({
   value,

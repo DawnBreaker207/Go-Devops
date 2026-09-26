@@ -46,7 +46,13 @@ export const router = createBrowserRouter([
   {
     element: <CustomerLayout />,
     children: [
-      { path: PATHS.home, element: <HomePage /> },
+      // `fullBleed` lets the QVisionShow hero reach the viewport edges; it drops <main>'s
+      // max-width AND padding, so every section in HomePage carries its own HOME_SECTION container.
+      {
+        path: PATHS.home,
+        element: <HomePage />,
+        handle: { fullBleed: true, overlayHeader: true },
+      },
       { path: PATHS.film, element: <FilmPage /> },
       { path: PATHS.films, element: <FilmsPage /> },
       { path: PATHS.pricing, element: <PricingPage /> },
