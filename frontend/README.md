@@ -4,11 +4,11 @@ Giao diện quản trị của **Cinema Project**, xây dựng trên React 18 + 
 
 ## Yêu cầu môi trường
 
-| Thành phần | Phiên bản                        |
-| ---------- | -------------------------------- |
-| Node.js    | >= 20 (khuyến nghị 22 LTS)       |
-| npm        | >= 10                            |
-| BackEnd-CP | chạy tại `http://localhost:8080` |
+| Thành phần | Phiên bản                                                                          |
+| ---------- | ---------------------------------------------------------------------------------- |
+| Node.js    | >= 20 (khuyến nghị 22 LTS)                                                         |
+| npm        | >= 10                                                                              |
+| BackEnd-CP | chạy tại `http://localhost:8080`, **đã chạy `make migrate` + `make migrate-seed`** |
 
 ## Cài đặt & chạy dev
 
@@ -17,6 +17,11 @@ npm install
 cp .env.example .env      # chỉnh VITE_API_BASE_URL nếu cần
 npm run dev               # http://localhost:3000
 ```
+
+Trang chủ lấy toàn bộ nội dung từ backend. Nếu banner trống, lưới phim trống hoặc
+khối trailer không hiện, gần như chắc chắn là **backend chưa chạy seed** chứ không
+phải lỗi giao diện — chạy `make migrate-seed` bên `BackEnd-CP` rồi tải lại. Lịch
+chiếu cũ đi (danh sách suất rỗng) cũng chữa bằng đúng lệnh đó.
 
 ## Scripts
 

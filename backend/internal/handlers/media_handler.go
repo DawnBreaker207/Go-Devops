@@ -26,7 +26,7 @@ func NewMediaHandler(media service.MediaService, localDir string, maxBytes int64
 func (h *MediaHandler) LocalDir() string { return h.localDir }
 
 //	@Summary		Upload a movie poster (admin/staff)
-//	@Description	multipart/form-data field "file": JPEG, PNG or WebP. Returns the URL to put in poster_url.
+//	@Description	multipart/form-data field "file": JPEG, PNG or WebP. Returns the URL to put in poster_url or backdrop_url.
 //	@Tags			media
 //	@Accept			mpfd
 //	@Produce		json

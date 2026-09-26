@@ -146,24 +146,38 @@ func (r *HallRepository) HasUnfinishedShowtimes(tx *gorm.DB, hallID string) (boo
 	return count > 0, err
 }
 
-// UpdateHall persists name/screen/aisle/active in a transaction. Whitelist excludes rows/
-// seats_per_row so PUT /admin/halls/:id can never resize a hall; layout writes use UpdateHallLayout.
+// UpdateHall persists name/screen/aisle/active. It must run inside a transaction.
+//
+// The column whitelist deliberately excludes `rows` and `seats_per_row`: this
+// method backs PUT /admin/halls/:id, whose dto.UpdateHallRequest carries no grid
+// fields, and the whitelist is what guarantees that endpoint can never resize a
+// hall out from under its own seats. Layout writes go through UpdateHallLayout.
 func (r *HallRepository) UpdateHall(tx *gorm.DB, hall *models.Hall) error {
 	return tx.Model(hall).
 		Select("name", "screen_position", "aisle_after_cols", "active", "updated_at").
 		Updates(hall).Error
 }
 
-// UpdateHallLayout: the ONLY write path for rows/seats_per_row (UpdateHall's whitelist drops
-// them — regenerating via UpdateHall once left `halls` describing a grid that no longer exists).
-// Runs in a transaction after seats are written; name/active stay out (not a rename/reactivation).
+// UpdateHallLayout persists the grid itself - rows/seats_per_row plus the two
+// display fields the layout request also carries - and is the ONLY write path
+// allowed to change a hall's declared size. It must run inside a transaction,
+// after the new seats have been written.
+//
+// It exists because RegenerateLayout used to call UpdateHall, whose whitelist
+// silently dropped the rows/seats_per_row assignment: regenerating a 4x5 hall
+// into 6x8 wrote 48 seats up to column 8 while `halls` kept saying 4x5 forever,
+// and the PUT's own response disagreed with every later GET because it
+// serialises the in-memory struct. `name` and `active` stay out on purpose -
+// regenerating a layout is not a rename and must not flip a hall back on.
 func (r *HallRepository) UpdateHallLayout(tx *gorm.DB, hall *models.Hall) error {
 	return tx.Model(hall).
 		Select("rows", "seats_per_row", "screen_position", "aisle_after_cols", "updated_at").
 		Updates(hall).Error
 }
 
-// DeleteHall soft-deletes and deactivates together; must run in a transaction.
+// DeleteHall soft-deletes a hall, also turning off active so the two flags
+// never disagree forever (a deleted hall is never "still active"). Must run
+// inside a transaction.
 func (r *HallRepository) DeleteHall(tx *gorm.DB, hallID string) error {
 	if err := tx.Model(&models.Hall{}).Where("id = ?", hallID).Update("active", false).Error; err != nil {
 		return err

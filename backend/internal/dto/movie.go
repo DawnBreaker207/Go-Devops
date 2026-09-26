@@ -15,6 +15,8 @@ type MovieRequest struct {
 	Director    string `json:"director" binding:"required,max=255" example:"Christopher Nolan"`
 	Description string `json:"description" binding:"omitempty,max=5000"`
 	PosterURL   string `json:"poster_url" binding:"omitempty,url,max=512"`
+	// BackdropURL is the landscape still used by the customer home hero and cards.
+	BackdropURL string `json:"backdrop_url" binding:"omitempty,url,max=512"`
 	TrailerURL  string `json:"trailer_url" binding:"omitempty,url,max=512" example:"https://www.youtube.com/watch?v=YoHD9XEInc0"`
 	Cast        string `json:"cast" binding:"omitempty,max=2000" example:"Leonardo DiCaprio, Joseph Gordon-Levitt"`
 	// AgeRating is Vietnamese film classification; empty defaults to P.
@@ -45,6 +47,7 @@ type MovieResponse struct {
 	Director    string    `json:"director"`
 	Description string    `json:"description"`
 	PosterURL   string    `json:"poster_url"`
+	BackdropURL string    `json:"backdrop_url"`
 	TrailerURL  string    `json:"trailer_url"`
 	Cast        string    `json:"cast"`
 	AgeRating   string    `json:"age_rating"`
@@ -63,6 +66,7 @@ func NewMovieResponse(movie *models.Movie) MovieResponse {
 		Director:    movie.Director,
 		Description: movie.Description,
 		PosterURL:   movie.PosterURL,
+		BackdropURL: movie.BackdropURL,
 		TrailerURL:  movie.TrailerURL,
 		Cast:        movie.Cast,
 		AgeRating:   movie.AgeRating,

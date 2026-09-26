@@ -90,20 +90,24 @@ func TestMovies_ExtraFieldsFilterAndSort(t *testing.T) {
 
 	made, err := e.movies.Create(e.ctx, dto.MovieRequest{
 		Title: "Rated Film", Genre: "Sci-Fi", Duration: 110, Director: "Y",
-		PosterURL: "http://poster.test/p.png", TrailerURL: "https://www.youtube.com/watch?v=uniquetoken",
-		Cast: "Nguyen Van A, Tran Thi B", AgeRating: "T16",
+		PosterURL: "http://poster.test/p.png", BackdropURL: "http://poster.test/bd.png",
+		TrailerURL: "https://www.youtube.com/watch?v=uniquetoken",
+		Cast:       "Nguyen Van A, Tran Thi B", AgeRating: "T16",
 		ReleaseDate: time.Now().Format(dto.DateLayout), Status: models.MovieStatusShowing,
 	})
 	e.must(err)
 	if made.TrailerURL == "" || made.Cast != "Nguyen Van A, Tran Thi B" || made.AgeRating != "T16" {
 		t.Fatalf("created = %+v", made)
 	}
+	if made.BackdropURL != "http://poster.test/bd.png" {
+		t.Fatalf("created backdrop = %q", made.BackdropURL)
+	}
 	blank, err := e.movies.Create(e.ctx, dto.MovieRequest{
 		Title: "Solid", Genre: "Drama", Duration: 90, Director: "Z",
 		ReleaseDate: time.Now().Format(dto.DateLayout), Status: models.MovieStatusShowing,
 	})
 	e.must(err)
-	if blank.AgeRating != "P" || blank.TrailerURL != "" || blank.Cast != "" {
+	if blank.AgeRating != "P" || blank.TrailerURL != "" || blank.Cast != "" || blank.BackdropURL != "" {
 		t.Fatalf("defaults = %+v", blank)
 	}
 
@@ -130,6 +134,51 @@ func TestMovies_ExtraFieldsFilterAndSort(t *testing.T) {
 	}
 	if _, total, err := e.movies.List(e.ctx, dto.MovieListQuery{PageQuery: page, Sort: "wall-clock", Order: "sideways"}, false); err != nil || total != 5 {
 		t.Fatalf("bogus sort falls back, total = %d, err = %v", total, err)
+	}
+}
+
+// T64b: backdrop_url survives the full-replace PUT when it is sent back, and is
+// wiped when it is omitted. The wipe is the documented behaviour of a
+// full-replace update (the same trap that used to clear trailer_url/cast), so it
+// is pinned here rather than left to be discovered by an operator.
+func TestMovies_BackdropSurvivesFullReplaceUpdate(t *testing.T) {
+	e := newEnv(t)
+	base := dto.MovieRequest{
+		Title: "Wide Shot", Genre: "Sci-Fi", Duration: 110, Director: "Y",
+		PosterURL: "http://poster.test/p.png", BackdropURL: "http://poster.test/bd.png",
+		ReleaseDate: time.Now().Format(dto.DateLayout), Status: models.MovieStatusShowing,
+	}
+	made, err := e.movies.Create(e.ctx, base)
+	e.must(err)
+
+	// The update echoes it back...
+	kept := base
+	kept.Title = "Wide Shot II"
+	updated, err := e.movies.Update(e.ctx, made.ID, kept)
+	e.must(err)
+	if updated.BackdropURL != base.BackdropURL {
+		t.Fatalf("update echo backdrop = %q, want %q", updated.BackdropURL, base.BackdropURL)
+	}
+	// ...and so does a fresh read, which is where a whitelisted UPDATE would show.
+	reread, err := e.movies.GetByID(e.ctx, made.ID, true)
+	e.must(err)
+	if reread.BackdropURL != base.BackdropURL {
+		t.Fatalf("re-read backdrop = %q, want %q", reread.BackdropURL, base.BackdropURL)
+	}
+
+	// Mirror case: PUT is a FULL replace, so omitting the field clears it.
+	dropped := base
+	dropped.BackdropURL = ""
+	if _, err := e.movies.Update(e.ctx, made.ID, dropped); err != nil {
+		t.Fatalf("update without backdrop: %v", err)
+	}
+	after, err := e.movies.GetByID(e.ctx, made.ID, true)
+	e.must(err)
+	if after.BackdropURL != "" {
+		t.Fatalf("omitted backdrop survived as %q, want it cleared", after.BackdropURL)
+	}
+	if after.PosterURL != base.PosterURL {
+		t.Fatalf("poster collateral damage = %q", after.PosterURL)
 	}
 }
 

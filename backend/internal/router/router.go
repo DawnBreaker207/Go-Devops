@@ -126,7 +126,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 	{
 		protected.GET("/users/me", h.User.Me)
 		protected.PUT("/users/me", middleware.Audit(db, "users.update_profile", "user"), h.User.UpdateMe)
-		// Erasure is customer self-service; staff/admin accounts are managed by an admin, not self-erased.
+		// Account erasure is a customer self-service right; staff/admin are
+		// operational accounts managed by an admin (lock/unlock), not self-erased.
 		protected.DELETE("/users/me", middleware.Audit(db, "users.delete_me", "user"),
 			middleware.RequireRoles(models.RoleCustomer), h.User.DeleteMe)
 		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)

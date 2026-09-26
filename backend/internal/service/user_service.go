@@ -77,10 +77,12 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.
 	return &result, nil
 }
 
-// DeleteMe erases the caller's account (right to erasure); password re-entry required.
-// Upcoming confirmed tickets block it (409); then PII is scrubbed, sessions dropped,
-// unpaid holds expired. Customer-only route, so no last-admin guard is needed.
-// Unlike admin Update it sets deleted_at, so no query (or unlock) can revive the row.
+// DeleteMe erases the caller's account under the right to erasure. The
+// current password must be re-entered, since this is irreversible. Confirmed
+// tickets still to come come first, so they block the delete (409); afterwards
+// personal fields are scrubbed, sessions dropped and unpaid holds expired.
+// The route restricts this to the customer role, so the account being erased
+// is never an admin: no "last admin" guard is needed here.
 func (s *userService) DeleteMe(ctx context.Context, userID, password string) error {
 	current, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {

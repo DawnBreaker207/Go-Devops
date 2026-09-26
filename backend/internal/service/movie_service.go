@@ -115,6 +115,7 @@ func (s *movieService) Create(ctx context.Context, req dto.MovieRequest) (*dto.M
 		Director:    strings.TrimSpace(req.Director),
 		Description: req.Description,
 		PosterURL:   req.PosterURL,
+		BackdropURL: req.BackdropURL,
 		TrailerURL:  req.TrailerURL,
 		Cast:        req.Cast,
 		AgeRating:   defaultAgeRating(req.AgeRating),
@@ -182,6 +183,7 @@ func (s *movieService) Update(ctx context.Context, id string, req dto.MovieReque
 		current.Director = strings.TrimSpace(req.Director)
 		current.Description = req.Description
 		current.PosterURL = req.PosterURL
+		current.BackdropURL = req.BackdropURL
 		current.TrailerURL = req.TrailerURL
 		current.Cast = req.Cast
 		current.AgeRating = defaultAgeRating(req.AgeRating)

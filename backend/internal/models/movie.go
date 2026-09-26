@@ -22,6 +22,7 @@ type Movie struct {
 	Director    string         `gorm:"type:varchar(255);not null" json:"director"`
 	Description string         `gorm:"type:text" json:"description"`
 	PosterURL   string         `gorm:"type:varchar(512)" json:"poster_url"`
+	BackdropURL string         `gorm:"type:varchar(512)" json:"backdrop_url"`
 	TrailerURL  string         `gorm:"type:varchar(512)" json:"trailer_url"`
 	Cast        string         `gorm:"column:cast_members;type:text" json:"cast"`
 	AgeRating   string         `gorm:"type:varchar(4);not null;default:P" json:"age_rating"`
