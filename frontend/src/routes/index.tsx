@@ -27,13 +27,19 @@ const BoxOfficePage = lazy(() => import('@/features/staff/BoxOfficePage'));
 const CustomerLookupPage = lazy(() => import('@/features/staff/CustomerLookupPage'));
 const AuditLogPage = lazy(() => import('@/features/audit/AuditLogPage'));
 const BatchJobsPage = lazy(() => import('@/features/batch/BatchJobsPage'));
+const CatalogPage = lazy(() => import('@/features/catalog/CatalogPage'));
+const CounterPage = lazy(() => import('@/features/counter/CounterPage'));
+const PromotionPage = lazy(() => import('@/features/promotion/PromotionPage'));
+const PricingAdminPage = lazy(() => import('@/features/pricing/PricingPage'));
+const MonitoringPage = lazy(() => import('@/features/monitoring/MonitoringPage'));
 const HomePage = lazy(() => import('@/features/browse/HomePage'));
 const FilmPage = lazy(() => import('@/features/browse/FilmPage'));
 const FilmsPage = lazy(() => import('@/features/browse/FilmsPage'));
 const PricingPage = lazy(() => import('@/features/browse/PricingPage'));
 const CinemaInfoPage = lazy(() => import('@/features/browse/CinemaInfoPage'));
 const OffersPage = lazy(() => import('@/features/browse/OffersPage'));
-const AccountPage = lazy(() => import('@/features/browse/AccountPage'));
+const OfferDetailPage = lazy(() => import('@/features/browse/OfferDetailPage'));
+const AccountPage = lazy(() => import('@/features/account/AccountPage'));
 // Booking flow is a single route with internal step state; success is a separate page.
 // See BookingFlowPage.tsx / BookingSuccessPage.tsx.
 const BookingFlowPage = lazy(() => import('@/features/booking-flow/BookingFlowPage'));
@@ -57,7 +63,8 @@ export const router = createBrowserRouter([
       { path: PATHS.films, element: <FilmsPage /> },
       { path: PATHS.pricing, element: <PricingPage /> },
       { path: PATHS.cinemaInfo, element: <CinemaInfoPage /> },
-      { path: PATHS.offers, element: <OffersPage /> },
+              { path: PATHS.offers, element: <OffersPage /> },
+              { path: PATHS.offerDetail, element: <OfferDetailPage /> },
       { path: PATHS.account, element: <AccountPage /> },
       // Single `/select-seat/:showtimeId` route, internal step state.
       // `handle.forceDark` pins the whole booking flow to dark whatever the customer's switch says:
@@ -112,6 +119,8 @@ export const router = createBrowserRouter([
               { path: PATHS.concessions, element: <ConcessionsPage /> },
               { path: PATHS.boxOffice, element: <BoxOfficePage /> },
               { path: PATHS.customerLookup, element: <CustomerLookupPage /> },
+              { path: PATHS.catalog, element: <CatalogPage /> },
+              { path: PATHS.counter, element: <CounterPage /> },
             ],
           },
           {
@@ -123,6 +132,9 @@ export const router = createBrowserRouter([
               { path: PATHS.reports, element: <ReportsPage /> },
               { path: PATHS.auditLogs, element: <AuditLogPage /> },
               { path: PATHS.batchJobs, element: <BatchJobsPage /> },
+              { path: PATHS.promotions, element: <PromotionPage /> },
+              { path: PATHS.pricingAdmin, element: <PricingAdminPage /> },
+              { path: PATHS.monitoring, element: <MonitoringPage /> },
             ],
           },
         ],

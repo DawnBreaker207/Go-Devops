@@ -193,14 +193,18 @@ func newEnv(t *testing.T) *env {
 
 	// DELETE, not TRUNCATE: far faster on tiny tables (no new relfilenodes and fsync).
 	// Child-before-parent throughout: combo_order_items references both
-	// combo_orders and concession_items, combo_orders references users, and
-	// bookings.discount_code_id references discount_codes.
+	// combo_orders and concession_items, combo_orders references users,
+	// bookings.discount_code_id references discount_codes, and the campaign
+	// link tables plus articles reference campaigns/articles/users.
 	e.must(testDB.Exec(`DELETE FROM audit_logs; DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
-		DELETE FROM combo_order_items; DELETE FROM combo_orders; DELETE FROM concession_items;
+		DELETE FROM combo_order_items; DELETE FROM combo_orders;
+		DELETE FROM discount_redemptions; DELETE FROM campaign_combos; DELETE FROM campaign_articles;
+		DELETE FROM campaigns; DELETE FROM concession_items;
 		DELETE FROM tickets; DELETE FROM booking_seats;
 		DELETE FROM payments; DELETE FROM bookings; DELETE FROM discount_codes; DELETE FROM showtime_seats;
 		DELETE FROM showtimes; DELETE FROM hall_prices; DELETE FROM seats; DELETE FROM halls;
-		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM users;`).Error)
+		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM articles; DELETE FROM users;
+		DELETE FROM pricing_rules;`).Error)
 
 	for i := 0; i < 8; i++ {
 		u := &models.User{Email: fmt.Sprintf("user%d@test.local", i), Password: "x", FullName: fmt.Sprintf("User %d", i), Role: models.RoleCustomer}

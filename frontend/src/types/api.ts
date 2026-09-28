@@ -27,4 +27,6 @@ export interface ApiError {
   code: number;
   message: string;
   details?: Record<string, string>;
+  // Stable machine-readable key (backend reason); absent on older errors.
+  reason?: string;
 }

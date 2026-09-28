@@ -93,7 +93,16 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 		Combo: handlers.NewComboHandler(service.NewComboService(db,
 			repository.NewComboRepository(db), repository.NewComboOrderRepository(db), repository.NewBookingRepository(db))),
 		Discount: handlers.NewDiscountHandler(service.NewDiscountService(db,
-			repository.NewDiscountRepository(db), repository.NewBookingRepository(db))),
+			repository.NewDiscountRepository(db), repository.NewBookingRepository(db),
+			repository.NewPaymentRepository(db), repository.NewCampaignRepository(db))),
+		Article: handlers.NewArticleHandler(service.NewArticleService(db,
+			repository.NewArticleRepository(db))),
+		Pricing: handlers.NewPricingHandler(service.NewPricingService(db,
+			repository.NewPricingRepository(db), repository.NewShowtimeRepository(db),
+			time.UTC, nil)),
+		Campaign: handlers.NewCampaignHandler(service.NewCampaignService(db,
+			repository.NewCampaignRepository(db), repository.NewDiscountRepository(db),
+			repository.NewComboRepository(db), repository.NewArticleRepository(db))),
 	})
 }
 

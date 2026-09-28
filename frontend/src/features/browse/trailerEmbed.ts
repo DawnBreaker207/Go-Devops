@@ -1,18 +1,16 @@
-/** Turn a stored `trailer_url` into a privacy-friendly YouTube embed URL.
- *
- *  The dev data uses `https://www.youtube.com/watch?v=<id>`, but operators paste whatever they have,
- *  so `youtu.be/<id>` and an already-embedded `/embed/<id>` are accepted too. Anything else returns
- *  null and the caller falls back to opening the raw link in a new tab rather than rendering a
- *  broken iframe.
- *
- *  `youtube-nocookie.com` is deliberate: nothing is requested from YouTube until the viewer actually
- *  clicks play, and when they do it is the no-cookie host. */
+// Unwrap the embed src from an iframe snippet, drop the extra HTML, only allowlisted hosts embed.
+export const extractIframeSrc = (input: string): string => {
+  const match = input.match(/<iframe[^>]*\ssrc=["']([^"']+)["'][^>]*>/i);
+  return match ? match[1] : input;
+};
+
+// Convert trailer_url to a nocookie embed; legacy links open the source instead of a broken iframe.
 export const youtubeEmbedUrl = (trailerUrl?: string | null): string | null => {
   if (!trailerUrl) return null;
 
   let parsed: URL;
   try {
-    parsed = new URL(trailerUrl);
+    parsed = new URL(extractIframeSrc(trailerUrl.trim()));
   } catch {
     return null;
   }
@@ -31,7 +29,7 @@ export const youtubeEmbedUrl = (trailerUrl?: string | null): string | null => {
     if (!id && parsed.pathname.startsWith('/embed/')) id = parsed.pathname.slice('/embed/'.length);
   }
 
-  // Ids are 11 chars of [A-Za-z0-9_-]; anything else is not something we can embed.
+  // Only an 11-char id embeds.
   if (!/^[\w-]{11}$/.test(id)) return null;
 
   return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`;

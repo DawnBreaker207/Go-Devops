@@ -80,6 +80,17 @@ definitions:
       users:
         type: integer
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AppliedPricingRule:
+    properties:
+      adjust_kind:
+        type: string
+      adjust_value:
+        type: integer
+      name:
+        type: string
+      rule_id:
+        type: string
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ApplyDiscountRequest:
     properties:
       code:
@@ -89,6 +100,76 @@ definitions:
         type: string
     required:
     - code
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleRequest:
+    properties:
+      content:
+        type: string
+      slug:
+        description: Omitted slug auto-generates from title.
+        example: khuyen-mai-thang-10
+        maxLength: 255
+        type: string
+      status:
+        enum:
+        - draft
+        - published
+        - hidden
+        example: draft
+        type: string
+      summary:
+        maxLength: 500
+        type: string
+      thumbnail_url:
+        maxLength: 1024
+        type: string
+      title:
+        example: Khuyen mai thang 10
+        maxLength: 255
+        minLength: 1
+        type: string
+      type:
+        enum:
+        - news
+        - promotion
+        example: news
+        type: string
+    required:
+    - content
+    - title
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse:
+    properties:
+      author_id:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      slug:
+        type: string
+      status:
+        type: string
+      summary:
+        type: string
+      thumbnail_url:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+      views:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AttachComboRequest:
+    properties:
+      promo_price:
+        minimum: 0
+        type: integer
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AuditLogResponse:
     properties:
@@ -121,6 +202,28 @@ definitions:
       resource_type:
         type: string
       user_agent:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceRequest:
+    properties:
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        example:
+          standard: 80000
+          vip: 120000
+        type: object
+    required:
+    - prices
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceResponse:
+    properties:
+      price:
+        type: integer
+      seat_type:
+        type: string
+      updated_at:
         type: string
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BoxOfficeDayResponse:
@@ -213,6 +316,133 @@ definitions:
         type: array
     required:
     - changes
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse:
+    properties:
+      combo_id:
+        type: string
+      name:
+        type: string
+      price:
+        type: integer
+      promo_price:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDetailResponse:
+    properties:
+      active:
+        type: boolean
+      articles:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+        type: array
+      combos:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse'
+        type: array
+      created_at:
+        type: string
+      description:
+        type: string
+      discount_codes:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDiscountCodeResponse'
+        type: array
+      ends_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      per_user_limit:
+        type: integer
+      starts_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDiscountCodeResponse:
+    properties:
+      active:
+        type: boolean
+      code:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      ends_at:
+        type: string
+      id:
+        type: string
+      kind:
+        type: string
+      max_discount:
+        type: integer
+      max_uses:
+        type: integer
+      min_order:
+        type: integer
+      starts_at:
+        type: string
+      used_count:
+        type: integer
+      value:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicDiscountCode:
+    properties:
+      code:
+        type: string
+      remaining:
+        description: Nil when the code has no max_uses (unlimited).
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse:
+    properties:
+      articles:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+        type: array
+      combos:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse'
+        type: array
+      description:
+        type: string
+      discount_codes:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicDiscountCode'
+        type: array
+      ends_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      starts_at:
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse:
+    properties:
+      active:
+        type: boolean
+      created_at:
+        type: string
+      description:
+        type: string
+      ends_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      per_user_limit:
+        type: integer
+      starts_at:
+        type: string
+      updated_at:
+        type: string
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ChangePasswordRequest:
     properties:
@@ -315,6 +545,31 @@ definitions:
     - seat_ids
     - show_id
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateCampaignRequest:
+    properties:
+      active:
+        description: Omitted defaults to FALSE (draft until switched on explicitly).
+        type: boolean
+      description:
+        maxLength: 2000
+        type: string
+      ends_at:
+        type: string
+      name:
+        example: Tet 2027
+        maxLength: 255
+        minLength: 1
+        type: string
+      per_user_limit:
+        minimum: 1
+        type: integer
+      starts_at:
+        type: string
+    required:
+    - ends_at
+    - name
+    - starts_at
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboOrderRequest:
     properties:
       booking_id:
@@ -392,6 +647,47 @@ definitions:
     - code
     - kind
     - value
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreatePricingRuleRequest:
+    properties:
+      active:
+        description: Omitted defaults to TRUE.
+        type: boolean
+      adjust_kind:
+        enum:
+        - percent
+        - fixed
+        example: percent
+        type: string
+      adjust_value:
+        description: 'Signed: negative discounts, positive surcharges.'
+        example: 10
+        type: integer
+      day_of_week:
+        example: 0
+        maximum: 6
+        minimum: 0
+        type: integer
+      end_time:
+        example: "23:00"
+        type: string
+      name:
+        example: Weekend surcharge
+        maxLength: 255
+        minLength: 1
+        type: string
+      priority:
+        minimum: 0
+        type: integer
+      specific_date:
+        example: "2026-01-01"
+        type: string
+      start_time:
+        example: "18:00"
+        type: string
+    required:
+    - adjust_kind
+    - name
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateUserRequest:
     properties:
@@ -534,6 +830,16 @@ definitions:
         type: string
       created_at:
         type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse:
+    properties:
+      from_price:
+        type: integer
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse:
     properties:
@@ -797,6 +1103,11 @@ definitions:
         - T18
         example: T18
         type: string
+      backdrop_url:
+        description: BackdropURL is the landscape still used by the customer home
+          hero and cards.
+        maxLength: 512
+        type: string
       cast:
         example: Leonardo DiCaprio, Joseph Gordon-Levitt
         maxLength: 2000
@@ -851,6 +1162,8 @@ definitions:
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.MovieResponse:
     properties:
       age_rating:
+        type: string
+      backdrop_url:
         type: string
       cast:
         type: string
@@ -1065,6 +1378,44 @@ definitions:
         type: object
     required:
     - prices
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingQuoteResponse:
+    properties:
+      applied:
+        items:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AppliedPricingRule'
+        type: array
+      base:
+        type: integer
+      final:
+        type: integer
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse:
+    properties:
+      active:
+        type: boolean
+      adjust_kind:
+        type: string
+      adjust_value:
+        type: integer
+      created_at:
+        type: string
+      day_of_week:
+        type: integer
+      end_time:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      priority:
+        type: integer
+      specific_date:
+        type: string
+      start_time:
+        type: string
+      updated_at:
+        type: string
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices:
     properties:
@@ -1558,6 +1909,55 @@ definitions:
       txn_ref:
         type: string
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateArticleRequest:
+    properties:
+      content:
+        minLength: 1
+        type: string
+      slug:
+        maxLength: 255
+        type: string
+      status:
+        enum:
+        - draft
+        - published
+        - hidden
+        type: string
+      summary:
+        maxLength: 500
+        type: string
+      thumbnail_url:
+        maxLength: 1024
+        type: string
+      title:
+        maxLength: 255
+        minLength: 1
+        type: string
+      type:
+        enum:
+        - news
+        - promotion
+        type: string
+    type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateCampaignRequest:
+    properties:
+      active:
+        type: boolean
+      description:
+        maxLength: 2000
+        type: string
+      ends_at:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      per_user_limit:
+        minimum: 1
+        type: integer
+      starts_at:
+        type: string
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateComboRequest:
     properties:
       active:
@@ -1626,6 +2026,35 @@ definitions:
       promo_offers:
         type: boolean
     type: object
+  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdatePricingRuleRequest:
+    properties:
+      active:
+        type: boolean
+      adjust_kind:
+        enum:
+        - percent
+        - fixed
+        type: string
+      adjust_value:
+        type: integer
+      day_of_week:
+        maximum: 6
+        minimum: 0
+        type: integer
+      end_time:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      priority:
+        minimum: 0
+        type: integer
+      specific_date:
+        type: string
+      start_time:
+        type: string
+    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateProfileRequest:
     properties:
       full_name:
@@ -1693,6 +2122,8 @@ definitions:
       message:
         example: success
         type: string
+      reason:
+        type: string
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta:
     properties:
@@ -1733,6 +2164,170 @@ info:
   title: BackEnd-CP API
   version: "1.0"
 paths:
+  /admin/articles:
+    get:
+      parameters:
+      - default: 1
+        description: Current page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Records per page
+        in: query
+        name: page_size
+        type: integer
+      - description: news or promotion
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+                        type: array
+                    type: object
+              type: object
+      security:
+      - BearerAuth: []
+      summary: List all articles, any status (admin)
+      tags:
+      - articles
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Article
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create an article
+      tags:
+      - articles
+  /admin/articles/{id}:
+    delete:
+      parameters:
+      - description: Article ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Delete an article (soft delete)
+      tags:
+      - articles
+    get:
+      parameters:
+      - description: Article ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get an article by ID, any status (admin)
+      tags:
+      - articles
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Article ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateArticleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Update an article
+      tags:
+      - articles
   /admin/audit-logs:
     get:
       description: |-
@@ -1887,6 +2482,465 @@ paths:
       summary: Start a job now, in the background
       tags:
       - batch
+  /admin/campaigns:
+    get:
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Match name or description
+        in: query
+        name: search
+        type: string
+      - description: Filter enabled/disabled; omit for both
+        in: query
+        name: active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List campaigns (admin)
+      tags:
+      - campaigns
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Campaign
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateCampaignRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create a campaign draft (admin)
+      tags:
+      - campaigns
+  /admin/campaigns/{id}:
+    delete:
+      description: 'Hard delete: its combo/article links go with it, and any discount
+        code it had gets campaign_id set back to NULL (never orphaned, never deleted).'
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Delete a campaign (admin)
+      tags:
+      - campaigns
+    get:
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDetailResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get one campaign with everything attached (admin)
+      tags:
+      - campaigns
+    patch:
+      consumes:
+      - application/json
+      description: PARTIAL update; an omitted field is left alone.
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateCampaignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Update a campaign (admin)
+      tags:
+      - campaigns
+  /admin/campaigns/{id}/articles/{article_id}:
+    delete:
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Article id
+        in: path
+        name: article_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Detach an article from a campaign (admin)
+      tags:
+      - campaigns
+    post:
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Article id
+        in: path
+        name: article_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Attach an article to a campaign (admin)
+      tags:
+      - campaigns
+  /admin/campaigns/{id}/combos/{combo_id}:
+    delete:
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Combo id
+        in: path
+        name: combo_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Detach a combo from a campaign (admin)
+      tags:
+      - campaigns
+    post:
+      consumes:
+      - application/json
+      description: 'Upserts: attaching an already-linked combo updates its promo_price.
+        v1 record/display only - it does not change what /combo-orders charges.'
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Combo id
+        in: path
+        name: combo_id
+        required: true
+        type: string
+      - description: Optional promo price
+        in: body
+        name: payload
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AttachComboRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Attach a combo to a campaign (admin)
+      tags:
+      - campaigns
+  /admin/campaigns/{id}/discount-codes/{code_id}:
+    delete:
+      description: Sets discount_codes.campaign_id back to NULL; the code itself is
+        untouched and stays usable as a standalone code.
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Discount code id
+        in: path
+        name: code_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Detach a discount code from a campaign (admin)
+      tags:
+      - campaigns
+    post:
+      description: A code belongs to at most one campaign; attaching it here sets
+        discount_codes.campaign_id. Applying it then additionally requires the campaign
+        to be active and inside its own window.
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Discount code id
+        in: path
+        name: code_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Attach a discount code to a campaign (admin)
+      tags:
+      - campaigns
   /admin/concessions:
     get:
       description: Unlike the public GET /combos this is paged and INCLUDES inactive
@@ -3194,6 +4248,292 @@ paths:
         and operational alerts, in one call'
       tags:
       - reports
+  /admin/pricing/base:
+    get:
+      description: One row per seat type. All four seat types always exist once migration
+        000013 has run.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get the global base prices (admin)
+      tags:
+      - pricing
+    put:
+      consumes:
+      - application/json
+      description: Send just the seat type(s) you are changing; the rest are left
+        alone.
+      parameters:
+      - description: Seat type -> price
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Set the global base price for one or more seat types (admin)
+      tags:
+      - pricing
+  /admin/pricing/rules:
+    get:
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      - description: Match rule name
+        in: query
+        name: search
+        type: string
+      - description: Filter enabled/disabled; omit for both
+        in: query
+        name: active
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: List pricing rules (admin)
+      tags:
+      - pricing
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Rule
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreatePricingRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Create a pricing rule (admin)
+      tags:
+      - pricing
+  /admin/pricing/rules/{id}:
+    delete:
+      parameters:
+      - description: Pricing rule id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Delete a pricing rule (admin)
+      tags:
+      - pricing
+    get:
+      parameters:
+      - description: Pricing rule id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Get one pricing rule (admin)
+      tags:
+      - pricing
+    patch:
+      consumes:
+      - application/json
+      description: PARTIAL update. Sending "" for start_time/end_time/specific_date
+        clears it back to NULL.
+      parameters:
+      - description: Pricing rule id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdatePricingRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Update a pricing rule (admin)
+      tags:
+      - pricing
   /admin/reports/breakdown:
     get:
       description: 'Live aggregation over paid money in [from, to]: daily line, top
@@ -3596,7 +4936,7 @@ paths:
       consumes:
       - multipart/form-data
       description: 'multipart/form-data field "file": JPEG, PNG or WebP. Returns the
-        URL to put in poster_url.'
+        URL to put in poster_url or backdrop_url.'
       parameters:
       - description: Poster image
         in: formData
@@ -3771,6 +5111,72 @@ paths:
       summary: Lock/unlock an account and/or change its role (admin)
       tags:
       - admin-users
+  /articles:
+    get:
+      parameters:
+      - default: 1
+        description: Current page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Records per page
+        in: query
+        name: page_size
+        type: integer
+      - description: news or promotion
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+                        type: array
+                    type: object
+              type: object
+      summary: List published articles (public)
+      tags:
+      - articles
+  /articles/{slug}:
+    get:
+      parameters:
+      - description: Article slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Get a published article by slug (public)
+      tags:
+      - articles
   /auth/forgot-password:
     post:
       consumes:
@@ -4001,6 +5407,77 @@ paths:
       summary: Accept the current terms and sign in
       tags:
       - auth
+  /campaigns:
+    get:
+      description: Only campaigns with active=true and now inside [starts_at, ends_at).
+        Each carries its linked discount codes (code + remaining, never internal counters),
+        combos (with promo_price if set) and published articles.
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse'
+                        type: array
+                    type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: List active campaigns (public)
+      tags:
+      - campaigns
+  /campaigns/{id}:
+    get:
+      description: 404 when the campaign does not exist, is not active, or its window
+        has not started/has ended.
+      parameters:
+      - description: Campaign id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Get one active campaign (public)
+      tags:
+      - campaigns
   /combo-orders:
     post:
       consumes:
@@ -5020,6 +6497,68 @@ paths:
       summary: Public ticket price list
       tags:
       - halls
+  /pricing/global:
+    get:
+      description: The global base price for each seat type, plus the cheapest configured
+        seat anywhere. No auth. Lives at /pricing/global because /pricing serves the
+        per-hall list.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Public global ticket price list
+      tags:
+      - pricing
+  /pricing/quote:
+    get:
+      description: 'Read-only: base price, every rule that matched (in applied order)
+        and the floored-at-0 final price. Never touches booking or hold state.'
+      parameters:
+      - description: Showtime id
+        in: query
+        name: showtime_id
+        required: true
+        type: string
+      - description: standard, vip, couple or recliner
+        in: query
+        name: seat_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingQuoteResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: showtime not found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      summary: Preview the price for one showtime and seat type
+      tags:
+      - pricing
   /shows/{id}/seats:
     get:
       parameters:

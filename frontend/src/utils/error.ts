@@ -44,3 +44,22 @@ export const fieldErrorsOf = (error: unknown): Record<string, string> | undefine
   if (!details || Object.keys(details).length === 0) return undefined;
   return details;
 };
+
+/** Translated backend reason (err.* namespace) with message fallback. */
+export const reasonMessage = (
+  error: unknown,
+  t: (key: string, options?: { defaultValue?: string }) => string,
+  fallback: string
+): string => {
+  if (isApiError(error) && error.reason) {
+    const translated = t(`err.${error.reason}`, { defaultValue: '' });
+    if (translated) return translated;
+  }
+  return safeMessage(error, fallback);
+};
+
+const NON_FATAL_REFRESH_REASONS = new Set(['payment_in_progress']);
+
+/** A refresh-flow failure the UI may ride through without logging out. */
+export const isRecoverableRefreshError = (error: unknown): boolean =>
+  isApiError(error) && !!error.reason && NON_FATAL_REFRESH_REASONS.has(error.reason);

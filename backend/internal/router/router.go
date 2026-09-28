@@ -40,6 +40,9 @@ type Handlers struct {
 	Audit    *handlers.AuditHandler
 	Combo    *handlers.ComboHandler
 	Discount *handlers.DiscountHandler
+	Article  *handlers.ArticleHandler
+	Pricing  *handlers.PricingHandler
+	Campaign *handlers.CampaignHandler
 }
 
 type Limiters struct {
@@ -119,6 +122,12 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		// Public price page. The only anonymous read of hall_prices; everything
 		// else about halls is operator-scoped.
 		public.GET("/pricing", h.Hall.PublicPrices)
+		public.GET("/pricing/global", h.Pricing.PublicPrices)
+		public.GET("/pricing/quote", h.Pricing.Quote)
+		public.GET("/articles", h.Article.List)
+		public.GET("/articles/:slug", h.Article.Show)
+		public.GET("/campaigns", h.Campaign.PublicList)
+		public.GET("/campaigns/:id", h.Campaign.PublicGet)
 	}
 
 	protected := v1.Group("")
@@ -180,6 +189,12 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.POST("/concessions", middleware.Audit(db, "admin.create_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminCreate)
 			catalog.PATCH("/concessions/:id", middleware.Audit(db, "admin.update_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminUpdate)
 			catalog.DELETE("/concessions/:id", middleware.Audit(db, "admin.delete_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminDelete)
+			// Article CMS is operator scope too: a news post moves no money.
+			catalog.GET("/articles", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.ListAdmin)
+			catalog.GET("/articles/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.ShowAdmin)
+			catalog.POST("/articles", middleware.Audit(db, "admin.create_article", "article"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.Create)
+			catalog.PUT("/articles/:id", middleware.Audit(db, "admin.update_article", "article"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.Update)
+			catalog.DELETE("/articles/:id", middleware.Audit(db, "admin.delete_article", "article"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.Delete)
 		}
 
 		orders := protected.Group("/orders")
@@ -282,6 +297,26 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			admin.POST("/discounts", middleware.Audit(db, "admin.create_discount", "discount"), h.Discount.AdminCreate)
 			admin.PATCH("/discounts/:id", middleware.Audit(db, "admin.update_discount", "discount"), h.Discount.AdminUpdate)
 			admin.DELETE("/discounts/:id", middleware.Audit(db, "admin.delete_discount", "discount"), h.Discount.AdminDelete)
+			// Pricing engine: admin-only, group-level RequireRoles above covers all.
+			admin.GET("/pricing/base", h.Pricing.AdminGetBasePrices)
+			admin.PUT("/pricing/base", middleware.Audit(db, "admin.set_base_price", "seat_base_price"), h.Pricing.AdminSetBasePrices)
+			admin.GET("/pricing/rules", h.Pricing.AdminListRules)
+			admin.GET("/pricing/rules/:id", h.Pricing.AdminGetRule)
+			admin.POST("/pricing/rules", middleware.Audit(db, "admin.create_pricing_rule", "pricing_rule"), h.Pricing.AdminCreateRule)
+			admin.PATCH("/pricing/rules/:id", middleware.Audit(db, "admin.update_pricing_rule", "pricing_rule"), h.Pricing.AdminUpdateRule)
+			admin.DELETE("/pricing/rules/:id", middleware.Audit(db, "admin.delete_pricing_rule", "pricing_rule"), h.Pricing.AdminDeleteRule)
+			// Campaigns are ADMIN-ONLY like discounts: they gate redemptions and move revenue.
+			admin.GET("/campaigns", h.Campaign.AdminList)
+			admin.GET("/campaigns/:id", h.Campaign.AdminGet)
+			admin.POST("/campaigns", middleware.Audit(db, "admin.create_campaign", "campaign"), h.Campaign.AdminCreate)
+			admin.PATCH("/campaigns/:id", middleware.Audit(db, "admin.update_campaign", "campaign"), h.Campaign.AdminUpdate)
+			admin.DELETE("/campaigns/:id", middleware.Audit(db, "admin.delete_campaign", "campaign"), h.Campaign.AdminDelete)
+			admin.POST("/campaigns/:id/combos/:combo_id", middleware.Audit(db, "admin.attach_campaign_combo", "campaign"), h.Campaign.AttachCombo)
+			admin.DELETE("/campaigns/:id/combos/:combo_id", middleware.Audit(db, "admin.detach_campaign_combo", "campaign"), h.Campaign.DetachCombo)
+			admin.POST("/campaigns/:id/articles/:article_id", middleware.Audit(db, "admin.attach_campaign_article", "campaign"), h.Campaign.AttachArticle)
+			admin.DELETE("/campaigns/:id/articles/:article_id", middleware.Audit(db, "admin.detach_campaign_article", "campaign"), h.Campaign.DetachArticle)
+			admin.POST("/campaigns/:id/discount-codes/:code_id", middleware.Audit(db, "admin.attach_campaign_discount", "campaign"), h.Campaign.AttachDiscountCode)
+			admin.DELETE("/campaigns/:id/discount-codes/:code_id", middleware.Audit(db, "admin.detach_campaign_discount", "campaign"), h.Campaign.DetachDiscountCode)
 		}
 		admin.POST("/batch/jobs/:name/run", middleware.Audit(db, "admin.run_job", "batch_job"), middleware.RequireRoles(models.RoleAdmin), h.Batch.Run)
 	}

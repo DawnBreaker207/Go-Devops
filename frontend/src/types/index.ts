@@ -14,3 +14,6 @@ export * from './staff';
 export * from './audit';
 export * from './batch';
 export * from './account';
+export * from './pricing';
+export * from './article';
+export * from './campaign';

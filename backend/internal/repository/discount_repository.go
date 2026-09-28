@@ -32,6 +32,8 @@ type DiscountRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, code *models.DiscountCode) error
 	Update(ctx context.Context, tx *gorm.DB, id string, fields map[string]any) error
 	SoftDelete(ctx context.Context, tx *gorm.DB, id string) error
+	// ListByCampaignID: every non-deleted code attached to one campaign.
+	ListByCampaignID(ctx context.Context, campaignID string) ([]models.DiscountCode, error)
 }
 
 type discountRepository struct {
@@ -139,4 +141,13 @@ func (r *discountRepository) SoftDelete(ctx context.Context, tx *gorm.DB, id str
 		return fmt.Errorf("delete discount code: %w", err)
 	}
 	return nil
+}
+
+func (r *discountRepository) ListByCampaignID(ctx context.Context, campaignID string) ([]models.DiscountCode, error) {
+	var codes []models.DiscountCode
+	if err := r.db.WithContext(ctx).Where("campaign_id = ?", campaignID).
+		Order("created_at DESC").Find(&codes).Error; err != nil {
+		return nil, fmt.Errorf("list discount codes by campaign: %w", err)
+	}
+	return codes, nil
 }

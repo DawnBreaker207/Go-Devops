@@ -44,6 +44,8 @@ type DiscountCode struct {
 	// MaxUses nil means unlimited.
 	MaxUses   *int `json:"max_uses,omitempty"`
 	UsedCount int  `gorm:"not null;default:0" json:"used_count"`
+	// CampaignID nil = standalone; a linked code also needs its campaign running.
+	CampaignID *string `gorm:"type:uuid" json:"campaign_id,omitempty"`
 	// No `default:` tag on purpose - GORM omits a zero-valued field from an
 	// INSERT when the column has a default, so a code created as active=false
 	// would silently come back on. Same trap as models.Combo.Active.

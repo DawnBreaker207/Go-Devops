@@ -155,7 +155,26 @@ type PaymentConfig struct {
 }
 
 type PaymentProvidersConfig struct {
-	Mock MockProviderConfig `mapstructure:"mock"`
+	Mock  MockProviderConfig  `mapstructure:"mock"`
+	VNPay VNPayProviderConfig `mapstructure:"vnpay"`
+}
+
+// VNPayProviderConfig holds the merchant credentials from the VNPay portal. It ships
+// DISABLED: without a tmn_code and hash_secret the adapter cannot come up, and enabling
+// it is a deployment decision rather than a code one.
+type VNPayProviderConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	DisplayName string `mapstructure:"display_name"`
+	// TmnCode is the 8-character merchant terminal code.
+	TmnCode string `mapstructure:"tmn_code"`
+	// HashSecret signs every request and verifies every callback.
+	HashSecret string `mapstructure:"hash_secret"`
+	// PayURL is the hosted checkout the browser is sent to.
+	PayURL string `mapstructure:"pay_url"`
+	// APIURL serves the merchant commands (querydr, refund).
+	APIURL string `mapstructure:"api_url"`
+	// Locale is "vn" or "en".
+	Locale string `mapstructure:"locale"`
 }
 
 type MockProviderConfig struct {
@@ -457,6 +476,15 @@ func setDefaults(v *viper.Viper) {
 	// No default mock secret: config.yaml / env must provide one.
 	v.SetDefault("payment.providers.mock.secret", "")
 	v.SetDefault("payment.providers.mock.allow_in_production", false)
+	// VNPay ships disabled and credential-less on purpose: an adapter that cannot
+	// authenticate must never come up by accident.
+	v.SetDefault("payment.providers.vnpay.enabled", false)
+	v.SetDefault("payment.providers.vnpay.display_name", "VNPay")
+	v.SetDefault("payment.providers.vnpay.tmn_code", "")
+	v.SetDefault("payment.providers.vnpay.hash_secret", "")
+	v.SetDefault("payment.providers.vnpay.pay_url", "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html")
+	v.SetDefault("payment.providers.vnpay.api_url", "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction")
+	v.SetDefault("payment.providers.vnpay.locale", "vn")
 
 	v.SetDefault("mail.outbox_dir", "tmp/mail")
 

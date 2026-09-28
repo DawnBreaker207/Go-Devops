@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import DeleteAccountDialog from './components/account/DeleteAccountDialog';
-import MembershipTeaser from './components/account/MembershipTeaser';
-import NotificationsSection from './components/account/NotificationsSection';
-import ProfileSection from './components/account/ProfileSection';
-import PasswordSection from './components/account/PasswordSection';
-import SessionsSection from './components/account/SessionsSection';
-import TicketsSection from './components/account/TicketsSection';
-import TransactionsSection from './components/account/TransactionsSection';
+import DeleteAccountDialog from './components/DeleteAccountDialog';
+import MembershipTeaser from './components/MembershipTeaser';
+import NotificationsSection from './components/NotificationsSection';
+import ProfileSection from './components/ProfileSection';
+import PasswordSection from './components/PasswordSection';
+import SessionsSection from './components/SessionsSection';
+import TicketsSection from './components/TicketsSection';
+import TransactionsSection from './components/TransactionsSection';
 import { useAuthStore } from '@/stores/authStore';
 import { PATHS } from '@/routes/paths';
 import Button from '@/components/ui/Button';
@@ -157,8 +157,7 @@ export const AccountPage = () => {
   const logout = useAuthStore((s) => s.logout);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  // Tab lives in the URL so the "My tickets" link deep-opens the tickets tab. Read straight from the URL
-  // (no state + effect) to stay within the hooks rules.
+  // Tab lives in the URL so the "My tickets" link deep-opens the tickets tab.
   const requestedTab = searchParams.get('tab');
   const tab: Tab = isTab(requestedTab) ? requestedTab : 'profile';
   const handleTab = (key: Tab) => {
@@ -209,7 +208,6 @@ export const AccountPage = () => {
         </div>
       </div>
 
-      {/* Single card: icon tabs + content. */}
       <div
         className={`mb-6 flex flex-col overflow-hidden rounded-(--radius-card) border lg:flex-row ${INK_BORDER_14} ${INK_BG_035}`}
       >

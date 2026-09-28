@@ -12,6 +12,7 @@ export const PATHS = {
   pricing: '/pricing',
   cinemaInfo: '/cinema',
   offers: '/offers',
+  offerDetail: '/offers/:slug',
   account: '/account',
   customerLogin: '/customer-login',
   register: '/register',
@@ -34,6 +35,11 @@ export const PATHS = {
   customerLookup: '/customer-lookup',
   auditLogs: '/audit-logs',
   batchJobs: '/batch-jobs',
+  catalog: '/catalog',
+  counter: '/counter',
+  promotions: '/promotions',
+  pricingAdmin: '/pricing-admin',
+  monitoring: '/monitoring',
   notFound: '*',
 } as const;
 
@@ -41,6 +47,7 @@ export type AppPath = (typeof PATHS)[keyof typeof PATHS];
 
 /* Parameterized customer-zone paths. Never concatenate path strings elsewhere. */
 export const filmPath = (id: string): string => `/film/${id}`;
+export const offerDetailPath = (slug: string): string => `/offers/${slug}`;
 export const selectSeatPath = (showtimeId: string): string => `/select-seat/${showtimeId}`;
 export const bookingSuccessPath = (bookingId: string): string => `/booking-success/${bookingId}`;
 export const ACCOUNT_TICKETS_TAB = 'tickets';

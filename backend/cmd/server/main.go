@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -21,6 +23,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/notify"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment/mock"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/payment/vnpay"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/router"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
@@ -159,7 +162,12 @@ func run() error {
 		paymentRepo, batchRepo, bookingRepo, location)
 
 	comboService := service.NewComboService(db, repository.NewComboRepository(db), repository.NewComboOrderRepository(db), bookingRepo)
-	discountService := service.NewDiscountService(db, repository.NewDiscountRepository(db), bookingRepo)
+	comboRepo := repository.NewComboRepository(db)
+	discountRepo := repository.NewDiscountRepository(db)
+	discountService := service.NewDiscountService(db, discountRepo, bookingRepo, paymentRepo, repository.NewCampaignRepository(db))
+	articleService := service.NewArticleService(db, repository.NewArticleRepository(db))
+	pricingService := service.NewPricingService(db, repository.NewPricingRepository(db), showtimeRepo, location, catalogCache)
+	campaignService := service.NewCampaignService(db, repository.NewCampaignRepository(db), discountRepo, comboRepo, repository.NewArticleRepository(db))
 
 	imageStore, mediaDir := buildImageStore(cfg)
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
@@ -204,6 +212,9 @@ func run() error {
 		Audit:    handlers.NewAuditHandler(service.NewAuditService(repository.NewAuditRepository(db))),
 		Combo:    handlers.NewComboHandler(comboService),
 		Discount: handlers.NewDiscountHandler(discountService),
+		Article:  handlers.NewArticleHandler(articleService),
+		Pricing:  handlers.NewPricingHandler(pricingService),
+		Campaign: handlers.NewCampaignHandler(campaignService),
 	})
 
 	server := &http.Server{
@@ -275,6 +286,29 @@ func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 			return nil, err
 		}
 	}
+	if vp := cfg.Payment.Providers.VNPay; vp.Enabled {
+		provider, err := vnpay.New(vnpay.Options{
+			DisplayName: vp.DisplayName,
+			TmnCode:     vp.TmnCode,
+			HashSecret:  vp.HashSecret,
+			PayURL:      vp.PayURL,
+			APIURL:      vp.APIURL,
+			Locale:      vp.Locale,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := registry.Register(provider); err != nil {
+			return nil, err
+		}
+		// VNPay calls the IPN from its own servers, so a loopback public_base_url
+		// means notifications can never arrive. Config gap, said at boot.
+		if isLoopback(cfg.Payment.PublicBaseURL) {
+			logger.Warn("vnpay is enabled but payment.public_base_url still points at localhost: "+
+				"VNPay cannot reach the IPN from outside this machine (set PAYMENT_PUBLIC_BASE_URL)",
+				logger.String("public_base_url", cfg.Payment.PublicBaseURL))
+		}
+	}
 	if err := registry.SetDefault(cfg.Payment.DefaultProvider); err != nil {
 		return nil, err
 	}
@@ -299,6 +333,19 @@ func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 			logger.String("providers", strings.Join(names, ",")), logger.String("default", registry.Default()))
 	}
 	return registry, nil
+}
+
+func isLoopback(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "::1" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func buildImageStore(cfg *config.Config) (storage.Store, string) {

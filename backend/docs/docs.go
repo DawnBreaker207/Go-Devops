@@ -15,6 +15,288 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/articles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "List all articles, any status (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Current page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Records per page",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "news or promotion",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "Create an article",
+                "parameters": [
+                    {
+                        "description": "Article",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/articles/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "Get an article by ID, any status (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Article ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "Update an article",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Article ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateArticleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "Delete an article (soft delete)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Article ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/audit-logs": {
             "get": {
                 "security": [
@@ -253,6 +535,748 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/campaigns": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "List campaigns (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Match name or description",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter enabled/disabled; omit for both",
+                        "name": "active",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Create a campaign draft (admin)",
+                "parameters": [
+                    {
+                        "description": "Campaign",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateCampaignRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/campaigns/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Get one campaign with everything attached (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDetailResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hard delete: its combo/article links go with it, and any discount code it had gets campaign_id set back to NULL (never orphaned, never deleted).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Delete a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "PARTIAL update; an omitted field is left alone.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Update a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateCampaignRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/campaigns/{id}/articles/{article_id}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Attach an article to a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Article id",
+                        "name": "article_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Detach an article from a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Article id",
+                        "name": "article_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/campaigns/{id}/combos/{combo_id}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upserts: attaching an already-linked combo updates its promo_price. v1 record/display only - it does not change what /combo-orders charges.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Attach a combo to a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Combo id",
+                        "name": "combo_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional promo price",
+                        "name": "payload",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AttachComboRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Detach a combo from a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Combo id",
+                        "name": "combo_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/campaigns/{id}/discount-codes/{code_id}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "A code belongs to at most one campaign; attaching it here sets discount_codes.campaign_id. Applying it then additionally requires the campaign to be active and inside its own window.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Attach a discount code to a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discount code id",
+                        "name": "code_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.DiscountCodeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets discount_codes.campaign_id back to NULL; the code itself is untouched and stays usable as a standalone code.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Detach a discount code from a campaign (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Discount code id",
+                        "name": "code_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
@@ -2400,6 +3424,480 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/pricing/base": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "One row per seat type. All four seat types always exist once migration 000013 has run.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Get the global base prices (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Send just the seat type(s) you are changing; the rest are left alone.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Set the global base price for one or more seat types (admin)",
+                "parameters": [
+                    {
+                        "description": "Seat type -\u003e price",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/pricing/rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "List pricing rules (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Match rule name",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter enabled/disabled; omit for both",
+                        "name": "active",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Create a pricing rule (admin)",
+                "parameters": [
+                    {
+                        "description": "Rule",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreatePricingRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/pricing/rules/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Get one pricing rule (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pricing rule id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Delete a pricing rule (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pricing rule id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "PARTIAL update. Sending \"\" for start_time/end_time/specific_date clears it back to NULL.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Update a pricing rule (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pricing rule id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdatePricingRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/reports/breakdown": {
             "get": {
                 "security": [
@@ -3050,7 +4548,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "multipart/form-data field \"file\": JPEG, PNG or WebP. Returns the URL to put in poster_url.",
+                "description": "multipart/form-data field \"file\": JPEG, PNG or WebP. Returns the URL to put in poster_url or backdrop_url.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -3334,6 +4832,120 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/articles": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "List published articles (public)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Current page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Records per page",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "news or promotion",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/articles/{slug}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "articles"
+                ],
+                "summary": "Get a published article by slug (public)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Article slug",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
@@ -3705,6 +5317,122 @@ const docTemplate = `{
                     },
                     "428": {
                         "description": "terms not required or already accepted",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/campaigns": {
+            "get": {
+                "description": "Only campaigns with active=true and now inside [starts_at, ends_at). Each carries its linked discount codes (code + remaining, never internal counters), combos (with promo_price if set) and published articles.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "List active campaigns (public)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "allOf": [
+                                                {
+                                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Paged"
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "items": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/campaigns/{id}": {
+            "get": {
+                "description": "404 when the campaign does not exist, is not active, or its window has not started/has ended.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "campaigns"
+                ],
+                "summary": "Get one active campaign (public)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Campaign id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
                         }
@@ -5394,6 +7122,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/pricing/global": {
+            "get": {
+                "description": "The global base price for each seat type, plus the cheapest configured seat anywhere. No auth. Lives at /pricing/global because /pricing serves the per-hall list.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Public global ticket price list",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/pricing/quote": {
+            "get": {
+                "description": "Read-only: base price, every rule that matched (in applied order) and the floored-at-0 final price. Never touches booking or hold state.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pricing"
+                ],
+                "summary": "Preview the price for one showtime and seat type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Showtime id",
+                        "name": "showtime_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "standard, vip, couple or recliner",
+                        "name": "seat_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingQuoteResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "showtime not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/shows/{id}/seats": {
             "get": {
                 "security": [
@@ -6833,6 +8659,23 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AppliedPricingRule": {
+            "type": "object",
+            "properties": {
+                "adjust_kind": {
+                    "type": "string"
+                },
+                "adjust_value": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rule_id": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ApplyDiscountRequest": {
             "type": "object",
             "required": [
@@ -6844,6 +8687,105 @@ const docTemplate = `{
                     "maxLength": 32,
                     "minLength": 1,
                     "example": "WELCOME10"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleRequest": {
+            "type": "object",
+            "required": [
+                "content",
+                "title"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Omitted slug auto-generates from title.",
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "khuyen-mai-thang-10"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "published",
+                        "hidden"
+                    ],
+                    "example": "draft"
+                },
+                "summary": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "thumbnail_url": {
+                    "type": "string",
+                    "maxLength": 1024
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "Khuyen mai thang 10"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "news",
+                        "promotion"
+                    ],
+                    "example": "news"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse": {
+            "type": "object",
+            "properties": {
+                "author_id": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "thumbnail_url": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "views": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AttachComboRequest": {
+            "type": "object",
+            "properties": {
+                "promo_price": {
+                    "type": "integer",
+                    "minimum": 0
                 }
             }
         },
@@ -6892,6 +8834,39 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_agent": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceRequest": {
+            "type": "object",
+            "required": [
+                "prices"
+            ],
+            "properties": {
+                "prices": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "example": {
+                        "standard": 80000,
+                        "vip": 120000
+                    }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.BasePriceResponse": {
+            "type": "object",
+            "properties": {
+                "price": {
+                    "type": "integer"
+                },
+                "seat_type": {
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 }
             }
@@ -7030,6 +9005,199 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatChange"
                     }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse": {
+            "type": "object",
+            "properties": {
+                "combo_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "promo_price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDetailResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "articles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                    }
+                },
+                "combos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "discount_codes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDiscountCodeResponse"
+                    }
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "per_user_limit": {
+                    "type": "integer"
+                },
+                "starts_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignDiscountCodeResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "max_discount": {
+                    "type": "integer"
+                },
+                "max_uses": {
+                    "type": "integer"
+                },
+                "min_order": {
+                    "type": "integer"
+                },
+                "starts_at": {
+                    "type": "string"
+                },
+                "used_count": {
+                    "type": "integer"
+                },
+                "value": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicDiscountCode": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "remaining": {
+                    "description": "Nil when the code has no max_uses (unlimited).",
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse": {
+            "type": "object",
+            "properties": {
+                "articles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.ArticleResponse"
+                    }
+                },
+                "combos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignComboResponse"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "discount_codes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicDiscountCode"
+                    }
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "starts_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "per_user_limit": {
+                    "type": "integer"
+                },
+                "starts_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -7181,6 +9349,40 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateCampaignRequest": {
+            "type": "object",
+            "required": [
+                "ends_at",
+                "name",
+                "starts_at"
+            ],
+            "properties": {
+                "active": {
+                    "description": "Omitted defaults to FALSE (draft until switched on explicitly).",
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "Tet 2027"
+                },
+                "per_user_limit": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "starts_at": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateComboOrderRequest": {
             "type": "object",
             "required": [
@@ -7282,6 +9484,60 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1,
                     "example": 10
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreatePricingRuleRequest": {
+            "type": "object",
+            "required": [
+                "adjust_kind",
+                "name"
+            ],
+            "properties": {
+                "active": {
+                    "description": "Omitted defaults to TRUE.",
+                    "type": "boolean"
+                },
+                "adjust_kind": {
+                    "type": "string",
+                    "enum": [
+                        "percent",
+                        "fixed"
+                    ],
+                    "example": "percent"
+                },
+                "adjust_value": {
+                    "description": "Signed: negative discounts, positive surcharges.",
+                    "type": "integer",
+                    "example": 10
+                },
+                "day_of_week": {
+                    "type": "integer",
+                    "maximum": 6,
+                    "minimum": 0,
+                    "example": 0
+                },
+                "end_time": {
+                    "type": "string",
+                    "example": "23:00"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "Weekend surcharge"
+                },
+                "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "specific_date": {
+                    "type": "string",
+                    "example": "2026-01-01"
+                },
+                "start_time": {
+                    "type": "string",
+                    "example": "18:00"
                 }
             }
         },
@@ -7491,6 +9747,21 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse": {
+            "type": "object",
+            "properties": {
+                "from_price": {
+                    "type": "integer"
+                },
+                "prices": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
                 }
             }
         },
@@ -7868,6 +10139,11 @@ const docTemplate = `{
                     ],
                     "example": "T18"
                 },
+                "backdrop_url": {
+                    "description": "BackdropURL is the landscape still used by the customer home hero and cards.",
+                    "type": "string",
+                    "maxLength": 512
+                },
                 "cast": {
                     "type": "string",
                     "maxLength": 2000,
@@ -7928,6 +10204,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "age_rating": {
+                    "type": "string"
+                },
+                "backdrop_url": {
                     "type": "string"
                 },
                 "cast": {
@@ -8235,6 +10514,64 @@ const docTemplate = `{
                         "standard": 80000,
                         "vip": 120000
                     }
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingQuoteResponse": {
+            "type": "object",
+            "properties": {
+                "applied": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.AppliedPricingRule"
+                    }
+                },
+                "base": {
+                    "type": "integer"
+                },
+                "final": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingRuleResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "adjust_kind": {
+                    "type": "string"
+                },
+                "adjust_value": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "day_of_week": {
+                    "type": "integer"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "specific_date": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -8965,6 +11302,74 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateArticleRequest": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "slug": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "published",
+                        "hidden"
+                    ]
+                },
+                "summary": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "thumbnail_url": {
+                    "type": "string",
+                    "maxLength": 1024
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "news",
+                        "promotion"
+                    ]
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateCampaignRequest": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "per_user_limit": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "starts_at": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdateComboRequest": {
             "type": "object",
             "properties": {
@@ -9059,6 +11464,47 @@ const docTemplate = `{
                 },
                 "promo_offers": {
                     "type": "boolean"
+                }
+            }
+        },
+        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.UpdatePricingRuleRequest": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "adjust_kind": {
+                    "type": "string",
+                    "enum": [
+                        "percent",
+                        "fixed"
+                    ]
+                },
+                "adjust_value": {
+                    "type": "integer"
+                },
+                "day_of_week": {
+                    "type": "integer",
+                    "maximum": 6,
+                    "minimum": 0
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "specific_date": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
                 }
             }
         },
@@ -9158,6 +11604,9 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "success"
+                },
+                "reason": {
+                    "type": "string"
                 }
             }
         },

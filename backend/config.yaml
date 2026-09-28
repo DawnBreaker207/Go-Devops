@@ -106,11 +106,11 @@ payment:
       enabled: true
       display_name: "Cổng thử nghiệm (mock)"
       secret: dev-mock-secret-change-in-prod
-    # A real gateway gets its own block once its adapter exists, e.g.:
-    # vnpay:
-    #   enabled: false
-    #   tmn_code: ...
-    #   hash_secret: ...
+    vnpay:
+      enabled: false
+      display_name: "VNPay"
+      tmn_code: ""
+      hash_secret: ""
 
 # Ticket emails use a mock mailer (no SMTP): each email is written as an
 # .html file into outbox_dir so it can be opened in a browser.

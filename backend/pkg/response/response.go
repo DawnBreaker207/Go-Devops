@@ -20,6 +20,7 @@ type Body struct {
 	Message string            `json:"message" example:"success"`
 	Data    any               `json:"data,omitempty"`
 	Details map[string]string `json:"details,omitempty"`
+	Reason  string            `json:"reason,omitempty"`
 }
 
 // Meta is the pagination info.
@@ -104,6 +105,7 @@ func Abort(c *gin.Context, err error) {
 		Code:    appErr.Code,
 		Message: appErr.Message,
 		Details: appErr.Details,
+		Reason:  appErr.Reason,
 	})
 }
 
@@ -114,6 +116,7 @@ func writeError(c *gin.Context, appErr *apperrors.AppError) {
 		Code:    appErr.Code,
 		Message: appErr.Message,
 		Details: appErr.Details,
+		Reason:  appErr.Reason,
 	})
 }
 

@@ -36,12 +36,15 @@ type discountService struct {
 	db       *gorm.DB
 	codes    repository.DiscountRepository
 	bookings repository.BookingRepository
+	payments repository.PaymentRepository
+	// campaigns backs the campaign window check + per-account-once guard.
+	campaigns repository.CampaignRepository
 	// now is injectable so the validity-window tests do not depend on wall clock.
 	now func() time.Time
 }
 
-func NewDiscountService(db *gorm.DB, codes repository.DiscountRepository, bookings repository.BookingRepository) DiscountService {
-	return &discountService{db: db, codes: codes, bookings: bookings, now: time.Now}
+func NewDiscountService(db *gorm.DB, codes repository.DiscountRepository, bookings repository.BookingRepository, payments repository.PaymentRepository, campaigns repository.CampaignRepository) DiscountService {
+	return &discountService{db: db, codes: codes, bookings: bookings, payments: payments, campaigns: campaigns, now: time.Now}
 }
 
 /* -------------------------------------------------------------------------- */
@@ -84,6 +87,14 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		if b.Status != models.BookingPending || b.PaidAt != nil {
 			return apperrors.ErrDiscountOrderClosed
 		}
+		// Live checkout freezes the charge; re-pricing now is invisible to capture.
+		open, err := s.payments.HasOpen(ctx, tx, b.ID)
+		if err != nil {
+			return err
+		}
+		if open {
+			return apperrors.ErrPaymentInProgress
+		}
 		if b.TotalAmount <= 0 {
 			return apperrors.ErrBookingEmpty
 		}
@@ -99,6 +110,16 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		}
 		if err := s.validate(found, b.TotalAmount); err != nil {
 			return err
+		}
+		// Campaign-linked codes also need an active campaign inside its window.
+		if found.CampaignID != nil {
+			campaign, err := s.campaigns.FindByID(ctx, *found.CampaignID)
+			if err != nil {
+				return err
+			}
+			if campaign == nil || !campaign.InWindow(s.now()) {
+				return apperrors.ErrCampaignInactive
+			}
 		}
 
 		off := found.DiscountFor(b.TotalAmount)
@@ -121,6 +142,14 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		}
 		if n == 0 {
 			return apperrors.ErrDiscountExhausted
+		}
+		// Per-account-once guard for every code; the UNIQUE (user, code) pair
+		// enforces it under race.
+		if err := s.campaigns.ClaimRedemption(ctx, tx, userID, found.ID); err != nil {
+			if apperrors.IsUniqueViolation(err) {
+				return apperrors.ErrDiscountAlreadyRedeemed
+			}
+			return err
 		}
 
 		n, err = s.bookings.SetDiscount(ctx, tx, b.ID, &found.ID, off)
@@ -165,6 +194,14 @@ func (s *discountService) Remove(ctx context.Context, userID, bookingID string) 
 		if b.Status != models.BookingPending || b.PaidAt != nil {
 			return apperrors.ErrDiscountOrderClosed
 		}
+		// Same live-checkout freeze as Apply.
+		open, err := s.payments.HasOpen(ctx, tx, b.ID)
+		if err != nil {
+			return err
+		}
+		if open {
+			return apperrors.ErrPaymentInProgress
+		}
 		if b.DiscountCodeID == nil {
 			return apperrors.ErrDiscountNone
 		}
@@ -180,6 +217,10 @@ func (s *discountService) Remove(ctx context.Context, userID, bookingID string) 
 		// Give the redemption back only after the booking write succeeded, so a
 		// failure cannot leak a use.
 		if err := s.codes.ReleaseUse(ctx, tx, codeID); err != nil {
+			return err
+		}
+		// Also give back the per-account guard so the same code can be applied again.
+		if err := s.campaigns.ReleaseRedemption(ctx, tx, userID, codeID); err != nil {
 			return err
 		}
 
