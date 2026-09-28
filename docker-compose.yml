@@ -111,6 +111,7 @@ services:
       args:
         # Vite bakes this at build time, from root .env.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_TMDB_READ_TOKEN: ${VITE_TMDB_READ_TOKEN}
     image: cinema-frontend:local
     container_name: cp-frontend
     restart: unless-stopped

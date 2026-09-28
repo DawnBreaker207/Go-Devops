@@ -23,6 +23,9 @@ COPY . .
 
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+# Optional: TMDB read token for poster/trailer metadata. Empty = feature off.
+ARG VITE_TMDB_READ_TOKEN
+ENV VITE_TMDB_READ_TOKEN=$VITE_TMDB_READ_TOKEN
 
 RUN npm run build
 
