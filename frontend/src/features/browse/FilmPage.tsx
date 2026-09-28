@@ -16,6 +16,7 @@ import {
 import { useAuthCheckpoint } from '@/features/auth/useAuthCheckpoint';
 import LoginBottomSheet from '@/features/auth/LoginBottomSheet';
 import ComingSoonHero from './components/ComingSoonHero';
+import FilmTrailer from './components/FilmTrailer';
 import {
   showtimeCardClass,
   showtimeHallClass,
@@ -36,12 +37,9 @@ import {
 } from '@/theme/customerTw';
 import type { ShowtimeListItem } from '@/types';
 
-/** Movie detail + showtime picker. GET /movies/:id/showtimes is clamped to ONE day (today by default), so the day strip is mandatory. */
-
-/** Days offered on the day strip. */
+// GET /movies/:id/showtimes is clamped to one day, so the day strip is mandatory.
 const DAYS_AHEAD = 7;
 
-/** Age-badge colors; see --cp-rating-* in index.css. */
 const ratingVars = (rating: string) => ({
   background: `var(--cp-rating-${rating.toLowerCase()})`,
   color: `var(--cp-rating-${rating.toLowerCase()}-text)`,
@@ -54,7 +52,7 @@ export const FilmPage = () => {
   const { requireAuth, sheetOpen, contextMessage, closeSheet, handleSheetSuccess } =
     useAuthCheckpoint();
 
-  // Work days in CINEMA time, not viewer time: dayjs() elsewhere shifts "today" for out-of-zone viewers.
+  // Compute days in cinema time: plain dayjs shifts "today" for out-of-zone viewers.
   const days = useMemo(
     () =>
       Array.from({ length: DAYS_AHEAD }, (_, i) =>
@@ -68,7 +66,7 @@ export const FilmPage = () => {
   const movie = useMovieDetail(id);
   const showtimes = useMovieShowtimes(id, selectedDay);
 
-  // Single login-checkpoint entry: with token requireAuth navigates straight; without, it opens LoginBottomSheet for that show. Closing mid-sheet keeps the selection (still on FilmPage, no route push). Seat-map needs JWT, so availability is rechecked only AFTER auth (a show can sell out mid-password-entry).
+  // Seat maps need JWT, so re-check after auth: seats may sell out during password entry.
   const handleSelectSeat = (show: ShowtimeListItem) => {
     setSeatCheckError(null);
     const message = t('customer.loginToSelectSeat', {
@@ -90,7 +88,7 @@ export const FilmPage = () => {
           navigate(selectSeatPath(show.id));
         })
         .catch(() => {
-          // Seat state unreadable (network, just-closed show): still enter SelectSeatPage; it handles its own errors.
+          // Unreadable seat state still enters the picker page to surface its own error there.
           navigate(selectSeatPath(show.id));
         });
     }, message);
@@ -175,10 +173,11 @@ export const FilmPage = () => {
             ) : null}
           </div>
 
+          {film ? <FilmTrailer movie={film} /> : null}
+
           {seatCheckError ? <Notice variant="error">{seatCheckError}</Notice> : null}
 
           {film?.status === 'coming_soon' ? (
-            // Unstable schedule: no day strip, only the expected date + early shows if any (see ComingSoonHero). `showtimes` is the same hook call above, not a second fetch.
             <ComingSoonHero
               releaseDate={film.release_date}
               showtimes={showtimes.data}
@@ -231,7 +230,6 @@ export const FilmPage = () => {
               ) : null}
 
               {!showtimes.isFetching && (showtimes.data?.length ?? 0) === 0 && !showtimes.error ? (
-                // Empty has many causes (left `showing`, closed, past, under-priced hall); backend doesn't distinguish, so one honest generic line.
                 <EmptyState>{t('customer.noShowtimes')}</EmptyState>
               ) : null}
 
@@ -248,7 +246,7 @@ export const FilmPage = () => {
                         {toCinemaTime(show.start_at).format('HH:mm')}
                       </span>
                       <span className={showtimeHallClass}>{show.hall_name}</span>
-                      {/* from_price is omitempty: absent at 0 (unpriced hall). Never render "0 d". */}
+                      {/* from_price 0 la chua dinh gia nen khong render 0 d. */}
                       {show.from_price ? (
                         <span className={showtimePriceClass}>
                           {t('customer.fromPrice', { price: formatVND(show.from_price) })}

@@ -1,6 +1,6 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import { CloseOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { Empty, Flex, Popover, Tooltip, Typography, theme as antdTheme } from 'antd';
+import { Checkbox, Empty, Flex, Tooltip, Typography, theme as antdTheme } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { Hall, Seat } from '@/types';
 import { SEAT_TYPE_STYLE } from '../constants';
@@ -16,60 +16,54 @@ import './SeatGrid.css';
 interface SeatGridProps {
   hall: Hall;
   seats: Seat[];
-  /** Only used for SELECTING WHOLE ROWS (row-label click) - single seats no longer
-   *  enter this set, see `onSeatClick`. */
   selected: Set<string>;
   onToggleRow: (rowLabel: string) => void;
-  /** View mode: nothing editable anymore; seats/row labels/gaps are no longer buttons. */
+  onToggleSelectAll: (selectAll: boolean) => void;
   readOnly?: boolean;
-  /** Click a standard/couple seat -> quick-edit Popover opens right in that cell. The parent
-   *  decides: with a pendingMergeSeatId this may complete a merge instead of opening a Popover. */
   onSeatClick: (seat: Seat) => void;
-  /** Double-click a standard seat -> parent enters merge-pending state. */
   onSeatDoubleClick: (seat: Seat) => void;
-  /** The ONLY seat with an open Popover (unrelated to `selected`). */
-  activeSeatId?: string | null;
-  seatPopoverContent?: ReactNode;
-  /** Seat awaiting merge (after double-click) - drawn with a blinking border. */
   pendingMergeSeatId?: string | null;
-  /** "x" button at each standard seat's top-right corner (on hover/focus) - marks a
-   *  gap IMMEDIATELY, no Popover, no confirm. */
   onQuickGap: (seat: Seat) => void;
-  /** A gap (is_gap) is a "ghost seat" - clicking it fills a seat STRAIGHT away, no
-   *  pre-select needed. This is a local (draft) edit, no API call. */
   onFillGap: (seat: Seat) => void;
   onAddRow?: () => void;
   onDeleteRow?: (rowLabel: string) => void;
+  onAddColumn?: () => void;
+  aisleAfterColsOverride?: number[];
 }
 
-/** Seat grid placing each seat by its own column. */
 export const SeatGrid = ({
   hall,
   seats,
   selected,
   onToggleRow,
+  onToggleSelectAll,
   readOnly = false,
   onSeatClick,
   onSeatDoubleClick,
-  activeSeatId = null,
-  seatPopoverContent,
   pendingMergeSeatId = null,
   onQuickGap,
   onFillGap,
   onAddRow,
   onDeleteRow,
+  onAddColumn,
+  aisleAfterColsOverride,
 }: SeatGridProps) => {
   const { t } = useTranslation();
   const { token } = antdTheme.useToken();
 
   const rows = useMemo(() => groupSeatsByRow(seats), [seats]);
-  // Render by the ACTUAL column count in the seat data, not `hall.seats_per_row`:
-  // the two can disagree - see the renderedSeatsPerRow note.
+  // Derive column count from data: it can drift from hall.seats_per_row.
   const seatsPerRow = useMemo(() => renderedSeatsPerRow(hall, seats), [hall, seats]);
+  const isAislePreview = aisleAfterColsOverride !== undefined;
+  const aisleAfterCols = aisleAfterColsOverride ?? hall.aisle_after_cols;
   const layout = useMemo(
-    () => buildGridLayout(seatsPerRow, hall.aisle_after_cols),
-    [seatsPerRow, hall.aisle_after_cols]
+    () => buildGridLayout(seatsPerRow, aisleAfterCols),
+    [seatsPerRow, aisleAfterCols]
   );
+
+  const seatIds = useMemo(() => seats.map((s) => s.id), [seats]);
+  const allSelected = seatIds.length > 0 && seatIds.every((id) => selected.has(id));
+  const someSelected = seatIds.some((id) => selected.has(id));
 
   if (seats.length === 0) {
     return <Empty description={t('hall.noSeats')} />;
@@ -98,6 +92,28 @@ export const SeatGrid = ({
         {hall.screen_position === 'front' ? screen : null}
 
         <Flex vertical gap={4} align="center">
+          {!readOnly ? (
+            <Flex align="center" gap={8}>
+              <Tooltip title={t('hall.selectAll')}>
+                <span
+                  style={{
+                    width: 32,
+                    height: SEAT_SIZE,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={someSelected && !allSelected}
+                    onChange={() => onToggleSelectAll(!allSelected)}
+                    aria-label={t('hall.selectAll')}
+                  />
+                </span>
+              </Tooltip>
+            </Flex>
+          ) : null}
           {rows.map((row) => (
             <Flex key={row.rowLabel} align="center" gap={8}>
               <button
@@ -112,8 +128,7 @@ export const SeatGrid = ({
                   width: 32,
                   height: SEAT_SIZE,
                   border: 'none',
-                  // Opaque background so scrolled-under seats don't show through the sticky
-                  // left label - from the token, never hardcoded.
+                  // Solid backdrop so sliding seats never show through the sticky label.
                   background: token.colorBgContainer,
                   color: token.colorTextSecondary,
                   cursor: readOnly ? 'default' : 'pointer',
@@ -132,15 +147,26 @@ export const SeatGrid = ({
                   alignItems: 'stretch',
                 }}
               >
+                {layout.aisles.map((col) => (
+                  <div
+                    key={`aisle-${col}`}
+                    aria-hidden
+                    style={{
+                      gridColumn: `${layout.lineOf(col) + 1} / span 1`,
+                      alignSelf: 'stretch',
+                      justifySelf: 'center',
+                      width: 0,
+                      borderLeft: `2px dashed ${isAislePreview ? token.colorWarning : token.colorBorderSecondary}`,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                ))}
                 {row.seats.map((seat) => {
                   const isSelected = selected.has(seat.id);
                   const line = layout.lineOf(seat.col_number);
                   const span = layout.spanOf(seat.col_number, seat.col_span);
                   const gridColumn = `${line} / span ${span}`;
 
-                  // Gaps are "ghost seats": never handled like a normal seat that gets
-                  // SELECTED then converted via toolbar - clicking fills a seat STRAIGHT
-                  // away (one step, no pre-select). Icon-only, no text.
                   if (seat.is_gap) {
                     return (
                       <Tooltip key={seat.id} title={readOnly ? undefined : t('hall.fillGapHint')}>
@@ -171,9 +197,6 @@ export const SeatGrid = ({
                     );
                   }
 
-                  // View mode must never show a "selected" ring/glow - even if
-                  // `selected` still holds some id for any other reason,
-                  // this is the last line of defense at render time.
                   const showSelected = isSelected && !readOnly;
                   const isPendingMerge = !readOnly && seat.id === pendingMergeSeatId;
 
@@ -207,13 +230,11 @@ export const SeatGrid = ({
                         boxShadow: showSelected ? `0 0 0 2px ${token.colorPrimaryBg}` : undefined,
                       }}
                     >
-                      {seat.col_number}
+                      {seat.col_span === 2
+                        ? `${seat.col_number}-${seat.col_number + 1}`
+                        : seat.col_number}
                     </button>
                   );
-
-                  // In-place edit: clicking a seat anchors the Popover right there,
-                  // instead of dragging eyes down to the bottom pill.
-                  const showPopover = !readOnly && seat.id === activeSeatId && seatPopoverContent;
 
                   return (
                     <span
@@ -221,27 +242,24 @@ export const SeatGrid = ({
                       className="seat-cell"
                       style={{ gridColumn, position: 'relative', display: 'inline-block' }}
                     >
-                      {showPopover ? (
-                        <Popover
-                          open
-                          placement="top"
-                          content={seatPopoverContent}
-                          title={t('hall.quickEdit', { label: seat.label })}
-                        >
-                          {seatButton}
-                        </Popover>
-                      ) : (
-                        seatButton
-                      )}
+                      {seatButton}
                       {!readOnly ? (
-                        <Tooltip title={t('hall.quickGap')}>
+                        <Tooltip
+                          title={seat.col_span === 2 ? t('hall.splitCouple') : t('hall.quickGap')}
+                        >
                           <button
                             type="button"
                             className="seat-x"
-                            aria-label={t('hall.quickGap')}
+                            aria-label={
+                              seat.col_span === 2 ? t('hall.splitCouple') : t('hall.quickGap')
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
-                              onQuickGap(seat);
+                              if (seat.col_span === 2) {
+                                onSeatClick(seat);
+                              } else {
+                                onQuickGap(seat);
+                              }
                             }}
                             style={{
                               position: 'absolute',
@@ -269,6 +287,34 @@ export const SeatGrid = ({
                   );
                 })}
               </div>
+
+              {!readOnly && onAddColumn ? (
+                <Tooltip title={t('hall.addColumnHint')}>
+                  <button
+                    type="button"
+                    onClick={onAddColumn}
+                    aria-label={t('hall.addColumn')}
+                    style={{
+                      width: SEAT_SIZE,
+                      height: SEAT_SIZE,
+                      minWidth: 0,
+                      flexShrink: 0,
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      borderRadius: token.borderRadiusSM,
+                      border: `1px dashed ${token.colorPrimary}`,
+                      background: 'transparent',
+                      color: token.colorPrimary,
+                      opacity: 0.7,
+                    }}
+                  >
+                    <PlusOutlined style={{ fontSize: 12 }} />
+                  </button>
+                </Tooltip>
+              ) : null}
 
               {!readOnly && onDeleteRow ? (
                 <Tooltip title={t('hall.deleteRow')}>
@@ -320,9 +366,7 @@ export const SeatGrid = ({
                   <PlusOutlined style={{ fontSize: 16 }} />
                 </button>
               </Tooltip>
-              {/* Spacer as wide as the row-delete icon (24px) so the ghost row's right edge
-                  aligns with the real rows above - without it the ghost row runs
-                  short and breaks the grid. */}
+              {onAddColumn ? <div style={{ width: SEAT_SIZE }} /> : null}
               {onDeleteRow ? <div style={{ width: 24 }} /> : null}
             </Flex>
           ) : null}

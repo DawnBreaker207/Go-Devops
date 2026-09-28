@@ -6,7 +6,6 @@ import (
 	"sync"
 )
 
-// SeatUpdate.ID is the showtime_seat id.
 type SeatUpdate struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
@@ -38,17 +37,15 @@ func (c *client) drop() { c.once.Do(func() { close(c.done) }) }
 
 type Subscription struct {
 	Events <-chan SeatEvent
-	// Done closes when the hub drops this client (too slow, or shutdown).
+	// Closed when the hub drops this client.
 	Done  <-chan struct{}
 	close func()
 }
 
-// Close is safe to call more than once.
 func (s *Subscription) Close() { s.close() }
 
-// Hub keeps one client set per showtime so an event never reaches viewers of another showtime.
+// One client set per showtime; events never cross showtimes.
 type Hub struct {
-	// Set the stream limits before the hub is used.
 	MaxStreamsPerUser int
 	MaxStreams        int
 
@@ -68,7 +65,6 @@ func NewHub() *Hub {
 	}
 }
 
-// Subscribe returns ErrTooManyStreams when the user or the server has too many streams open.
 func (h *Hub) Subscribe(showtimeID, userID string) (*Subscription, error) {
 	c := &client{user: userID, ch: make(chan SeatEvent, clientBuffer), done: make(chan struct{})}
 	h.mu.Lock()
@@ -141,8 +137,7 @@ func (h *Hub) Viewers(showtimeID string) int {
 	return len(h.shows[showtimeID])
 }
 
-// Close drops every client so long-lived streams don't hold up graceful shutdown.
-// Later subscriptions end immediately.
+// Drops every client so streams don't hold up shutdown.
 func (h *Hub) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()

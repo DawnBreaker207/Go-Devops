@@ -14,16 +14,16 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/audit"
 )
 
-// Body is the common response shape.
 type Body struct {
-	Code    int               `json:"code" example:"0"`
-	Message string            `json:"message" example:"success"`
-	Data    any               `json:"data,omitempty"`
-	Details map[string]string `json:"details,omitempty"`
+	Code    int    `json:"code" example:"0"`
+	Message string `json:"message" example:"success"`
+	Data    any    `json:"data,omitempty"`
+	// Reason is a stable machine-readable key for an error ("discount_expired"), so the
+	// frontend can translate without matching on the English sentence. Absent on success.
 	Reason  string            `json:"reason,omitempty"`
+	Details map[string]string `json:"details,omitempty"`
 }
 
-// Meta is the pagination info.
 type Meta struct {
 	Page       int   `json:"page" example:"1"`
 	PageSize   int   `json:"page_size" example:"10"`
@@ -31,31 +31,25 @@ type Meta struct {
 	TotalPages int   `json:"total_pages" example:"5"`
 }
 
-// Paged is a paginated list payload.
 type Paged struct {
 	Items any  `json:"items"`
 	Meta  Meta `json:"meta"`
 }
 
-// CodeSuccess is the code returned on success.
 const CodeSuccess = 0
 
-// OK returns 200 with data.
 func OK(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, Body{Code: CodeSuccess, Message: "success", Data: data})
 }
 
-// Created returns 201 with the created data.
 func Created(c *gin.Context, data any) {
 	c.JSON(http.StatusCreated, Body{Code: CodeSuccess, Message: "created", Data: data})
 }
 
-// NoContentOK returns 200 without data.
 func NoContentOK(c *gin.Context, message string) {
 	c.JSON(http.StatusOK, Body{Code: CodeSuccess, Message: message})
 }
 
-// List returns a paginated list.
 func List(c *gin.Context, items any, page, pageSize int, total int64) {
 	totalPages := 0
 	if pageSize > 0 {
@@ -104,8 +98,8 @@ func Abort(c *gin.Context, err error) {
 	c.AbortWithStatusJSON(appErr.Status, Body{
 		Code:    appErr.Code,
 		Message: appErr.Message,
-		Details: appErr.Details,
 		Reason:  appErr.Reason,
+		Details: appErr.Details,
 	})
 }
 
@@ -115,8 +109,8 @@ func writeError(c *gin.Context, appErr *apperrors.AppError) {
 	c.JSON(appErr.Status, Body{
 		Code:    appErr.Code,
 		Message: appErr.Message,
-		Details: appErr.Details,
 		Reason:  appErr.Reason,
+		Details: appErr.Details,
 	})
 }
 

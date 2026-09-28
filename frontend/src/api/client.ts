@@ -6,11 +6,11 @@ import axios, {
 } from 'axios';
 import type { ApiError, ApiResponse, TokenPair } from '@/types';
 import { tokenStorage } from '@/utils/storage';
+import i18n from '@/locales/i18n';
 
-/** Fired on expired session; App listens and routes to /login. */
 export const UNAUTHORIZED_EVENT = 'cp:unauthorized';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 interface RetriableConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -23,7 +23,6 @@ export const apiClient: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-/** Separate client so refresh never re-enters the interceptor loop. */
 const refreshClient = axios.create({ baseURL: API_BASE_URL, timeout: 30_000 });
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -34,6 +33,7 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// Auth refresh single-flight: one request refreshes, the rest wait in queue.
 let isRefreshing = false;
 let pendingQueue: Array<(token: string | null) => void> = [];
 
@@ -47,12 +47,22 @@ const forceLogout = () => {
   window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
 };
 
+const translateReason = (reason: string | undefined, fallback: string): string => {
+  if (!reason) return fallback;
+  const key = `err.${reason}`;
+  const translated = i18n.t(key, { defaultValue: '' });
+  return translated || fallback;
+};
+
 const normalizeError = (error: AxiosError<ApiError>): ApiError => {
   if (error.response?.data && typeof error.response.data === 'object') {
     const data = error.response.data;
+    const raw = data.message ?? error.message;
     return {
       code: data.code ?? error.response.status,
-      message: data.message ?? error.message,
+      message: translateReason(data.reason, raw),
+      rawMessage: raw,
+      reason: data.reason,
       details: data.details,
     };
   }
@@ -114,12 +124,10 @@ apiClient.interceptors.response.use(
   }
 );
 
-/** Unwrap { code, message, data } to the payload. */
 export const unwrap = <T>(response: AxiosResponse<ApiResponse<T>>): T => response.data.data;
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
-    /** Skip auto refresh for this request. */
     skipAuthRefresh?: boolean;
   }
 }

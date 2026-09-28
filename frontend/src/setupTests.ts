@@ -4,9 +4,7 @@ import '@/locales/i18n';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
 
-// Zustand store la singleton dung chung ca file test. Mot test doi state (hoac
-// thay han mot action bang spy) se ro ri sang moi test chay sau no, nen chup lai
-// state goc ngay khi nap module va tra ve nguyen ven sau tung test.
+// Zustand stores are file-wide singletons; snapshot initial state to restore after each test.
 const initialAuthState = useAuthStore.getState();
 const initialAppState = useAppStore.getState();
 
@@ -15,7 +13,7 @@ afterEach(() => {
   useAppStore.setState(initialAppState, true);
 });
 
-// antd doc matchMedia luc render, jsdom chua co san
+// antd reads matchMedia at render time; jsdom has none.
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({

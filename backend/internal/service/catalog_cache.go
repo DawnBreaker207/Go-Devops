@@ -8,15 +8,11 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/cache"
 )
 
-// catalogGenKey is the generation counter every public-catalog list cache key
-// embeds (movies, showtimes). Bumping it after a write invalidates every
-// list key at once — the old ones simply age out via TTL, unread — without a
-// Redis SCAN over an unbounded key space.
+// catalogGenKey: generation embedded in catalog keys; bump invalidates all lists
+// at once without SCAN (old keys age out via TTL).
 const catalogGenKey = "catalog:gen"
 
-// catalogGeneration reads the current generation; a nil cache, a miss or a
-// Redis error all read as 0 (fail-open — the cache key is still stable, just
-// unshared with whatever wrote a later generation).
+// catalogGeneration reads current generation; miss or Redis error reads as 0 (fail-open).
 func catalogGeneration(ctx context.Context, c *cache.Cache) int64 {
 	v, ok, err := c.Get(ctx, catalogGenKey)
 	if err != nil || !ok {
@@ -26,10 +22,8 @@ func catalogGeneration(ctx context.Context, c *cache.Cache) int64 {
 	return n
 }
 
-// bumpCatalog invalidates every cached catalog list/detail. Call it after a
-// write commits, never before or inside the transaction: bumping first would
-// let a concurrent reader repopulate the cache with the pre-write value
-// before the write lands.
+// bumpCatalog invalidates catalog lists. Call after commit, never inside tx:
+// bumping first lets a reader repopulate cache with pre-write value.
 func bumpCatalog(ctx context.Context, c *cache.Cache) {
 	_, _ = c.Incr(ctx, catalogGenKey)
 }

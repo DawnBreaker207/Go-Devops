@@ -7,9 +7,7 @@ import { useSoonToast } from '@/hooks/useSoonToast';
 import SoonToast from '@/components/ui/SoonToast';
 import { FOCUS_RING, TRANSITION_FAST } from '@/theme/customerTw';
 
-/** Footer: 4 columns + copyright bar, always dark. Pageless links share the "coming soon" toast. */
-// App-wide preflight is off (see index.css), so reset button/list here.
-// Links always stand out (brand red), never change on hover.
+// Tailwind preflight is off, so reset button/list manually.
 const linkClass = `border-none bg-transparent p-0 text-left text-[13px] font-semibold text-brand no-underline ${TRANSITION_FAST}`;
 
 export const Footer = () => {

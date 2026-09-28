@@ -3,7 +3,6 @@ import { Alert, Card, Col, DatePicker, Row, Statistic, Table, Tabs, Tag } from '
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import type dayjs from 'dayjs';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import CounterSellPanel from './components/CounterSellPanel';
 import OrderLookupPanel from './components/OrderLookupPanel';
@@ -20,8 +19,7 @@ const STATUS_COLOR: Record<ShowtimeStatus, string> = {
   cancelled: 'red',
 };
 
-/** A map, not a ternary. The old `value === 'open' ? 'Open' : 'Closed'` rendered
- *  a CANCELLED showtime as "closed", which is a different thing entirely. */
+/** A map, not a ternary: a ternary rendered CANCELLED as "closed", which is wrong. */
 const STATUS_LABEL_KEY: Record<ShowtimeStatus, string> = {
   open: 'showtime.statusOpen',
   closed: 'showtime.statusClosed',
@@ -150,7 +148,6 @@ export const BoxOfficePage = () => {
 
   return (
     <>
-      <PageHeader title={t('boxOffice.title')} />
       <Tabs
         defaultActiveKey="dashboard"
         items={[

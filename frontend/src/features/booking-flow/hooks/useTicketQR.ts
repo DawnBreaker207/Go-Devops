@@ -28,8 +28,7 @@ export const useTicketQR = (ticketId: string | undefined) => {
         void setCachedQR(ticketId, res.qr_base64);
       })
       .catch(() => {
-        // Offline/server error: shown cache (if any) stands, never overwritten
-        // by the error. Only clear "loading" when still nothing at all.
+        // Offline/server error: keep any shown cache, just clear loading if there's still nothing.
         if (cancelled) return;
         setLoading(false);
       });

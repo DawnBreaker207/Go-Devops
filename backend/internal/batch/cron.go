@@ -15,7 +15,7 @@ type cronScheduler struct {
 }
 
 func newCron() *cronScheduler {
-	// Second net under Manager's recover: a panic in a cron func must not crash the process.
+	// Second net under Manager's recover; a panic must not crash the process.
 	return &cronScheduler{cron: cron.New(cron.WithSeconds(), cron.WithChain(cron.Recover(cronLogger{})))}
 }
 
@@ -25,7 +25,6 @@ func (s *cronScheduler) addFunc(schedule string, fn func()) (cron.EntryID, error
 
 func (s *cronScheduler) start() { s.cron.Start() }
 
-// The returned context is done once running jobs have finished.
 func (s *cronScheduler) stop() context.Context { return s.cron.Stop() }
 
 type cronLogger struct{}

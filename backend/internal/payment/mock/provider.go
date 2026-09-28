@@ -14,14 +14,10 @@ import (
 )
 
 type Options struct {
-	// Name defaults to "mock".
 	Name        string
 	DisplayName string
-	// Secret signs IPNs and return redirects (HMAC-SHA256).
 	Secret string
-	// PublicBaseURL is where browsers reach the checkout page.
 	PublicBaseURL string
-	// HTTPClient delivers IPNs; defaults to a client with a 5s timeout.
 	HTTPClient *http.Client
 }
 
@@ -87,8 +83,7 @@ func (p *Provider) ParseNotification(r *http.Request) (*payment.Notification, er
 	return &payment.Notification{TxnRef: n.TxnRef, Status: state, Amount: n.Amount, ProviderTxnID: n.GatewayTxnID}, nil
 }
 
-// AckNotification answers with an HTTP status and a VNPay-like code so the gateway
-// retries only temporary failures.
+// Only temporary failures are retried by the gateway.
 func (p *Provider) AckNotification(w http.ResponseWriter, ack payment.AckStatus) {
 	status, code := http.StatusOK, "00"
 	switch ack {

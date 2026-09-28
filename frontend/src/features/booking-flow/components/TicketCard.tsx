@@ -36,7 +36,7 @@ const STATUS_BADGE_CLASS: Record<OrderStatus['status'], string> = {
   refunded: `bg-[rgb(var(--cp-ink-rgb))]/18 ${INK_85}`,
 };
 
-/** One ticket's QR: offline cache FIRST (instant if present), then silent `GET /tickets/:id/qr` refresh. Offline still shows the cached QR - never block UI on network. Tap to zoom (gates need it big) - closes on backdrop, Esc, or Back. */
+/** One ticket's QR: offline cache first, then silent refresh; tap to zoom (gates need it big), closes on backdrop/Esc/Back. */
 const TicketQRImage = ({ ticket }: { ticket: Ticket }) => {
   const { t } = useTranslation();
   const { qrBase64, loading } = useTicketQR(ticket.id);
@@ -110,9 +110,7 @@ export const TicketCard = ({ order, tickets, showRebook }: TicketCardProps) => {
   const loaded = tickets !== undefined;
   const seats = (tickets ?? []).map((ticket) => ticket.seat_label).join(', ');
 
-  // Venue-cancelled showtime (POST /admin/showtimes/:id/cancel): order goes
-  // `refunded` with its own `showtime_cancelled` reason - never lumped with
-  // used tickets or customer-cancelled/expired orders.
+  // A venue-cancelled showtime is `refunded` with reason `showtime_cancelled`, distinct from other refund/expiry causes.
   const showtimeCancelled =
     order.status === 'refunded' && order.status_reason === 'showtime_cancelled';
 
@@ -160,10 +158,8 @@ export const TicketCard = ({ order, tickets, showRebook }: TicketCardProps) => {
             {seats
               ? seats
               : order.status === 'pending'
-                ? /* Live hold - still payable. */
-                  t('customer.awaitingPayment')
-                : /* Dead order: empty because tickets never issue, NOT because
-                     "awaiting payment" - the reason sits in status_reason below. */
+                ? t('customer.awaitingPayment')
+                : /* Dead order: empty because tickets never issue, not "awaiting payment"; reason is in status_reason below. */
                   '—'}
             {!seats && !loaded ? ` · ${t('customer.openOrderForSeats')}` : null}
           </span>

@@ -9,11 +9,6 @@ import {
 
 export type ThemeMode = 'light' | 'dark';
 
-/** TWO independent themes, one per zone - they are not the same switch and must never share a value.
- *  `theme` drives antd's algorithm for the operator screens (light by default: the Figma admin is white).
- *  `customerTheme` drives `.cp-customer--light` on CustomerLayout (DARK by default: the customer zone is a
- *  cinema, its backdrop is `cinemaGradient` derived from brand.base, and index.css treats light as opt-in).
- *  Collapsing them into one value turns the admin tables dark the moment a customer picks a night theme. */
 interface AppState {
   theme: ThemeMode;
   customerTheme: ThemeMode;

@@ -135,33 +135,6 @@ func (h *HallHandler) UpdateSeat(c *gin.Context) {
 	response.OK(c, seat)
 }
 
-// @Summary		Set prices for all seat types of a hall
-// @Tags			halls
-// @Accept			json
-// @Produce		json
-// @Security		BearerAuth
-// @Param			id		path		string			true	"Hall ID"
-// @Param			payload	body		dto.PriceRequest	true	"Price per seat type"
-// @Success		200		{object}	response.Body{data=[]dto.HallPriceResponse}
-// @Failure		400		{object}	response.Body
-// @Failure		401		{object}	response.Body
-// @Failure		404		{object}	response.Body
-// @Router			/admin/halls/{id}/prices [put]
-func (h *HallHandler) SetPrices(c *gin.Context) {
-	var req dto.PriceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, err)
-		return
-	}
-	ctx := c.Request.Context()
-	prices, err := h.hallService.SetPrices(ctx, c.Param("id"), req)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.OK(c, prices)
-}
-
 // @Summary		Preview the built-in hall templates
 // @Tags			halls
 // @Produce		json
@@ -304,6 +277,27 @@ func (h *HallHandler) AddRow(c *gin.Context) {
 	response.Created(c, seats)
 }
 
+// @Summary		Append one new standard seat to every existing row, widening the hall by one column
+// @Description	Never touches an existing seat - safe while the hall has a live booking (409 only on an actual conflict), unlike regenerating the whole layout.
+// @Tags			halls
+// @Produce		json
+// @Security		BearerAuth
+// @Param			id	path		string	true	"Hall ID"
+// @Success		201	{object}	response.Body{data=[]dto.SeatResponse}
+// @Failure		400	{object}	response.Body
+// @Failure		401	{object}	response.Body
+// @Failure		404	{object}	response.Body
+// @Failure		409	{object}	response.Body
+// @Router			/admin/halls/{id}/seats/columns [post]
+func (h *HallHandler) AddColumn(c *gin.Context) {
+	seats, err := h.hallService.AddColumn(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, seats)
+}
+
 // @Summary		Remove one row and renumber every row after it
 // @Description	Any row can be removed, not just the last - rows after it shift down by one so numbering stays 1..N with no gap. Refused (409) if any seat in the removed row has booking history.
 // @Tags			halls
@@ -401,40 +395,3 @@ func (h *HallHandler) DeleteHall(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary		Get the prices of a hall
-// @Tags			halls
-// @Produce		json
-// @Security		BearerAuth
-// @Param			id	path	string	true	"Hall ID"
-// @Success		200	{object}	response.Body{data=[]dto.HallPriceResponse}
-// @Failure		401	{object}	response.Body
-// @Failure		404	{object}	response.Body
-// @Router			/admin/halls/{id}/prices [get]
-func (h *HallHandler) Prices(c *gin.Context) {
-	prices, err := h.hallService.PricesByHall(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	rows := make([]dto.HallPriceResponse, 0, len(prices))
-	for _, p := range prices {
-		rows = append(rows, dto.HallPriceResponse{SeatType: p.SeatType, Price: p.Price})
-	}
-	response.OK(c, rows)
-}
-
-// @Summary		Public ticket price list
-// @Description	Seat-type prices per bookable hall, plus the cheapest seat anywhere. No auth: this is the customer price page. Only halls a customer can actually book appear — active, and with all four seat types priced, the same gate the customer showtime query uses.
-// @Tags			halls
-// @Produce		json
-// @Success		200	{object}	response.Body{data=dto.PublicPriceListResponse}
-// @Failure		500	{object}	response.Body
-// @Router			/pricing [get]
-func (h *HallHandler) PublicPrices(c *gin.Context) {
-	prices, err := h.hallService.PublicPrices(c.Request.Context())
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.OK(c, prices)
-}

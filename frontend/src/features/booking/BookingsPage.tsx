@@ -48,7 +48,6 @@ export const BookingsPage = () => {
           <Space direction="vertical" size={0}>
             <span>{c.full_name || c.email || '-'}</span>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {/* Counter sales have no account, hence no email. */}
               {c.email || c.phone || t('booking.walkIn')}
             </Typography.Text>
           </Space>
@@ -76,9 +75,7 @@ export const BookingsPage = () => {
       align: 'right',
     },
     {
-      // payable_amount is what the customer was charged. total_amount is the
-      // undiscounted seat subtotal, so showing THAT here would disagree with the
-      // payment row on any discounted order.
+      // Money: show payable_amount (actually charged), never total_amount.
       title: t('booking.total'),
       dataIndex: 'payable_amount',
       key: 'payable_amount',
@@ -124,7 +121,7 @@ export const BookingsPage = () => {
       title: t('booking.payment'),
       key: 'payment',
       width: 130,
-      // payment is the attempt HOLDING money. Holds without payment are normal, not missing data.
+      // A held order with no payment yet is normal, not missing data.
       render: (_, record) =>
         record.payment ? (
           <Tag color={PAYMENT_STATUS_COLOR[record.payment.status]} bordered={false}>

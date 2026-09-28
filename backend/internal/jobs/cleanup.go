@@ -10,8 +10,7 @@ import (
 
 const cleanupChunk = 5000
 
-// NewCleanup runs nightly at 03:30 local time: it deletes audit logs and finished runs past
-// retention, refresh tokens dead for a day, and password reset tokens expired for a day.
+// Nightly 03:30 local: deletes past-retention audit logs, finished runs, dead tokens.
 func NewCleanup(repo repository.MaintenanceRepository, retentionDays int, location *time.Location) *batch.Job {
 	return &batch.Job{
 		Name:     "cleanup",

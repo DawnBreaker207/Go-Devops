@@ -111,7 +111,6 @@ func (g *Gateway) submit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
-// formatAmount renders 120000 as "120.000 ₫".
 func formatAmount(amount int64) string {
 	digits := strconv.FormatInt(amount, 10)
 	out := make([]byte, 0, len(digits)+len(digits)/3)

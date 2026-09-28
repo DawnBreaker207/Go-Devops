@@ -23,22 +23,13 @@ export const PATHS = {
   login: '/login',
   dashboard: '/dashboard',
   profile: '/profile',
-  movies: '/movies',
-  showtimes: '/showtimes',
-  halls: '/halls',
-  concessions: '/concessions',
   bookings: '/bookings',
   users: '/users',
-  discounts: '/discounts',
-  reports: '/reports',
-  boxOffice: '/box-office',
-  customerLookup: '/customer-lookup',
-  auditLogs: '/audit-logs',
-  batchJobs: '/batch-jobs',
+  pricingAdmin: '/pricing-admin',
+  // Grouped tab pages - see src/routes/navigation.tsx for the tab members of each.
   catalog: '/catalog',
   counter: '/counter',
   promotions: '/promotions',
-  pricingAdmin: '/pricing-admin',
   monitoring: '/monitoring',
   notFound: '*',
 } as const;
@@ -47,9 +38,9 @@ export type AppPath = (typeof PATHS)[keyof typeof PATHS];
 
 /* Parameterized customer-zone paths. Never concatenate path strings elsewhere. */
 export const filmPath = (id: string): string => `/film/${id}`;
-export const offerDetailPath = (slug: string): string => `/offers/${slug}`;
 export const selectSeatPath = (showtimeId: string): string => `/select-seat/${showtimeId}`;
 export const bookingSuccessPath = (bookingId: string): string => `/booking-success/${bookingId}`;
+export const offerDetailPath = (slug: string): string => `/offers/${slug}`;
 export const ACCOUNT_TICKETS_TAB = 'tickets';
 /** "My tickets" lives inside Account: opens /account with the tickets tab preselected. */
 export const accountTicketsPath = (): string => `/account?tab=${ACCOUNT_TICKETS_TAB}`;

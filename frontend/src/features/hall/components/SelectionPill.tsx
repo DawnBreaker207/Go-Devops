@@ -64,8 +64,7 @@ export const SelectionPill = ({
         options={SEAT_TYPES.map((type) => ({ value: type, label: t(`hall.seatType_${type}`) }))}
       />
 
-      {/* Two COMMAND buttons, not state toggles (a Segmented would light up the
-          first item and mislead). */}
+      {/* Command buttons, not state toggles: a Segmented would light up the first item and mislead. */}
       <Button disabled={disabled} onClick={onMarkGap}>
         {t('hall.markAsGap')}
       </Button>

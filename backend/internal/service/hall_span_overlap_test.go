@@ -18,7 +18,7 @@ func TestHallLayout_SpanAnchorsConsumeNeighbor(t *testing.T) {
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
 		Name: "Spa Hall", Rows: 2, SeatsPerRow: 5,
 		SeatTypes: map[string][]string{"vip": {"2"}}, Gaps: []string{"A5"},
-		Spans: []string{"A2"}, Prices: fullPrices(),
+		Spans: []string{"A2"},
 	})
 	e.must(err)
 
@@ -71,7 +71,7 @@ func TestHallLayout_SpanValidation(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := e.halls.Create(e.ctx, dto.HallRequest{
 				Name: "Bad Span Hall", Rows: 2, SeatsPerRow: 5,
-				Gaps: c.gaps, Spans: c.spans, Prices: fullPrices()})
+				Gaps: c.gaps, Spans: c.spans})
 			if !isAppErr(err, apperrors.ErrSeatValidation) {
 				t.Fatalf("err = %v, want seat validation", err)
 			}
@@ -84,7 +84,7 @@ func TestSeatMap_SpanningSeatSellsAsOne(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
 		Name: "Love Hall", Rows: 1, SeatsPerRow: 4,
-		Spans: []string{"A2"}, Prices: fullPrices(),
+		Spans: []string{"A2"},
 	})
 	e.must(err)
 

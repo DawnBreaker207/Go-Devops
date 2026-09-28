@@ -103,6 +103,7 @@ export const SeatPickerGrid = ({ seatMap, selected, onToggle, maxSeats }: SeatPi
                     visual === 'blank' || (visual === 'available' && atMax)
                       ? true
                       : visual !== 'available' && visual !== 'selected';
+                  const span = layout.spanOf(seat.col_number, seat.col_span);
                   return (
                     <button
                       key={seat.id}
@@ -111,11 +112,10 @@ export const SeatPickerGrid = ({ seatMap, selected, onToggle, maxSeats }: SeatPi
                       disabled={disabled}
                       onClick={() => onToggle(seat)}
                       style={{
-                        gridColumn: `${layout.lineOf(seat.col_number)} / span ${layout.spanOf(
-                          seat.col_number,
-                          seat.col_span
-                        )}`,
-                        width: 32,
+                        gridColumn: `${layout.lineOf(seat.col_number)} / span ${span}`,
+                        // A couple seat (col_span=2) must fill its whole spanned width, not a fixed
+                        // single-seat box anchored at the left of that span - see SeatButton.tsx.
+                        width: span > 1 ? '100%' : 32,
                         height: 32,
                         margin: 2,
                         fontSize: 11,

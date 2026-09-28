@@ -2,7 +2,6 @@ interface SoonToastProps {
   message: string | null;
 }
 
-/** Renderer for useSoonToast. */
 export const SoonToast = ({ message }: SoonToastProps) => {
   if (!message) return null;
 

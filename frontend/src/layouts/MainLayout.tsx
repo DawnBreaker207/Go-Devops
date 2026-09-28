@@ -12,7 +12,6 @@ import { brand, textOnBrand } from '@/theme';
 
 const { Header, Sider, Content, Footer } = Layout;
 
-/** 'overview' (Dashboard) stands alone with no group title. */
 const GROUP_ORDER: NavGroup[] = ['operations', 'management'];
 
 export const MainLayout = () => {
@@ -24,10 +23,8 @@ export const MainLayout = () => {
   const toggleSider = useAppStore((s) => s.toggleSider);
   const themeMode = useAppStore((s) => s.theme);
 
-  // Filter by role with the same router constants so the menu never shows a 403 link.
   const navItems = useNavItems();
 
-  // Grouped sider: overview stands alone first, empty groups dropped.
   const menuItems = useMemo<MenuProps['items']>(() => {
     const overviewItems = navItems
       .filter((item) => item.group === 'overview')
@@ -74,15 +71,10 @@ export const MainLayout = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* 280px sider with the built-in bottom trigger. */}
       <Sider
-        // Sider `theme` is independent of the ConfigProvider light/dark algorithm (dark by default),
-        // so set "light" explicitly.
         theme="light"
         collapsible
         collapsed={collapsed}
-        // `toggleSider` only flips state: compare before calling because antd fires
-        // onCollapse(true, 'responsive') even when already collapsed, which would reopen it.
         onCollapse={(value) => {
           if (value !== collapsed) toggleSider();
         }}
@@ -125,10 +117,7 @@ export const MainLayout = () => {
             </span>
           )}
         </div>
-        {/* Keep light: the dark antd menu (#001529) is unreadable on a #141414 background. */}
         <div className="p-2">
-          {/* Without `inlineCollapsed` the Menu never enters icon-only mode: item labels and group
-              titles get clipped by width instead of hiding. */}
           <Menu
             theme="light"
             mode="inline"
@@ -140,11 +129,9 @@ export const MainLayout = () => {
       </Sider>
 
       <Layout>
-        {/* Header only exposes background/border; real sizing lives in the inner div (index.css reset). */}
         <Header
           className="sticky top-0 z-10 backdrop-blur-md"
           style={{
-            // Translucent background per light/dark token (theme switches via antd algorithm, no .dark class).
             background:
               themeMode === 'dark' ? 'rgba(20, 20, 20, 0.75)' : 'rgba(255, 255, 255, 0.8)',
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
@@ -157,7 +144,6 @@ export const MainLayout = () => {
               separator={<RightOutlined style={{ fontSize: 10 }} />}
             />
 
-            {/* Shared customer dropdown; wrapped in `.cp-customer` so INK classes can read `--cp-ink-rgb`. */}
             <div
               className={themeMode === 'light' ? 'cp-customer cp-customer--light' : 'cp-customer'}
             >
@@ -180,7 +166,6 @@ export const MainLayout = () => {
             </Suspense>
           </div>
 
-          {/* Copyright line closing the content frame. */}
           <Footer
             className="text-center"
             style={{ background: 'transparent', color: token.colorTextTertiary, padding: '24px 0' }}

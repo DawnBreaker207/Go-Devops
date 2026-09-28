@@ -64,21 +64,3 @@ func (s *Seat) BeforeCreate(*gorm.DB) error {
 	}
 	return nil
 }
-
-type HallPrice struct {
-	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
-	HallID    string    `gorm:"type:uuid;not null;uniqueIndex:uq_hall_prices_seat_type" json:"hall_id"`
-	SeatType  string    `gorm:"type:varchar(16);not null;uniqueIndex:uq_hall_prices_seat_type" json:"seat_type"`
-	Price     int64     `gorm:"not null" json:"price"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-func (HallPrice) TableName() string { return "hall_prices" }
-
-func (p *HallPrice) BeforeCreate(*gorm.DB) error {
-	if p.ID == "" {
-		p.ID = uuid.NewString()
-	}
-	return nil
-}

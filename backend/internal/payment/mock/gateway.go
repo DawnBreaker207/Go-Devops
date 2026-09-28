@@ -49,7 +49,7 @@ type Txn struct {
 const lateCaptureGrace = 20 * time.Minute
 
 type CaptureOptions struct {
-	// AmountDelta makes the gateway settle a different amount (wrong-amount drill).
+	// Wrong-amount drill.
 	AmountDelta int64
 	Decline     bool
 }
@@ -130,7 +130,7 @@ func (g *Gateway) Lookup(ref string) (Txn, bool) {
 	return *t, true
 }
 
-// Capture settles a pending transaction; calling it again on a settled one changes nothing.
+// Idempotent: re-capture on a settled transaction changes nothing.
 func (g *Gateway) Capture(ref string, opts CaptureOptions) (Txn, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -156,7 +156,7 @@ func (g *Gateway) Capture(ref string, opts CaptureOptions) (Txn, error) {
 	return *t, nil
 }
 
-// Cancel abandons a pending checkout; no IPN is sent.
+	// No IPN is sent.
 func (g *Gateway) Cancel(ref string) (Txn, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -170,7 +170,6 @@ func (g *Gateway) Cancel(ref string) (Txn, error) {
 	return *t, nil
 }
 
-// NotificationRequest builds the signed IPN exactly as Deliver sends it.
 func (g *Gateway) NotificationRequest(ctx context.Context, ref string) (*http.Request, error) {
 	t, ok := g.Lookup(ref)
 	if !ok {
@@ -203,7 +202,7 @@ func (g *Gateway) NotificationRequest(ctx context.Context, ref string) (*http.Re
 	return req, nil
 }
 
-// Deliver retries network errors and 5xx answers like a real gateway and returns the last HTTP status.
+// Retries network errors and 5xx like a real gateway.
 func (g *Gateway) Deliver(ctx context.Context, ref string) (int, error) {
 	status := 0
 	var lastErr error
@@ -308,14 +307,13 @@ func (g *Gateway) FailRefunds(err error) {
 	g.mu.Unlock()
 }
 
-// SetRefundDelay makes refund calls take d, to widen race windows in drills.
+	// Widens race windows in drills.
 func (g *Gateway) SetRefundDelay(d time.Duration) {
 	g.mu.Lock()
 	g.refundDelay = d
 	g.mu.Unlock()
 }
 
-// RefundCalls counts refund calls, accepted or not.
 func (g *Gateway) RefundCalls() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()

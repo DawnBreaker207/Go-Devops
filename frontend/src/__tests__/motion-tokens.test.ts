@@ -3,19 +3,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Read the CSS file straight from disk. No `@/index.css?raw`: vite.config sets
-// test.css = false, so every CSS import (even ?raw) is stubbed empty.
-// Triple-slash reference above scopes @types/node to this file only instead of
-// adding "node" to tsconfig.app.json (would leak Node globals into browser
-// code). Vitest runs with cwd = repo root.
+// No `@/index.css?raw`: vite.config sets test.css = false, so CSS imports are stubbed empty.
+// Triple-slash reference scopes @types/node to this file instead of tsconfig.app.json (would leak Node globals into browser code).
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
 import { distance, duration, easingCss, scale, stagger } from '@/motion';
 
-// Motion tokens live twice: src/motion.ts (TS) and :root in src/index.css
-// (CSS). This test forces both sides to agree - edit one side and the test
-// fails instead of the UI running two speeds.
+// Forces src/motion.ts (TS) and :root in src/index.css to agree instead of drifting apart.
 const cssVar = (name: string): string | undefined => {
-  // Chi doc khoi :root dau tien; khoi trong @media reduced-motion co gia tri khac.
+  // Read only the first :root block; the @media reduced-motion block holds different values.
   const root = css.slice(css.indexOf(':root'), css.indexOf('@media'));
   return root.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
 };

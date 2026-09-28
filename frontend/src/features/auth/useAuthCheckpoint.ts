@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { ACCESS_TOKEN_STORAGE_KEY, tokenStorage } from '@/utils/storage';
 
-/** Login gate running a pending action after sign-in, synced across tabs. */
+// Login gate holding a pending action, synced across tabs via storage events.
 export const useAuthCheckpoint = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const bootstrap = useAuthStore((s) => s.bootstrap);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [contextMessage, setContextMessage] = useState('');
-  // Ref, not state: the pending action needs no re-render when it changes.
+  // A ref holds the pending action; no re-render needed on change.
   const pendingAction = useRef<(() => void) | null>(null);
 
   const runPendingAction = useCallback(() => {
@@ -37,15 +37,12 @@ export const useAuthCheckpoint = () => {
     setSheetOpen(false);
   }, []);
 
-  // Signed in successfully INSIDE this sheet -> useAuthStore already set token +
-  // isAuthenticated, just run the pending action and close the sheet.
+  // Sign in inside the sheet already updated the store; just run the pending action.
   const handleSheetSuccess = useCallback(() => {
     runPendingAction();
   }, [runPendingAction]);
 
-  // Signed in from ANOTHER TAB while this sheet waits: listen for
-  // `storage` on the exact key tokenStorage uses (cp_access_token), re-bootstrap
-  // this tab's authStore, then run the pending action.
+  // A sign-in from another tab arrives via storage; reboot the store before running the action.
   useEffect(() => {
     if (!sheetOpen) return;
 

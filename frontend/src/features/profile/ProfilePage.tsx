@@ -90,8 +90,7 @@ interface PasswordFormValues {
   confirm_password: string;
 }
 
-/** Change password. The store keeps the fresh token pair the backend returns -
- *  see authStore.changePassword for why dropping it would sign this device out. */
+// Changing password keeps the fresh token pair, so this device stays signed in.
 const PasswordTab = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -106,8 +105,7 @@ const PasswordTab = () => {
       form.resetFields();
       message.success(t('customer.passwordChanged'));
     } catch (error) {
-      // A wrong current password is 401, not a field error, so it has no
-      // `details` map to bind - it can only be shown as a message.
+      // Wrong current password is 401 with no details; only a message can show.
       message.error(errorMessage(error, t('common.somethingWrong')));
     } finally {
       setSubmitting(false);
@@ -217,7 +215,7 @@ const SessionsTab = () => {
   );
 };
 
-/** Operator "Profile" (avatar menu in MainLayout). Same card + left-icon-tab frame as the customer AccountPage but antd Card/Tabs per operator convention (no customer INK tokens; those only exist under CustomerLayout). 2 tabs only: Profile (PUT /users/me, same role-agnostic endpoint) and Devices (/users/me/sessions). Skips transactions/notifications/membership: buyer concepts, not operator ones. */
+/** Operator "Profile" (avatar menu in MainLayout). Same frame as the customer AccountPage but plain antd Card/Tabs; skips transactions/notifications/membership since those are buyer concepts, not operator ones. */
 export const ProfilePage = () => {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);

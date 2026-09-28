@@ -26,7 +26,7 @@ import { useListQuery } from '@/hooks/useListQuery';
 import { errorMessage } from '@/utils/error';
 import { formatDateTime } from '@/utils/format';
 
-/** `active` filter: backend takes a pointer, so "no filter" must OMIT the field, unlike false. */
+// The active filter: backend takes a pointer, so "no filter" must OMIT, not send false.
 type ActiveFilter = 'all' | 'active' | 'locked';
 
 export const UsersPage = () => {
@@ -39,7 +39,6 @@ export const UsersPage = () => {
   const [role, setRole] = useState<UserRole>();
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
   const [formOpen, setFormOpen] = useState(false);
-  /** Row awaiting the server, so only that row locks. */
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data, isFetching, error } = useUserList({
@@ -51,7 +50,7 @@ export const UsersPage = () => {
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
 
-  // Don't catch here: the modal needs the raw error for input binding.
+  // Don't catch: the modal binds errors onto inputs.
   const handleCreate = async (payload: CreateUserPayload) => {
     await createUser.mutateAsync(payload);
     message.success(t('user.createSuccess'));
@@ -64,7 +63,7 @@ export const UsersPage = () => {
       await updateUser.mutateAsync({ id: user.id, payload: patch });
       message.success(t('common.updateSuccess'));
     } catch (err) {
-      // All four backend guards share 409/40900 and differ by sentence only (self-lock, self-demote, last active admin). Keep the server sentence instead of guessing which.
+      // Four guards share one code; keep the server sentence instead of guessing.
       message.error(errorMessage(err, t('common.somethingWrong')));
     } finally {
       setPendingId(null);

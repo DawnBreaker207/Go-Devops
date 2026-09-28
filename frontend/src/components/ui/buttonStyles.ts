@@ -9,16 +9,11 @@ const BASE =
   `${FOCUS_RING}`;
 
 const VARIANT: Record<ButtonVariant, string> = {
-  // No Tailwind variant for `:hover:not(:disabled)` - approximate: disabled already dims + unclickable, so hover color matters less there.
   primary: 'bg-brand text-on-brand hover-fine:bg-brand-hover',
   ghost: `bg-transparent ${INK_BORDER_35} ${INK} ${HOVER_INK_BORDER}`,
   danger: 'bg-danger text-white',
 };
 
-/** Customer button classes shared by button and link variants.
- *  `pill` is a real option rather than a `rounded-full` passed through `className`: both radii have
- *  the same specificity, so which one wins is decided by their order in the generated stylesheet,
- *  not by the order of the class attribute. */
 export const buttonClassName = (
   variant: ButtonVariant,
   opts?: { block?: boolean; pill?: boolean; className?: string }

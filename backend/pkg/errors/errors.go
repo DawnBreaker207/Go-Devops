@@ -71,17 +71,21 @@ const (
 	CodeServiceUnavailable = 50300
 )
 
-// AppError carries an HTTP status plus a business error code.
 type AppError struct {
-	Status  int               `json:"-"`
-	Code    int               `json:"code"`
-	Message string            `json:"message"`
+	Status  int    `json:"-"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	// Reason is a STABLE machine-readable key ("discount_expired") the frontend
+	// translates by. It is deliberately a top-level envelope field and NOT part of
+	// Details: fieldErrorsOf hands the whole Details map to the form binder, which
+	// maps every key to an input of the same name, so a "reason" entry there would
+	// paint a validation error on an input that does not exist.
+	//
+	// Message stays English and unchanged. That is what keeps this additive - logs,
+	// Swagger and the backend's own tests all still read the sentence they always did.
+	Reason  string            `json:"reason,omitempty"`
 	Details map[string]string `json:"details,omitempty"`
-	// Reason is a stable machine-readable key (e.g. "discount_expired") that
-	// stays constant while Message wording may change. Omitted when empty so
-	// older clients see no difference.
-	Reason string `json:"reason,omitempty"`
-	err    error
+	err     error
 }
 
 func (e *AppError) Error() string {
@@ -100,18 +104,18 @@ func (e *AppError) Wrap(err error) *AppError {
 	return &clone
 }
 
+// WithReason attaches the stable key the frontend translates by. Every exported
+// Err* sentinel is required to carry one; TestSentinelsAllCarryAReason enforces it.
+func (e *AppError) WithReason(reason string) *AppError {
+	clone := *e
+	clone.Reason = reason
+	return &clone
+}
+
 // WithDetails attaches per-field error details (used for validation).
 func (e *AppError) WithDetails(details map[string]string) *AppError {
 	clone := *e
 	clone.Details = details
-	return &clone
-}
-
-// WithReason attaches a stable key. Like Wrap/WithDetails it returns a clone,
-// so errors.Is still matches the unwrapped sentinel.
-func (e *AppError) WithReason(reason string) *AppError {
-	clone := *e
-	clone.Reason = reason
 	return &clone
 }
 
@@ -147,17 +151,14 @@ func Conflict(message string) *AppError {
 	return newError(http.StatusConflict, CodeConflict, message)
 }
 
-// PayloadTooLarge returns 413 when a request body exceeds its limit.
 func PayloadTooLarge(message string) *AppError {
 	return newError(http.StatusRequestEntityTooLarge, CodePayloadTooLarge, message)
 }
 
-// PreconditionRequired returns 428 when the account must accept the current terms first.
 func PreconditionRequired(message string) *AppError {
 	return newError(http.StatusPreconditionRequired, CodeTermsRequired, message)
 }
 
-// TooManyRequests returns 429 when a request exceeds the rate limit.
 func TooManyRequests(message string) *AppError {
 	return newError(http.StatusTooManyRequests, CodeTooManyRequests, message)
 }
@@ -166,12 +167,10 @@ func Internal(message string) *AppError {
 	return newError(http.StatusInternalServerError, CodeInternal, message)
 }
 
-// BadGateway returns 502 when an upstream provider (payment gateway) fails.
 func BadGateway(message string) *AppError {
 	return newError(http.StatusBadGateway, CodeBadGateway, message)
 }
 
-// ServiceUnavailable returns 503 when the server is temporarily unready (e.g. DB down).
 func ServiceUnavailable(message string) *AppError {
 	return newError(http.StatusServiceUnavailable, CodeServiceUnavailable, message)
 }
@@ -194,7 +193,8 @@ func From(err error) *AppError {
 	return Internal("internal server error").Wrap(err)
 }
 
-// Shared errors.
+// Shared errors. Every sentinel carries a stable .WithReason("...") key mirrored
+// into FrontEnd-CP's src/utils/errorReasons.ts; a new sentinel must get one too.
 var (
 	ErrUserNotFound             = NotFound("user not found").WithReason("user_not_found")
 	ErrEmailAlreadyExists       = Conflict("email already exists").WithReason("email_already_exists")
@@ -213,6 +213,8 @@ var (
 	ErrHallStillSelling         = Conflict("hall still has an open showtime still to come").WithReason("hall_still_selling")
 	ErrHallHasUpcomingShowtimes = Conflict("hall has showtimes not yet ended").WithReason("hall_has_upcoming_showtimes")
 	ErrHallRowLimitReached      = Validation("hall already has the maximum number of rows").WithReason("hall_row_limit_reached")
+	ErrHallColumnLimitReached   = Validation("hall already has the maximum number of seats per row").WithReason("hall_column_limit_reached")
+	ErrHallLastRow              = Validation("a hall must keep at least one row").WithReason("hall_last_row")
 	ErrSeatEverHadBooking       = Conflict("one or more seats have booking history and can not be changed this way").WithReason("seat_ever_had_booking")
 	ErrSeatNotMergeable         = Validation("seats are not adjacent standard seats and can not be merged").WithReason("seat_not_mergeable")
 	ErrSeatNotCouple            = Validation("seat is not a couple seat").WithReason("seat_not_couple")
@@ -271,35 +273,34 @@ var (
 	ErrComboInactive   = Validation("combo is not available").WithReason("combo_inactive")
 	ErrComboOrderEmpty = Validation("combo order must have at least one item").WithReason("combo_order_empty")
 
-	// Discount codes. Every reason a code will not apply is a DISTINCT sentence,
-	// because they all share code 40001 and the customer can only be told apart
-	// by the message. ErrDiscountNotFound is deliberately a 404 on the admin
-	// routes but is never used to answer a customer's apply attempt: an unknown
-	// code and an expired one both answer ErrDiscountInvalid, so the endpoint
-	// cannot be used to enumerate which codes exist.
-	ErrDiscountNotFound        = NotFound("discount code not found").WithReason("discount_not_found")
-	ErrDiscountInvalid         = Validation("this discount code is not valid").WithReason("discount_invalid")
-	ErrDiscountExpired         = Validation("this discount code is no longer valid").WithReason("discount_expired")
-	ErrDiscountNotStarted      = Validation("this discount code is not active yet").WithReason("discount_not_started")
+	// Discount codes share code 40001, so every refusal reason is a distinct sentence.
+	// Unknown and expired codes both answer ErrDiscountInvalid so codes can't be enumerated.
+	ErrDiscountNotFound    = NotFound("discount code not found").WithReason("discount_not_found")
+	ErrDiscountInvalid     = Validation("this discount code is not valid").WithReason("discount_invalid")
+	ErrDiscountExpired     = Validation("this discount code is no longer valid").WithReason("discount_expired")
+	ErrDiscountNotStarted  = Validation("this discount code is not active yet").WithReason("discount_not_started")
 	ErrDiscountExhausted   = Validation("this discount code has been fully redeemed").WithReason("discount_exhausted")
-	ErrDiscountMinOrder        = Validation("the order total is below this code's minimum").WithReason("discount_min_order")
-	ErrDiscountAlreadySet      = Conflict("this order already has a discount code").WithReason("discount_already_set")
-	ErrDiscountNone            = Validation("this order has no discount code to remove").WithReason("discount_none")
-	ErrDiscountOrderClosed     = Conflict("a discount can only be applied before payment").WithReason("discount_order_closed")
-	ErrDiscountCodeExists      = Conflict("this discount code already exists").WithReason("discount_code_exists")
-	ErrDiscountAlreadyRedeemed = Conflict("you have already redeemed this discount code").WithReason("discount_already_redeemed")
+	ErrDiscountMinOrder    = Validation("the order total is below this code's minimum").WithReason("discount_min_order")
+	ErrDiscountAlreadySet  = Conflict("this order already has a discount code").WithReason("discount_already_set")
+	ErrDiscountNone        = Validation("this order has no discount code to remove").WithReason("discount_none")
+	ErrDiscountOrderClosed = Conflict("a discount can only be applied before payment").WithReason("discount_order_closed")
+	ErrDiscountCodeExists  = Conflict("this discount code already exists").WithReason("discount_code_exists")
 
-	// Campaigns gate linked discount codes: a code with a campaign also needs
-	// that campaign active and inside [starts_at, ends_at).
-	ErrCampaignNotFound = NotFound("campaign not found").WithReason("campaign_not_found")
-	ErrCampaignInactive = Validation("this discount code's campaign is not currently running").WithReason("campaign_inactive")
+	ErrArticleNotFound = NotFound("article not found").WithReason("article_not_found")
 
-	// Pricing engine (global base prices + adjustment rules).
+	// Pricing Phase 1 (PLAN_CAMPAIGN.md section 11): nothing in the booking flow reads these yet.
 	ErrPricingRuleNotFound = NotFound("pricing rule not found").WithReason("pricing_rule_not_found")
+	ErrSeatTypeInvalid     = Validation("invalid seat type").WithReason("seat_type_invalid")
 	ErrPricingTimeInvalid  = Validation("start_time/end_time must be HH:MM or HH:MM:SS, with end_time after start_time").WithReason("pricing_time_invalid")
 	ErrPricingDateInvalid  = Validation("specific_date must be YYYY-MM-DD").WithReason("pricing_date_invalid")
-	ErrSeatTypeInvalid     = Validation("invalid seat type").WithReason("seat_type_invalid")
 
-	// Article CMS.
-	ErrArticleNotFound = NotFound("article not found").WithReason("article_not_found")
+	// Campaign (PLAN_CAMPAIGN.md sections 1-10): groups a discount code, a
+	// concession combo and a promotion article under one date window.
+	ErrCampaignNotFound = NotFound("campaign not found").WithReason("campaign_not_found")
+	// ErrCampaignInactive covers both active=false and outside [starts_at, ends_at).
+	ErrCampaignInactive = Validation("this discount code's campaign is not currently running").WithReason("campaign_inactive")
+	// ErrDiscountAlreadyRedeemed is the per-account-once guard: the SAME user
+	// applying the SAME code a second time, whether or not the code belongs to
+	// a campaign - see discount_redemptions and DiscountService.Apply.
+	ErrDiscountAlreadyRedeemed = Conflict("you have already redeemed this discount code").WithReason("discount_already_redeemed")
 )

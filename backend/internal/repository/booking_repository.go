@@ -167,10 +167,8 @@ type BookingRepository interface {
 	ExpireBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
 	// ExtendBookingExpiry moves a pending unpaid booking's expiry; concurrent changes make it a no-op.
 	ExtendBookingExpiry(ctx context.Context, tx *gorm.DB, id string, expiresAt time.Time) (int64, error)
-	// SetDiscount writes (or clears, with a nil codeID and 0) the discount on a
-	// booking. The WHERE pins status=pending AND paid_at IS NULL, so a discount
-	// can never be attached to an order whose money has already moved; 0 rows
-	// means the order changed underneath and the caller must refuse.
+// SetDiscount writes (or clears) discount; WHERE pins pending AND paid_at IS NULL,
+// so money-moved order never takes discount; 0 rows means order changed underneath.
 	SetDiscount(ctx context.Context, tx *gorm.DB, id string, codeID *string, amount int64) (int64, error)
 	SetPaid(ctx context.Context, tx *gorm.DB, id, paymentID string) (int64, error)
 	ConfirmBooking(ctx context.Context, tx *gorm.DB, id string) (int64, error)
@@ -190,7 +188,6 @@ type BookingRepository interface {
 	SellSeat(ctx context.Context, tx *gorm.DB, id, userID string, version int64) (int64, error)
 	SellSeatAtCounter(ctx context.Context, tx *gorm.DB, id string) (int64, error)
 	SeatsByIDs(ctx context.Context, tx *gorm.DB, ids []string) (map[string]models.Seat, error)
-	PricesByHall(ctx context.Context, tx *gorm.DB, hallID string) (map[string]int64, error)
 
 	CreateTickets(ctx context.Context, tx *gorm.DB, tickets []models.Ticket) error
 	TicketRows(ctx context.Context, bookingID string) ([]TicketRow, error)
@@ -427,9 +424,7 @@ func (r *bookingRepository) VoidTicketsForBooking(ctx context.Context, tx *gorm.
 }
 
 func (r *bookingRepository) SetDiscount(ctx context.Context, tx *gorm.DB, id string, codeID *string, amount int64) (int64, error) {
-	// paid_at IS NULL as well as status=pending: an order can be paid for a
-	// moment before it flips to confirmed, and re-pricing it in that window would
-	// change what the customer owes after they already paid.
+	// paid_at IS NULL plus pending: order can be paid a moment before confirm.
 	res := r.conn(ctx, tx).Model(&models.Booking{}).
 		Where("id = ? AND status = ? AND paid_at IS NULL", id, models.BookingPending).
 		Updates(map[string]any{
@@ -528,18 +523,6 @@ func (r *bookingRepository) SeatsByIDs(ctx context.Context, tx *gorm.DB, ids []s
 		byID[s.ID] = s
 	}
 	return byID, nil
-}
-
-func (r *bookingRepository) PricesByHall(ctx context.Context, tx *gorm.DB, hallID string) (map[string]int64, error) {
-	var prices []models.HallPrice
-	if err := r.conn(ctx, tx).Where("hall_id = ?", hallID).Find(&prices).Error; err != nil {
-		return nil, fmt.Errorf("find hall prices: %w", err)
-	}
-	byType := make(map[string]int64, len(prices))
-	for _, p := range prices {
-		byType[p.SeatType] = p.Price
-	}
-	return byType, nil
 }
 
 func (r *bookingRepository) CreateTickets(ctx context.Context, tx *gorm.DB, tickets []models.Ticket) error {
@@ -843,9 +826,8 @@ func adminOrderOrder(sort, order string) string {
 	return column + " " + direction
 }
 
-// AdminOrderList: unscoped ListByUser with account/showtime/payment in one round trip; from/to are
-// absolute instants (timezone is the service's; zero = open). Deleted catalog rows join in so old
-// orders still show what was bought; users is LEFT JOIN (counter has no account, erasure scrubs in place).
+// AdminOrderList: unscoped ListByUser in one trip; from/to absolute instants
+// (zero = open). Deleted catalog rows join in; users LEFT JOIN (counter/anon).
 func (r *bookingRepository) AdminOrderList(ctx context.Context, query dto.AdminOrderListQuery, from, to time.Time) ([]AdminOrderRow, int64, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&models.Booking{}).

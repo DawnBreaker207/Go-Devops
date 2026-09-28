@@ -22,7 +22,7 @@ type PricingService interface {
 	AdminSetBasePrices(ctx context.Context, req dto.BasePriceRequest) ([]dto.BasePriceResponse, error)
 
 	// PublicPrices: customer price page, global bases + cheapest configured.
-	PublicPrices(ctx context.Context) (*dto.GlobalPriceListResponse, error)
+	PublicPrices(ctx context.Context) (*dto.PublicPriceListResponse, error)
 
 	AdminListRules(ctx context.Context, q dto.PricingRuleListQuery) ([]dto.PricingRuleResponse, int64, error)
 	AdminGetRule(ctx context.Context, id string) (*dto.PricingRuleResponse, error)
@@ -106,12 +106,12 @@ func (s *pricingService) AdminSetBasePrices(ctx context.Context, req dto.BasePri
 	return dto.NewBasePriceResponses(prices), nil
 }
 
-func (s *pricingService) PublicPrices(ctx context.Context) (*dto.GlobalPriceListResponse, error) {
+func (s *pricingService) PublicPrices(ctx context.Context) (*dto.PublicPriceListResponse, error) {
 	prices, err := s.pricing.GetBasePrices(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result := dto.GlobalPriceListResponse{Prices: make(map[string]int64, len(prices))}
+	result := dto.PublicPriceListResponse{Prices: make(map[string]int64, len(prices))}
 	for _, p := range prices {
 		result.Prices[p.SeatType] = p.Price
 		if p.Price > 0 && (result.FromPrice == 0 || p.Price < result.FromPrice) {

@@ -118,7 +118,7 @@ func TestRace_UpdateSeatVsHolds(t *testing.T) {
 func TestShowtimeUpdate_ScheduleRules(t *testing.T) {
 	e := newEnv(t)
 	hall2, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Hall 2", Rows: 1, SeatsPerRow: 3,
-		SeatTypes: map[string][]string{"vip": {"1"}}, Prices: fullPrices()})
+		SeatTypes: map[string][]string{"vip": {"1"}}})
 	e.must(err)
 	other := &models.Movie{Title: "Other Movie", Genre: "Drama", Duration: 90, Director: "Tester",
 		ReleaseDate: time.Now(), Status: models.MovieStatusShowing}

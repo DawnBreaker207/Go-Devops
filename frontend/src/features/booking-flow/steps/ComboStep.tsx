@@ -16,8 +16,7 @@ import {
   INK_BORDER_28,
 } from '@/theme/customerTw';
 
-// Like buttonStyles.ts: no Tailwind variant for `:hover:not(:disabled)` -
-// approximate (disabled already dims + unclickable).
+// No Tailwind variant for `:hover:not(:disabled)`; approximated since disabled already dims + unclickable.
 const STEPPER_BTN_CLASS =
   `inline-flex h-8 w-8 items-center justify-center rounded-lg border bg-transparent ` +
   `text-base leading-none font-bold cursor-pointer transition-[transform,border-color] ${INK_BORDER_28} ${INK} ` +
@@ -45,9 +44,8 @@ export const ComboStep = ({
   const { t } = useTranslation();
   const hasCombos = combos.length > 0;
 
-  // Booker from the signed-in account (read-only here).
   const user = useAuthStore((s) => s.user);
-  // Seats from the shared store (survives F5) - grouped by kind + price.
+  // Read from the shared store, not props, so selection survives an F5 reload.
   const flowSeats = useBookingFlowStore((s) => s.seats);
   const seatGroups = (() => {
     const map = new Map<string, { seatType: SeatType; price: number; labels: string[] }>();
@@ -62,7 +60,6 @@ export const ComboStep = ({
 
   return (
     <>
-      {/* Read-only payer info (name/email/phone) - bare, ABOVE the combo title. */}
       {user ? (
         <section className="mb-6">
           <h2
@@ -178,7 +175,7 @@ export const ComboStep = ({
         </div>
       ) : null}
 
-      {/* Skip/Continue live IN THE SIDEBAR (parent's onBack/onContinue) - this column is quantities only, no nav buttons. */}
+      {/* Skip/Continue nav buttons live in the sidebar, not here. */}
     </>
   );
 };

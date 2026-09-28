@@ -91,7 +91,6 @@ const LogoutIcon = () => (
   </svg>
 );
 
-/** Avatar + header dropdown (no favorites page yet). Shared by both layouts (`variant` switches destinations); wrap with `.cp-customer` in MainLayout. Mobile uses a bottom sheet. */
 export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' | 'operator' }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -101,7 +100,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
   const isCustomer = useHasRole('customer');
   const isAdmin = useHasRole('admin');
 
-  // One component, two zones, two independent themes: the switch must drive the zone it is rendered in.
   const isOperator = variant === 'operator';
   const themeMode = useAppStore((s) => (isOperator ? s.theme : s.customerTheme));
   const toggleTheme = useAppStore((s) => (isOperator ? s.toggleTheme : s.toggleCustomerTheme));
@@ -112,7 +110,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
   const [shown, setShown] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Set both states in one handler (no effect) so reopen replays the animation.
   const close = () => {
     setOpen(false);
     setShown(false);
@@ -124,7 +121,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
     return () => cancelAnimationFrame(raf);
   }, [open]);
 
-  // Outside click for desktop only; mobile has its own backdrop.
   useEffect(() => {
     if (!open) return;
     const onClick = (event: MouseEvent) => {
@@ -139,7 +135,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
   const initials = (user?.full_name ?? user?.email ?? 'U').charAt(0).toUpperCase();
 
   const handleLoginClick = () => {
-    // Go straight to the login page (unlike mid-flow checkpoints that use a bottom sheet).
     close();
     navigate(variant === 'operator' ? PATHS.login : PATHS.customerLogin);
   };
@@ -152,8 +147,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
 
   return (
     <div className="relative" ref={rootRef}>
-      {/* Preflight is off so `bg-transparent p-0` is required, or the button turns opaque. */}
-      {/* Sub-44px hit target accepted per UI request. */}
       <button
         type="button"
         aria-haspopup="menu"
@@ -180,7 +173,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
 
       {open ? (
         <>
-          {/* Mobile-only backdrop; desktop already has outside-click. */}
           <div
             className="fixed inset-0 z-40 bg-black/50 transition-opacity duration-moderate ease-out md:hidden"
             style={{ opacity: shown ? 1 : 0 }}
@@ -190,7 +182,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
 
           <div
             role="menu"
-            // Theme-aware background: avoids white-on-white text in both modes.
             style={{
               backgroundColor: themeMode === 'dark' ? surface.dark.base : surface.light.base,
             }}
@@ -268,7 +259,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
                 <MoonIcon />
                 {t('common.theme')}
               </span>
-              {/* App switch: knob stays in flow, 2px shift when off. */}
               <button
                 type="button"
                 role="switch"
@@ -340,7 +330,6 @@ export const AvatarSwitcher = ({ variant = 'customer' }: { variant?: 'customer' 
                     </Link>
                   </>
                 ) : (
-                  // Staff/admin use `/profile` in both layouts.
                   <Link
                     to={PATHS.profile}
                     onClick={() => close()}

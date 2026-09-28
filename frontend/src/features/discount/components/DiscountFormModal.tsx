@@ -1,4 +1,4 @@
-import { App, DatePicker, Form, Input, InputNumber, Modal, Select, Switch } from 'antd';
+import { App, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
@@ -25,18 +25,15 @@ interface FormValues {
   min_order: number;
   window?: [Dayjs, Dayjs] | null;
   max_uses?: number | null;
-  active: boolean;
 }
 
 interface DiscountFormModalProps {
   open: boolean;
-  /** null = create. On edit, `code` and `kind` are locked: the backend refuses to
-   *  change either, because it would rewrite what the code meant for orders that
-   *  already used it. */
+  // null = create; on edit, code + kind stay locked because the backend forbids changing them.
   editing: DiscountCode | null;
   confirmLoading: boolean;
   onCancel: () => void;
-  /** Throws on failure so the modal stays open and can bind 400/40001 to inputs. */
+  // Throw so the modal stays open and binds 400/40001 onto inputs.
   onSubmit: (payload: CreateDiscountPayload | UpdateDiscountPayload) => Promise<void>;
 }
 
@@ -54,8 +51,7 @@ export const DiscountFormModal = ({
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
 
-  // Watched so the value field can relabel itself and the cap can hide: the
-  // backend REJECTS max_discount on a flat code rather than ignoring it.
+  // Watch kind to relabel value and hide the cap: the backend rejects max_discount on flat codes.
   const kind = Form.useWatch('kind', form) ?? editing?.kind ?? 'percent';
   const isPercent = kind === 'percent';
 
@@ -66,13 +62,12 @@ export const DiscountFormModal = ({
       const shared = {
         description: values.description?.trim() ?? '',
         value: values.value,
-        // Only a percentage code may carry a cap.
         max_discount: isPercent ? (values.max_discount ?? undefined) : undefined,
         min_order: values.min_order,
         starts_at: startsAt ? startsAt.toISOString() : undefined,
         ends_at: endsAt ? endsAt.toISOString() : undefined,
         max_uses: values.max_uses ?? undefined,
-        active: values.active,
+        active: editing?.active ?? false,
       };
       await onSubmit(
         editing ? shared : { ...shared, code: values.code.trim().toUpperCase(), kind: values.kind }
@@ -96,7 +91,7 @@ export const DiscountFormModal = ({
       onOk={handleOk}
       onCancel={onCancel}
       destroyOnHidden
-      width={620}
+      width={640}
     >
       <Form<FormValues>
         form={form}
@@ -114,16 +109,87 @@ export const DiscountFormModal = ({
               ? [dayjs(editing.starts_at), dayjs(editing.ends_at)]
               : null,
           max_uses: editing?.max_uses ?? null,
-          active: editing?.active ?? true,
         }}
       >
-        <Form.Item
-          name="code"
-          label={t('discount.code')}
-          extra={editing ? t('discount.codeLocked') : t('discount.codeHint')}
-          rules={editing ? [] : [required, { min: CODE_MIN, max: CODE_MAX }]}
-        >
-          <Input disabled={Boolean(editing)} style={{ textTransform: 'uppercase' }} />
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="code"
+              label={t('discount.code')}
+              extra={editing ? t('discount.codeLocked') : t('discount.codeHint')}
+              rules={editing ? [] : [required, { min: CODE_MIN, max: CODE_MAX }]}
+            >
+              <Input disabled={Boolean(editing)} style={{ textTransform: 'uppercase' }} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="kind"
+              label={t('discount.kind')}
+              extra={editing ? t('discount.kindLocked') : undefined}
+              rules={[required]}
+            >
+              <Select<DiscountKind>
+                disabled={Boolean(editing)}
+                options={DISCOUNT_KINDS.map((k) => ({ value: k, label: t(`discount.kind_${k}`) }))}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={isPercent ? 12 : 24}>
+            <Form.Item
+              name="value"
+              label={t(isPercent ? 'discount.valuePercent' : 'discount.valueAmount')}
+              rules={[required, { type: 'number', min: 1, max: isPercent ? 100 : undefined }]}
+            >
+              <InputNumber<number>
+                min={1}
+                max={isPercent ? 100 : undefined}
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+          </Col>
+          {isPercent ? (
+            <Col span={12}>
+              <Form.Item
+                name="max_discount"
+                label={t('discount.maxDiscount')}
+                extra={t('discount.maxDiscountHint')}
+                rules={[{ type: 'number', min: 1 }]}
+              >
+                <InputNumber<number> min={1} step={1000} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          ) : null}
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="min_order"
+              label={t('discount.minOrder')}
+              extra={t('discount.minOrderHint')}
+              rules={[{ type: 'number', min: 0 }]}
+            >
+              <InputNumber<number> min={0} step={10000} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="max_uses"
+              label={t('discount.maxUses')}
+              extra={t('discount.maxUsesHint')}
+              rules={[{ type: 'number', min: 1 }]}
+            >
+              <InputNumber<number> min={1} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Form.Item name="window" label={t('discount.window')} extra={t('discount.windowHint')}>
+          <DatePicker.RangePicker showTime style={{ width: '100%' }} />
         </Form.Item>
 
         <Form.Item
@@ -131,73 +197,7 @@ export const DiscountFormModal = ({
           label={t('discount.description')}
           rules={[{ max: DESCRIPTION_MAX }]}
         >
-          <Input.TextArea rows={2} />
-        </Form.Item>
-
-        <Form.Item
-          name="kind"
-          label={t('discount.kind')}
-          extra={editing ? t('discount.kindLocked') : undefined}
-          rules={[required]}
-        >
-          <Select<DiscountKind>
-            disabled={Boolean(editing)}
-            options={DISCOUNT_KINDS.map((k) => ({ value: k, label: t(`discount.kind_${k}`) }))}
-          />
-        </Form.Item>
-
-        <Form.Item
-          name="value"
-          label={t(isPercent ? 'discount.valuePercent' : 'discount.valueAmount')}
-          rules={[required, { type: 'number', min: 1, max: isPercent ? 100 : undefined }]}
-        >
-          <InputNumber<number>
-            min={1}
-            max={isPercent ? 100 : undefined}
-            style={{ width: '100%' }}
-          />
-        </Form.Item>
-
-        {isPercent ? (
-          <Form.Item
-            name="max_discount"
-            label={t('discount.maxDiscount')}
-            extra={t('discount.maxDiscountHint')}
-            rules={[{ type: 'number', min: 1 }]}
-          >
-            <InputNumber<number> min={1} step={1000} style={{ width: '100%' }} />
-          </Form.Item>
-        ) : null}
-
-        <Form.Item
-          name="min_order"
-          label={t('discount.minOrder')}
-          extra={t('discount.minOrderHint')}
-          rules={[{ type: 'number', min: 0 }]}
-        >
-          <InputNumber<number> min={0} step={10000} style={{ width: '100%' }} />
-        </Form.Item>
-
-        <Form.Item name="window" label={t('discount.window')} extra={t('discount.windowHint')}>
-          <DatePicker.RangePicker showTime style={{ width: '100%' }} />
-        </Form.Item>
-
-        <Form.Item
-          name="max_uses"
-          label={t('discount.maxUses')}
-          extra={t('discount.maxUsesHint')}
-          rules={[{ type: 'number', min: 1 }]}
-        >
-          <InputNumber<number> min={1} style={{ width: '100%' }} />
-        </Form.Item>
-
-        <Form.Item
-          name="active"
-          label={t('discount.status')}
-          valuePropName="checked"
-          extra={t('discount.activeHint')}
-        >
-          <Switch />
+          <Input.TextArea rows={2} autoSize={{ minRows: 1, maxRows: 3 }} />
         </Form.Item>
       </Form>
     </Modal>

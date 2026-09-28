@@ -17,21 +17,9 @@ import EmptyState from '@/components/ui/EmptyState';
 import Button from '@/components/ui/Button';
 import { FOCUS_RING, HOME_GRID, HOME_SECTION, INK_65, TRANSITION_FAST } from '@/theme/customerTw';
 
-/** Customer home, following QVisionShow frame 1-101: full-bleed hero, a "Now Showing" grid of wide
- *  3:2 cards with a "Show more", and a Trailers section.
- *
- *  The route carries `handle.fullBleed` so the hero can reach the viewport edges; that removes
- *  <main>'s max-width AND padding, so every section below wraps itself in `HOME_SECTION`.
- *
- *  Kept against the frame, deliberately: the Now/Coming/Special tabs. The frame has a plain
- *  "Now Showing" heading, but the tabs are this page's information architecture and the standing
- *  decision is that the Figma is the visual reference, not the IA - dropping them would delete a
- *  working feature to match a picture. The frame's "View All ->" rides in the tab bar instead. */
-
 /** Backend max is 100; this cinema never has that many movies. */
 const PAGE_SIZE = 100;
 
-/** Cards shown before "Show more", and how many each press adds. The frame shows 8 (4 x 2). */
 const PAGE_STEP = 8;
 
 export const HomePage = () => {
@@ -41,7 +29,7 @@ export const HomePage = () => {
   const [visible, setVisible] = useState(PAGE_STEP);
   const [bookingMovie, setBookingMovie] = useState<Movie | null>(null);
 
-  // GET /movies returns everything incl. draft/ended; customers see only showing + coming_soon.
+  // GET /movies returns drafts/ended too; filter to showing + coming_soon for customers.
   const showing = useMemo(
     () => (data?.items ?? []).filter((movie) => movie.status === 'showing'),
     [data]
@@ -51,15 +39,13 @@ export const HomePage = () => {
     [data]
   );
 
-  // Switching tabs collapses back to the first page; otherwise "Show more" on a long tab would
-  // silently expand a short one. Done in the handler, not an effect: the reset is caused by the
-  // click, so there is no external state to synchronise with.
+  // Reset to the first page on tab switch, or "Show more" on a long tab leaks into a short one.
   const changeTab = (next: BrowseTab) => {
     setTab(next);
     setVisible(PAGE_STEP);
   };
 
-  // "Special" is an empty placeholder tab (no such backend concept; UI first, unwired).
+  // The Special tab is an unwired placeholder (no backend concept).
   const allForTab = tab === 'showing' ? showing : tab === 'coming_soon' ? comingSoon : [];
   const tabLabel =
     tab === 'showing'
@@ -78,10 +64,7 @@ export const HomePage = () => {
         <UpcomingTicketTeaser />
       </div>
 
-      {/* pt-16 + the teaser's pt-10 give the frame's ~115px gap between the hero and this section. */}
       <section className={`${HOME_SECTION} pt-16`} aria-labelledby="home-now-showing">
-        {/* Follows the tab: a fixed "Dang chieu" would mislabel the section whenever the viewer is
-            looking at Sap chieu or Dac biet. */}
         <h2 id="home-now-showing" className="sr-only">
           {tabLabel}
         </h2>
@@ -91,8 +74,6 @@ export const HomePage = () => {
           onChange={changeTab}
           trailing={
             <Link to={`${PATHS.films}?tab=${tab}`} className={`no-underline ${FOCUS_RING}`}>
-              {/* Colour on the child: `.cp-customer a` is unlayered and would paint this brand, but
-                  the frame draws "View All" in muted grey. */}
               <span
                 className={`inline-flex items-center gap-2 text-sm font-semibold ${INK_65} ${TRANSITION_FAST} hover-fine:text-brand`}
               >

@@ -4,15 +4,8 @@ interface WideGridSkeletonProps {
   count?: number;
 }
 
-/** Loading placeholder for the home's wide grid.
- *
- *  Every box mirrors `MovieCardWide`'s real one - the same wrapper classes, the same 3:2 image, two
- *  lines of title, one meta line and a 40px pill - so the swap to real cards shifts nothing.
- *  `PosterGridSkeleton` cannot be reused: it hardcodes its own grid and `aspect-2/3`, which would
- *  make every card change shape the moment the data lands.
- *
- *  `motion-reduce:animate-none` on each pulse, as `PosterGridSkeleton` already does: an
- *  indefinitely looping animation is exactly what a reduced-motion preference is asking to stop. */
+/** Loading placeholder mirroring `MovieCardWide`'s real layout so the swap to real cards shifts
+ *  nothing; `PosterGridSkeleton` can't be reused since it hardcodes `aspect-2/3`. */
 export const WideGridSkeleton = ({ count = 8 }: WideGridSkeletonProps) => (
   <div className={HOME_GRID} aria-hidden="true">
     {Array.from({ length: count }, (_, i) => (

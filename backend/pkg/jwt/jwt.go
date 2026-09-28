@@ -11,7 +11,6 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// TokenType distinguishes access and refresh tokens.
 type TokenType string
 
 const (
@@ -19,7 +18,6 @@ const (
 	RefreshToken TokenType = "refresh"
 )
 
-// Claims is the token payload.
 type Claims struct {
 	UserID string    `json:"uid"`
 	Email  string    `json:"email"`
@@ -28,8 +26,7 @@ type Claims struct {
 	jwtlib.RegisteredClaims
 }
 
-// TokenPair is the token pair returned to the client. RefreshID and
-// RefreshExpiresAt let the caller persist the refresh token for rotation.
+// RefreshID/RefreshExpiresAt let the caller persist the refresh token for rotation.
 type TokenPair struct {
 	AccessToken      string
 	RefreshToken     string
@@ -38,7 +35,6 @@ type TokenPair struct {
 	RefreshExpiresAt time.Time
 }
 
-// Manager holds the secrets and TTLs for each token type.
 type Manager struct {
 	accessSecret  []byte
 	refreshSecret []byte
@@ -57,7 +53,6 @@ func NewManager(accessSecret, refreshSecret, issuer string, accessTTL, refreshTT
 	}
 }
 
-// GeneratePair issues an access and refresh token pair.
 func (m *Manager) GeneratePair(userID, email, role string) (*TokenPair, error) {
 	accessToken, _, _, err := m.sign(userID, email, role, AccessToken, m.accessSecret, m.accessTTL)
 	if err != nil {
@@ -78,12 +73,10 @@ func (m *Manager) GeneratePair(userID, email, role string) (*TokenPair, error) {
 	}, nil
 }
 
-// ParseAccess validates an access token.
 func (m *Manager) ParseAccess(token string) (*Claims, error) {
 	return m.parse(token, m.accessSecret, AccessToken)
 }
 
-// ParseRefresh validates a refresh token.
 func (m *Manager) ParseRefresh(token string) (*Claims, error) {
 	return m.parse(token, m.refreshSecret, RefreshToken)
 }

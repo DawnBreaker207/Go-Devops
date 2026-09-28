@@ -16,7 +16,6 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import ShowtimeBreakdownTable from './components/ShowtimeBreakdownTable';
 import { useDailyReport } from './hooks/useReports';
@@ -155,21 +154,18 @@ export const ReportsPage = () => {
 
   return (
     <>
-      <PageHeader
-        title={t('report.title')}
-        extra={
-          <DatePicker.RangePicker
-            allowClear={false}
-            format={DATE_FORMAT}
-            value={range}
-            // Future dates unpickable: an unarrived day can't be closed.
-            disabledDate={(current) => current.isAfter(dayjs(), 'day')}
-            onChange={(value) => {
-              if (value?.[0] && value[1]) setRange([value[0], value[1]]);
-            }}
-          />
-        }
-      />
+      <Space wrap style={{ marginBottom: 16 }}>
+        <DatePicker.RangePicker
+          allowClear={false}
+          format={DATE_FORMAT}
+          value={range}
+          // Future dates unpickable: an unarrived day can't be closed.
+          disabledDate={(current) => current.isAfter(dayjs(), 'day')}
+          onChange={(value) => {
+            if (value?.[0] && value[1]) setRange([value[0], value[1]]);
+          }}
+        />
+      </Space>
 
       {error ? (
         <Alert

@@ -9,8 +9,7 @@ export const useBatchJobList = (query: BatchJobListQuery) =>
     queryKey: [BATCH_QUERY_KEY, query],
     queryFn: () => batchApi.list(query),
     placeholderData: (previous) => previous,
-    // A job run history can still be 'running'; poll periodically so results
-    // appear without the user refreshing manually.
+    // A running job gets polled so results appear without a manual refresh.
     refetchInterval: 10_000,
   });
 

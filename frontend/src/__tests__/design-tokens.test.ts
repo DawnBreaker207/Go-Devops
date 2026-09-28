@@ -15,8 +15,7 @@ import {
   textOnBrand,
 } from '@/theme/tokens';
 
-// Read the CSS file straight from disk. No `@/index.css?raw`: vite.config sets
-// test.css = false, so every CSS import (even ?raw) is stubbed empty.
+// No `@/index.css?raw`: vite.config sets test.css = false, so CSS imports are stubbed empty.
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
 
 const cssVar = (name: string): string => {
@@ -25,11 +24,7 @@ const cssVar = (name: string): string => {
   return match[1].trim().toLowerCase();
 };
 
-/**
- * tokens.ts la nguon su that; index.css chi la ban sao cho phia CSS. Test nay ton
- * tai de mot ben doi ma ben kia quen doi thi build do ngay, thay vi de hai he mau
- * troi xa nhau am tham.
- */
+/** tokens.ts is the source of truth; the test fails at once if index.css drifts from it. */
 describe('design token: TS va CSS phai trung nhau', () => {
   const pairs: Array<[string, string]> = [
     ['brand', brand.base],

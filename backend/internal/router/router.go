@@ -1,4 +1,3 @@
-// Package router declares every route of the service.
 package router
 
 import (
@@ -119,13 +118,13 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		public.GET("/movies/:id/showtimes", h.Showtime.ListForMovie)
 		public.GET("/showtimes", h.Showtime.List)
 		public.GET("/combos", h.Combo.List)
-		// Public price page. The only anonymous read of hall_prices; everything
-		// else about halls is operator-scoped.
-		public.GET("/pricing", h.Hall.PublicPrices)
-		public.GET("/pricing/global", h.Pricing.PublicPrices)
-		public.GET("/pricing/quote", h.Pricing.Quote)
 		public.GET("/articles", h.Article.List)
 		public.GET("/articles/:slug", h.Article.Show)
+	// Public price page: the global base prices (PLAN_CAMPAIGN.md 11.4, Phase 3).
+		public.GET("/pricing", h.Pricing.PublicPrices)
+	// Phase 1 pricing preview (PLAN_CAMPAIGN.md 11): read-only, unused by booking.
+		public.GET("/pricing/quote", h.Pricing.Quote)
+	// Campaigns (PLAN_CAMPAIGN.md 1-10): only listed while active and inside [starts_at, ends_at).
 		public.GET("/campaigns", h.Campaign.PublicList)
 		public.GET("/campaigns/:id", h.Campaign.PublicGet)
 	}
@@ -135,8 +134,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 	{
 		protected.GET("/users/me", h.User.Me)
 		protected.PUT("/users/me", middleware.Audit(db, "users.update_profile", "user"), h.User.UpdateMe)
-		// Account erasure is a customer self-service right; staff/admin are
-		// operational accounts managed by an admin (lock/unlock), not self-erased.
+		// Erasure is customer self-service; staff/admin accounts are managed by an admin, not self-erased.
 		protected.DELETE("/users/me", middleware.Audit(db, "users.delete_me", "user"),
 			middleware.RequireRoles(models.RoleCustomer), h.User.DeleteMe)
 		protected.PUT("/users/me/password", middleware.Audit(db, "users.change_password", "user"), h.Auth.ChangePassword)
@@ -162,7 +160,6 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.GET("/halls", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.List)
 			catalog.GET("/halls/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Show)
 			catalog.GET("/halls/:id/seats", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Seats)
-			catalog.GET("/halls/:id/prices", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Prices)
 			catalog.POST("/halls", middleware.Audit(db, "admin.create_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Create)
 			catalog.POST("/halls/:id/clone", middleware.Audit(db, "admin.clone_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.Clone)
 			catalog.PUT("/halls/:id", middleware.Audit(db, "admin.update_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateHall)
@@ -171,25 +168,23 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
 			catalog.POST("/halls/:id/seats/rows", middleware.Audit(db, "admin.add_hall_row", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.AddRow)
 			catalog.DELETE("/halls/:id/seats/rows/:rowLabel", middleware.Audit(db, "admin.delete_hall_row", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteRow)
+			catalog.POST("/halls/:id/seats/columns", middleware.Audit(db, "admin.add_hall_column", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.AddColumn)
 			catalog.POST("/halls/:id/seats/merge", middleware.Audit(db, "admin.merge_hall_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.MergeSeats)
 			catalog.POST("/halls/:id/seats/split", middleware.Audit(db, "admin.split_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SplitSeat)
 			catalog.PUT("/halls/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
-			catalog.PUT("/halls/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 			catalog.GET("/showtimes", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.AdminList)
 			catalog.GET("/showtimes/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Detail)
 			catalog.POST("/showtimes", middleware.Audit(db, "admin.create_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Create)
 			catalog.PUT("/showtimes/:id", middleware.Audit(db, "admin.update_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Update)
 			catalog.DELETE("/showtimes/:id", middleware.Audit(db, "admin.delete_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Delete)
 			catalog.POST("/showtimes/:id/cancel", middleware.Audit(db, "admin.cancel_showtime", "showtime"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Showtime.Cancel)
-			// Concession catalogue. Operator scope (admin AND staff) like halls and
-			// showtimes, not admin-only like /admin/users and /admin/reports:
-			// putting popcorn back on sale is counter work, not an admin decision.
+		// Concession catalogue is operator scope (admin AND staff): counter work, not an admin decision.
 			catalog.GET("/concessions", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminList)
 			catalog.GET("/concessions/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminGet)
 			catalog.POST("/concessions", middleware.Audit(db, "admin.create_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminCreate)
 			catalog.PATCH("/concessions/:id", middleware.Audit(db, "admin.update_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminUpdate)
 			catalog.DELETE("/concessions/:id", middleware.Audit(db, "admin.delete_concession", "concession"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Combo.AdminDelete)
-			// Article CMS is operator scope too: a news post moves no money.
+		// Article CMS is operator scope too: a news post moves no money.
 			catalog.GET("/articles", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.ListAdmin)
 			catalog.GET("/articles/:id", middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.ShowAdmin)
 			catalog.POST("/articles", middleware.Audit(db, "admin.create_article", "article"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Article.Create)
@@ -212,8 +207,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Cancel)
 			orders.POST("/:id/refresh", middleware.RateLimit(limits.Hold), middleware.Audit(db, "orders.refresh", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Booking.Refresh)
-			// Discount: customer-only like the rest of this tree, and only while
-			// the order is still pending (the service enforces that, not the route).
+		// Discount applies while the order is still pending (enforced by the service).
 			orders.POST("/:id/discount", middleware.Audit(db, "orders.apply_discount", "booking"),
 				middleware.RequireRoles(models.RoleCustomer), h.Discount.Apply)
 			orders.DELETE("/:id/discount", middleware.Audit(db, "orders.remove_discount", "booking"),
@@ -250,7 +244,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
 			staff.GET("/orders/:id", h.Staff.OrderDetail)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
-			// Customer support lookup, read-only, scoped to role=customer (staff/admin only via /admin/users).
+			// Read-only customer lookup; staff/admin accounts via /admin/users.
 			staff.GET("/customers", h.Staff.SearchCustomers)
 			staff.GET("/customers/:id", h.Staff.CustomerProfile)
 			staff.GET("/customers/:id/orders", h.Staff.CustomerOrders)
@@ -269,14 +263,12 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 		protected.GET("/admin/overview", middleware.RequireRoles(models.RoleAdmin), h.Report.Overview)
 		protected.GET("/admin/stats", middleware.RequireRoles(models.RoleAdmin), h.Report.Stats)
 
-		// Aliases required by the API contract; the seat grid is readable by any signed-in user.
+		// API-contract aliases; seat grid readable by any signed-in user.
 		halls := protected.Group("/halls")
 		{
 			halls.GET("/:id/seats", h.Hall.Seats)
 			halls.PUT("/:id/seats/:seatId", middleware.Audit(db, "admin.update_hall_seat", "seat"),
 				middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.UpdateSeat)
-			halls.PUT("/:id/prices", middleware.Audit(db, "admin.set_hall_prices", "hall"),
-				middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.SetPrices)
 		}
 
 		protected.POST("/admin/uploads/poster", middleware.Audit(db, "admin.upload_poster", "media"),
@@ -289,15 +281,14 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			admin.GET("/audit-logs", h.Audit.List)
 			// Admin-only: staff read one order at a time (/staff/orders/:id), never all emails next to money.
 			admin.GET("/orders", h.Booking.AdminList)
-			// Discount codes are ADMIN-ONLY, unlike the concession catalogue next
-			// door: a code moves revenue, so it is a pricing decision rather than
-			// counter work. The group-level RequireRoles above covers all five.
+		// Discount codes are ADMIN-ONLY: a code moves revenue, unlike counter work.
 			admin.GET("/discounts", h.Discount.AdminList)
 			admin.GET("/discounts/:id", h.Discount.AdminGet)
 			admin.POST("/discounts", middleware.Audit(db, "admin.create_discount", "discount"), h.Discount.AdminCreate)
 			admin.PATCH("/discounts/:id", middleware.Audit(db, "admin.update_discount", "discount"), h.Discount.AdminUpdate)
 			admin.DELETE("/discounts/:id", middleware.Audit(db, "admin.delete_discount", "discount"), h.Discount.AdminDelete)
-			// Pricing engine: admin-only, group-level RequireRoles above covers all.
+
+		// Pricing Phase 1 (PLAN_CAMPAIGN.md 11): admin-only, unused outside this group and the public preview.
 			admin.GET("/pricing/base", h.Pricing.AdminGetBasePrices)
 			admin.PUT("/pricing/base", middleware.Audit(db, "admin.set_base_price", "seat_base_price"), h.Pricing.AdminSetBasePrices)
 			admin.GET("/pricing/rules", h.Pricing.AdminListRules)
@@ -305,7 +296,8 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			admin.POST("/pricing/rules", middleware.Audit(db, "admin.create_pricing_rule", "pricing_rule"), h.Pricing.AdminCreateRule)
 			admin.PATCH("/pricing/rules/:id", middleware.Audit(db, "admin.update_pricing_rule", "pricing_rule"), h.Pricing.AdminUpdateRule)
 			admin.DELETE("/pricing/rules/:id", middleware.Audit(db, "admin.delete_pricing_rule", "pricing_rule"), h.Pricing.AdminDeleteRule)
-			// Campaigns are ADMIN-ONLY like discounts: they gate redemptions and move revenue.
+
+		// Campaigns are ADMIN-ONLY like discounts and pricing: they gate redemptions and move revenue.
 			admin.GET("/campaigns", h.Campaign.AdminList)
 			admin.GET("/campaigns/:id", h.Campaign.AdminGet)
 			admin.POST("/campaigns", middleware.Audit(db, "admin.create_campaign", "campaign"), h.Campaign.AdminCreate)

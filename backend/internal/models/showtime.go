@@ -10,9 +10,7 @@ import (
 const (
 	ShowtimeOpen   = "open"
 	ShowtimeClosed = "closed"
-	// ShowtimeCancelled is set only by the cinema actively cancelling an already
-	// sold showtime (POST /admin/showtimes/{id}/cancel); it cascades a refund to
-	// every paid booking and never appears in a public or booking-facing list.
+	// Set only via cancel; cascades a refund, never listed publicly.
 	ShowtimeCancelled = "cancelled"
 )
 

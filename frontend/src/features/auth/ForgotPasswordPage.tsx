@@ -7,25 +7,41 @@ import Button from '@/components/ui/Button';
 import Notice from '@/components/ui/Notice';
 import { authApi } from '@/api/auth.api';
 import { PATHS } from '@/routes/paths';
-import { errorMessage } from '@/utils/error';
+import { errorMessage, fieldErrorsOf } from '@/utils/error';
+import { isValidEmail } from '@/utils/validators';
 
-/** Step 1: request reset link. Backend is always 200 (no email enumeration), so copy must stay neutral about whether the email exists. */
+// Backend always answers 200 (anti-enumeration); keep the copy vague so it never leaks whether an email exists.
 export const ForgotPasswordPage = () => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
+
+    if (!email.trim()) {
+      setEmailError(t('auth.emailRequired'));
+      return;
+    }
+    if (!isValidEmail(email.trim())) {
+      setEmailError(t('auth.emailInvalid'));
+      return;
+    }
+    setEmailError(undefined);
+
     setBusy(true);
     try {
       await authApi.forgotPassword(email.trim());
       setSent(true);
     } catch (err) {
-      setError(errorMessage(err, t('common.somethingWrong')));
+      // A 400/40001 the client missed lands on the input, not a shared banner.
+      const details = fieldErrorsOf(err);
+      if (details?.email) setEmailError(details.email);
+      else setError(errorMessage(err, t('common.somethingWrong')));
     } finally {
       setBusy(false);
     }
@@ -59,8 +75,13 @@ export const ForgotPasswordPage = () => {
             label={t('user.email')}
             type="email"
             required
+            placeholder="ban@email.com"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (emailError) setEmailError(undefined);
+            }}
+            error={emailError}
           />
 
           <Button type="submit" variant="primary" block className="mt-2" disabled={busy}>

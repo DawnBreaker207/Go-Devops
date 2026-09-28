@@ -16,8 +16,7 @@ type tokenEntry struct {
 	expires    time.Time
 }
 
-// TokenStore issues showtime-bound stream tokens so no JWT goes in the URL. Tokens stay
-// reusable until expiry so EventSource reconnects with the same URL still work.
+// Showtime-bound stream tokens (no JWT in URL); reusable until expiry for EventSource reconnects.
 type TokenStore struct {
 	ttl time.Duration
 	now func() time.Time
@@ -27,7 +26,6 @@ type TokenStore struct {
 	nextPrune time.Time
 }
 
-// NewTokenStore uses DefaultTokenTTL when ttl <= 0 and time.Now when now is nil.
 func NewTokenStore(ttl time.Duration, now func() time.Time) *TokenStore {
 	if ttl <= 0 {
 		ttl = DefaultTokenTTL
@@ -81,7 +79,6 @@ func (s *TokenStore) Validate(token, showtimeID string) (hallID, userID string, 
 	return e.hallID, e.userID, true
 }
 
-// size is used by tests.
 func (s *TokenStore) size() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

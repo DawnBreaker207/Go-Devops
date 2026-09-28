@@ -21,10 +21,7 @@ type PaymentSummary struct {
 	RefundedAt   *time.Time `json:"refunded_at,omitempty"`
 }
 
-// TransactionResponse is one row of the financial view GET
-// /users/me/transactions: what was paid/refunded, when, through which
-// provider, plus just enough booking/showtime context to place it. This is
-// distinct from GET /orders, which is the booking/ticket view.
+// Financial view, distinct from GET /orders (booking/ticket view).
 type TransactionResponse struct {
 	PaymentID    string     `json:"payment_id"`
 	Provider     string     `json:"provider"`
@@ -43,7 +40,6 @@ type TransactionResponse struct {
 	StartAt      time.Time  `json:"start_at"`
 }
 
-// PaymentReturnResponse is the result behind a provider return redirect.
 type PaymentReturnResponse struct {
 	BookingID     string `json:"booking_id"`
 	BookingStatus string `json:"booking_status"`

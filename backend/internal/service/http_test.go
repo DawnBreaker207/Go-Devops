@@ -97,12 +97,13 @@ func (h *httpEnv) buildEngine(db *gorm.DB) *gin.Engine {
 			repository.NewPaymentRepository(db), repository.NewCampaignRepository(db))),
 		Article: handlers.NewArticleHandler(service.NewArticleService(db,
 			repository.NewArticleRepository(db))),
-		Pricing: handlers.NewPricingHandler(service.NewPricingService(db,
-			repository.NewPricingRepository(db), repository.NewShowtimeRepository(db),
-			time.UTC, nil)),
 		Campaign: handlers.NewCampaignHandler(service.NewCampaignService(db,
 			repository.NewCampaignRepository(db), repository.NewDiscountRepository(db),
 			repository.NewComboRepository(db), repository.NewArticleRepository(db))),
+		// Same instance ShowtimeService/BookingService use (env.pricing, built
+		// in newEnv) - a base-price/rule write through this handler must be
+		// visible to the seatmap and hold price without a second round trip.
+		Pricing: handlers.NewPricingHandler(h.pricing),
 	})
 }
 
@@ -176,7 +177,6 @@ func TestHTTP_RoleScopes(t *testing.T) {
 		{"T38 customer checks a ticket in", http.MethodPost, "/api/v1/tickets/ANY/redeem", customer, map[string]string{"showtime_id": h.showID}, http.StatusForbidden},
 		{"customer opens staff board", http.MethodGet, "/api/v1/staff/dashboard", customer, nil, http.StatusForbidden},
 		{"staff creates accounts", http.MethodPost, "/api/v1/admin/users", staff, map[string]string{"email": "x@test.local", "password": "secret123", "full_name": "X", "role": "staff"}, http.StatusForbidden},
-		{"staff changes prices", http.MethodPut, "/api/v1/halls/" + h.hallID + "/prices", customer, map[string]any{"prices": fullPrices()}, http.StatusForbidden},
 		{"staff holds seats", http.MethodPost, "/api/v1/orders/hold", staff, map[string]any{"show_id": h.showID, "seat_ids": h.ids("A1")}, http.StatusForbidden},
 		{"staff self-erases", http.MethodDelete, "/api/v1/users/me", staff, map[string]string{"password": "secret123"}, http.StatusForbidden},
 		{"admin self-erases", http.MethodDelete, "/api/v1/users/me", admin, map[string]string{"password": "secret123"}, http.StatusForbidden},
@@ -375,9 +375,9 @@ func TestHTTP_ContractEndpoints(t *testing.T) {
 	if seats, _ := body["data"].([]any); status != http.StatusOK || len(seats) != 10 {
 		t.Fatalf("HALL-02: HTTP %d, %d seats", status, len(seats))
 	}
-	if status, _, _ := h.call(http.MethodPut, "/api/v1/halls/"+h.hallID+"/prices", admin, map[string]any{"prices": fullPrices()}); status != http.StatusOK {
-		t.Fatalf("HALL-04: HTTP %d", status)
-	}
+	// HALL-04 (PUT /halls/:id/prices) removed: hall_prices is gone
+	// (PLAN_CAMPAIGN.md section 11.4, Phase 3). Prices are set globally via
+	// PUT /admin/pricing/base, covered by pricing_test.go.
 
 	staff := h.newUser(models.RoleStaff, "promote@test.local", "secret123")
 	status, _, body = h.call(http.MethodPut, "/api/v1/admin/users/"+staff.ID, admin, map[string]string{"role": "admin"})

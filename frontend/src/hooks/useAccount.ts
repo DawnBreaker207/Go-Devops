@@ -8,10 +8,8 @@ import type {
   UpdateProfilePayload,
 } from '@/types';
 
-/** GET/PUT /users/me* is shared by every authenticated role (see router.go `protected` group), so this hook lives here; also reused by ProfilePage. Exception: useDeleteAccount is customer-only per RequireRoles. */
 export const ACCOUNT_QUERY_KEY = 'account';
 
-/** authStore.user is stale after this mutation; syncAuthUser keeps header/avatar current. */
 export const useUpdateProfile = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -63,7 +61,6 @@ export const useRevokeSession = () => {
   });
 };
 
-/** No invalidation: caller logs out and routes home, dropping all user cache. */
 export const useDeleteAccount = () =>
   useMutation({
     mutationFn: (payload: DeleteAccountPayload) => accountApi.deleteMe(payload),

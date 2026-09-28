@@ -1,6 +1,6 @@
 import type { Hall, Seat, SeatChange, SeatType } from '@/types';
 
-/** Minimum seat shape for grid math - `Seat` (admin) and `SeatMapSeat` (customer) both satisfy it, so all math is shared. */
+/** Minimum seat shape shared by admin and customer grid math. */
 export interface GridSeat {
   row_label: string;
   col_number: number;
@@ -8,11 +8,8 @@ export interface GridSeat {
   is_gap: boolean;
 }
 
-/** Seat-grid math, React-free (easiest to get wrong, hence tested). Couple seats swallow a column (never render by index); `aisle_after_cols` is length-checked only, so filter here. */
-
-/** One seat cell, in px. */
+/** Pure grid math, React-free. */
 export const SEAT_SIZE = 40;
-/** Aisle gap between two columns. */
 export const AISLE_WIDTH = 22;
 
 export interface SeatRow<T extends GridSeat = Seat> {
@@ -20,7 +17,7 @@ export interface SeatRow<T extends GridSeat = Seat> {
   seats: T[];
 }
 
-/** Keeps backend row order - never sort by row_label (AA precedes B alphabetically but is row 27). */
+// Keep backend row order, never sort: AA comes after Z, not before B.
 export const groupSeatsByRow = <T extends GridSeat>(seats: T[]): SeatRow<T>[] => {
   const rows: SeatRow<T>[] = [];
   const index = new Map<string, SeatRow<T>>();
@@ -36,7 +33,13 @@ export const groupSeatsByRow = <T extends GridSeat>(seats: T[]): SeatRow<T>[] =>
   return rows;
 };
 
-/** Keep only renderable aisles: 1..seatsPerRow-1, deduped (past the last column renders nothing). */
+export const parseAisles = (raw: string): number[] =>
+  raw
+    .split(',')
+    .map((part) => Number.parseInt(part.trim(), 10))
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+// Keep only renderable aisles: 1..seatsPerRow-1, deduped and sorted.
 export const normalizeAisles = (aisleAfterCols: number[], seatsPerRow: number): number[] => {
   const seen = new Set<number>();
   aisleAfterCols.forEach((col) => {
@@ -46,16 +49,13 @@ export const normalizeAisles = (aisleAfterCols: number[], seatsPerRow: number): 
 };
 
 export interface GridLayout {
-  /** Value for CSS `grid-template-columns`. */
   templateColumns: string;
-  /** Grid line a column starts at (CSS grids count from 1). */
   lineOf: (col: number) => number;
-  /** TRACKS one seat spans - not col_span when an aisle track sits between. */
   spanOf: (col: number, colSpan: number) => number;
   aisles: number[];
 }
 
-/** Aisles are their OWN TRACK, not seat margin (margin squeezes cells, skewing the grid right). */
+// An aisle is its own track, not a margin: margins skew the grid right.
 export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): GridLayout => {
   const aisles = normalizeAisles(aisleAfterCols, seatsPerRow);
   const aisleSet = new Set(aisles);
@@ -67,7 +67,6 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
   }
 
   const lineOf = (col: number): number => {
-    // Line = 1 + tracks before it = 1 + (col-1) cells + inserted aisles.
     let aislesBefore = 0;
     aisles.forEach((aisle) => {
       if (aisle < col) aislesBefore += 1;
@@ -76,7 +75,7 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
   };
 
   const spanOf = (col: number, colSpan: number): number => {
-    // Couple covers col and col+1. An aisle between stretches it over the aisle track too: 3 tracks, not 2.
+    // A couple swallowing a middle aisle spans 3 tracks, not 2.
     if (colSpan <= 1) return 1;
     return colSpan + (aisleSet.has(col) ? 1 : 0);
   };
@@ -84,18 +83,18 @@ export const buildGridLayout = (seatsPerRow: number, aisleAfterCols: number[]): 
   return { templateColumns: tracks.join(' '), lineOf, spanOf, aisles };
 };
 
-/** Sellable capacity, counted like the backend: `rows * seats_per_row` counts cells (couples swallow a column, gaps are unsellable). */
+// Capacity counts like the backend: gaps excluded, a couple is one sellable seat.
 export const sellableCapacity = (seats: GridSeat[]): number =>
   seats.reduce((total, seat) => (seat.is_gap ? total : total + 1), 0);
 
-/** Backend uppercases labels but does NOT trim (400 ROLLS BACK the whole batch) - clean here first. */
+// Backend uppercases but never trims: clean first or a 400 rolls back the whole batch.
 export const cleanSeatLabel = (label: string): string => label.trim().toUpperCase();
 
-/** Backend cap: 50 changes/call, 500 labels/change. */
+// Backend cap: 50 changes/call, 500 labels/change.
 export const MAX_CHANGES_PER_CALL = 50;
 export const MAX_LABELS_PER_CHANGE = 500;
 
-/** Chunk labels within backend caps (one batch = ONE transaction, oversized batches fail whole). */
+// Chunk to backend caps: one batch is one transaction, oversize fails the whole batch.
 export const chunkLabels = (labels: string[]): string[][][] => {
   const changes: string[][] = [];
   for (let i = 0; i < labels.length; i += MAX_LABELS_PER_CHANGE) {
@@ -108,48 +107,76 @@ export const chunkLabels = (labels: string[]): string[][][] => {
   return batches;
 };
 
-/** Real column count from seat data (never trust `hall.seats_per_row`: no DB constraint ties it to `seats`, drifted for real once). */
+// Zoom via transform scale, never width/height.
+export const ZOOM_MIN = 1;
+export const ZOOM_MAX = 1.6;
+export const ZOOM_STEP = 0.1;
+export const ZOOM_DEFAULT = 1;
+
+export const gridPixelWidth = (templateColumns: string, gapPx: number = 4): number => {
+  const tracks = templateColumns.trim().split(/\s+/).filter(Boolean);
+  const tracksPx = tracks.reduce((sum, token) => sum + (Number.parseFloat(token) || 0), 0);
+  const gaps = Math.max(0, tracks.length - 1) * gapPx;
+  return tracksPx + gaps;
+};
+
+// Fit the room into view, never upscale past 1.
+export const computeFitScale = (
+  gridWidthPx: number,
+  containerWidthPx: number,
+  min: number = ZOOM_MIN,
+  max: number = 1
+): number => {
+  if (gridWidthPx <= 0 || containerWidthPx <= 0) return ZOOM_DEFAULT;
+  const raw = containerWidthPx / gridWidthPx;
+  return Math.min(max, Math.max(min, raw));
+};
+
+export const clampZoom = (value: number, min: number = ZOOM_MIN, max: number = ZOOM_MAX): number =>
+  Math.min(max, Math.max(min, value));
+
+// Never trust hall.seats_per_row: no DB constraint, and it has drifted for real.
 export const widestColumn = (seats: Pick<GridSeat, 'col_number' | 'col_span'>[]): number =>
   seats.reduce((max, s) => Math.max(max, s.col_number + s.col_span - 1), 0);
 
-/** Customer variant: `GET /shows/:id/seats` omits rows/seats_per_row - derive from seats. */
+// GET /shows/:id/seats omits rows/seats_per_row, so derive from seats.
 export const seatsPerRowFromSeats = (seats: Pick<GridSeat, 'col_number' | 'col_span'>[]): number =>
   widestColumn(seats);
 
 export const renderedSeatsPerRow = (hall: Hall, seats: Seat[]): number =>
   Math.max(widestColumn(seats), hall.seats_per_row);
 
-/** Grid summary for the screen's recap panel. */
 export interface GridSummary {
   gridCells: number;
   seatCount: number;
   sellable: number;
   gaps: number;
   doubleSeats: number;
-  /** true when the hall's declared rows/seats_per_row mismatch real seats. */
-  declaredMismatch: boolean;
+}
+
+export const summarizeGrid = (hall: Hall, seats: Seat[]): GridSummary => ({
+  gridCells: hall.rows * hall.seats_per_row,
+  seatCount: seats.length,
+  sellable: sellableCapacity(seats),
+  gaps: seats.filter((s) => s.is_gap).length,
+  doubleSeats: seats.filter((s) => s.col_span === 2).length,
+});
+
+export interface GridMismatch {
   actualRows: number;
   actualSeatsPerRow: number;
 }
 
-export const summarizeGrid = (hall: Hall, seats: Seat[]): GridSummary => {
-  const actualRows = groupSeatsByRow(seats).length;
-  const actualSeatsPerRow = widestColumn(seats);
-  return {
-    gridCells: hall.rows * hall.seats_per_row,
-    seatCount: seats.length,
-    sellable: sellableCapacity(seats),
-    gaps: seats.filter((s) => s.is_gap).length,
-    doubleSeats: seats.filter((s) => s.col_span === 2).length,
-    // A seatless hall is not "mismatched" - different state.
-    declaredMismatch:
-      seats.length > 0 && (actualRows !== hall.rows || actualSeatsPerRow !== hall.seats_per_row),
-    actualRows,
-    actualSeatsPerRow,
-  };
+// Mismatch against saved seats, not the draft: a pending row intentionally overshoots rows mid-edit.
+export const declaredGridMismatch = (hall: Hall, savedSeats: Seat[]): GridMismatch | null => {
+  if (savedSeats.length === 0) return null;
+  const actualRows = groupSeatsByRow(savedSeats).length;
+  const actualSeatsPerRow = widestColumn(savedSeats);
+  if (actualRows === hall.rows && actualSeatsPerRow === hall.seats_per_row) return null;
+  return { actualRows, actualSeatsPerRow };
 };
 
-/** Edit screen is ONE DRAFT SESSION: changes touch local draft only; one Save folds everything (new rows get fake `pending-row-N-col` ids). */
+// The edit screen is one draft session: every change touches the draft until Save.
 export const PENDING_ROW_PREFIX = 'pending-row-';
 
 export const makePendingSeatId = (rowIndex: number, colNumber: number): string =>
@@ -160,7 +187,27 @@ export const isPendingSeatId = (id: string): boolean => id.startsWith(PENDING_RO
 export const pendingRowIndexOf = (id: string): number =>
   Number(id.slice(PENDING_ROW_PREFIX.length).split('-')[0]);
 
-/** Go dto.RowLabel port: base-26 Excel-style columns (A..Z, AA, AB...). */
+export const PENDING_COL_PREFIX = 'pending-col-';
+
+export const makePendingColSeatId = (colIndex: number, rowLabel: string): string =>
+  `${PENDING_COL_PREFIX}${colIndex}-${rowLabel}`;
+
+export const isPendingColSeatId = (id: string): boolean => id.startsWith(PENDING_COL_PREFIX);
+
+export const pendingColIndexOf = (id: string): number =>
+  Number(id.slice(PENDING_COL_PREFIX.length).split('-')[0]);
+
+// A split's brand-new right seat doesn't exist server-side until Save runs splitSeat.
+export const PENDING_SPLIT_PREFIX = 'pending-split-';
+
+export const makeSplitSeatId = (leftSeatId: string): string =>
+  `${PENDING_SPLIT_PREFIX}${leftSeatId}`;
+
+export const isPendingSplitSeatId = (id: string): boolean => id.startsWith(PENDING_SPLIT_PREFIX);
+
+export const isUnsavedSeatId = (id: string): boolean =>
+  isPendingSeatId(id) || isPendingColSeatId(id) || isPendingSplitSeatId(id);
+
 export const rowLabelFromIndex = (n: number): string => {
   let label = '';
   let value = n;
@@ -172,14 +219,14 @@ export const rowLabelFromIndex = (n: number): string => {
   return label;
 };
 
-/** Standard-seat placeholder for a pending row. The label is PREVIEW only (server may assign another); Save matches by column order. */
 export const buildPendingRow = (
   rowIndex: number,
   seatsPerRow: number,
   rowLabel: string,
-  hallId: string
+  hallId: string,
+  totalWidth: number = seatsPerRow
 ): Seat[] =>
-  Array.from({ length: seatsPerRow }, (_, i) => {
+  Array.from({ length: totalWidth }, (_, i) => {
     const col = i + 1;
     return {
       id: makePendingSeatId(rowIndex, col),
@@ -188,10 +235,27 @@ export const buildPendingRow = (
       row_label: rowLabel,
       col_number: col,
       seat_type: 'standard' as SeatType,
-      is_gap: false,
+      is_gap: col > seatsPerRow,
       col_span: 1 as const,
     };
   });
+
+export const buildPendingColumn = (
+  colIndex: number,
+  rowLabels: string[],
+  colNumber: number,
+  hallId: string
+): Seat[] =>
+  rowLabels.map((rowLabel) => ({
+    id: makePendingColSeatId(colIndex, rowLabel),
+    hall_id: hallId,
+    label: `${rowLabel}${colNumber}`,
+    row_label: rowLabel,
+    col_number: colNumber,
+    seat_type: 'standard' as SeatType,
+    is_gap: true,
+    col_span: 1 as const,
+  }));
 
 export interface SeatPatchGroup {
   labels: string[];
@@ -199,12 +263,12 @@ export interface SeatPatchGroup {
   is_gap?: boolean;
 }
 
-/** Diff real (non-pending) seats draft-vs-saved, grouped by (seat_type, is_gap) - id-matched even right after a pending save. */
+// Diff draft vs saved by id, grouped by type/gap.
 export const diffChangedSeats = (saved: Seat[], draft: Seat[]): SeatPatchGroup[] => {
   const savedById = new Map(saved.map((s) => [s.id, s]));
   const groups = new Map<string, SeatPatchGroup>();
   draft.forEach((seat) => {
-    if (isPendingSeatId(seat.id)) return;
+    if (isUnsavedSeatId(seat.id)) return;
     const before = savedById.get(seat.id);
     if (!before || (before.seat_type === seat.seat_type && before.is_gap === seat.is_gap)) return;
     const key = `${seat.seat_type}|${seat.is_gap}`;
@@ -218,7 +282,6 @@ export const diffChangedSeats = (saved: Seat[], draft: Seat[]): SeatPatchGroup[]
   return [...groups.values()];
 };
 
-/** Like chunkLabels for multi-patch Saves, same two backend caps. */
 export const buildSeatChangeBatches = (groups: SeatPatchGroup[]): SeatChange[][] => {
   const changes: SeatChange[] = [];
   groups.forEach((group) => {
@@ -237,7 +300,16 @@ export const buildSeatChangeBatches = (groups: SeatPatchGroup[]): SeatChange[][]
   return batches;
 };
 
-/** Mergeable pair: same row, adjacent, single, non-gap (mirrors BE `spanSet`). */
+export const countSeatsByType = (seats: Seat[]): Record<SeatType, number> => {
+  const counts: Record<SeatType, number> = { standard: 0, vip: 0, couple: 0, recliner: 0 };
+  seats.forEach((seat) => {
+    if (seat.is_gap) return;
+    counts[seat.seat_type] += 1;
+  });
+  return counts;
+};
+
+// Mergeable pair: same row, adjacent, single, non-gap (mirrors BE spanSet).
 export const areAdjacentSeats = (a: Seat, b: Seat): boolean =>
   a.row_label === b.row_label &&
   a.col_span === 1 &&
@@ -245,3 +317,38 @@ export const areAdjacentSeats = (a: Seat, b: Seat): boolean =>
   !a.is_gap &&
   !b.is_gap &&
   Math.abs(a.col_number - b.col_number) === 1;
+
+export interface MergeOp {
+  leftLabel: string;
+  rightLabel: string;
+}
+
+export interface SplitOp {
+  label: string;
+}
+
+/** Merge/split trong phien draft, doi chieu voi server theo label (khong theo id vi merge xoa seat phai, split de id moi). Baseline gom ca row/col vua tao trong cung lan Save. */
+export const diffMergeSplitOps = (
+  baseline: Pick<Seat, 'label' | 'row_label' | 'col_number' | 'col_span'>[],
+  draft: Pick<Seat, 'label' | 'row_label' | 'col_number' | 'col_span'>[]
+): { merges: MergeOp[]; splits: SplitOp[] } => {
+  const baselineByLabel = new Map(baseline.map((s) => [s.label, s]));
+  const draftByLabel = new Map(draft.map((s) => [s.label, s]));
+
+  const merges: MergeOp[] = draft
+    .filter((seat) => seat.col_span === 2 && baselineByLabel.get(seat.label)?.col_span !== 2)
+    .map((seat) => ({
+      leftLabel: seat.label,
+      rightLabel: `${seat.row_label}${seat.col_number + 1}`,
+    }));
+
+  const splits: SplitOp[] = baseline
+    .filter((seat) => {
+      if (seat.col_span !== 2) return false;
+      const after = draftByLabel.get(seat.label);
+      return after !== undefined && after.col_span !== 2;
+    })
+    .map((seat) => ({ label: seat.label }));
+
+  return { merges, splits };
+};

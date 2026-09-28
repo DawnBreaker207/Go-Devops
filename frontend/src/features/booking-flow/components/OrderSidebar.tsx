@@ -112,8 +112,7 @@ export const OrderSidebar = ({
     stateLabels ??
     o.tickets.map((ticket) => ticket.seat_label);
 
-  // `total` is payable_amount, NOT total_amount: this number sits next to the
-  // pay button, so it must be what the gateway will actually charge.
+  // `total` is payable_amount, not total_amount, since it must match what the gateway actually charges.
   return (
     <BookingSummarySidebar
       posterUrl={movie.data?.poster_url}

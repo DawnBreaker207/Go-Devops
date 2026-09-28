@@ -17,7 +17,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Hook point for Sentry / log service later.
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 

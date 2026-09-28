@@ -5,10 +5,11 @@ import (
 	"testing"
 )
 
-// GET /pricing is the public price page. It must apply the SAME gate the customer
-// showtime query does — active halls with all four seat types priced — or it will
-// advertise a hall nobody can book.
-func TestHTTP_PublicPricingListsOnlyBookableHalls(t *testing.T) {
+// GET /pricing is the public price page. Phase 3 of the pricing redesign
+// (PLAN_CAMPAIGN.md section 11.4) dropped hall_prices, so this is no longer
+// a per-hall listing: every hall shares the one global seat_base_prices row
+// per seat type, and that is exactly what the page now echoes.
+func TestHTTP_PublicPricingListsGlobalBasePrices(t *testing.T) {
 	h := newHTTPEnv(t)
 
 	// Anonymous: this is the whole point of the endpoint.
@@ -17,54 +18,29 @@ func TestHTTP_PublicPricingListsOnlyBookableHalls(t *testing.T) {
 		t.Fatalf("anonymous read: HTTP %d %v", status, body["message"])
 	}
 	data := dataMap(body)
-	halls, _ := data["halls"].([]any)
-	if len(halls) != 1 {
-		t.Fatalf("halls = %d, want the 1 seeded hall", len(halls))
-	}
-	row, _ := halls[0].(map[string]any)
-	prices, _ := row["prices"].(map[string]any)
+	prices, _ := data["prices"].(map[string]any)
 	if len(prices) != 4 {
 		t.Fatalf("prices = %v, want all four seat types", prices)
 	}
-	// from_price is the headline number, so it must be the cheapest seat anywhere.
+	// from_price is the headline number, so it must be the cheapest configured seat.
 	if got := num(t, data, "from_price"); got != priceStandard {
 		t.Fatalf("from_price = %d, want the cheapest seat %d", got, priceStandard)
 	}
 
-	// A hall missing one price disappears, the same way it disappears from the
-	// customer showtime list. Dropping one row is enough to fail the HAVING.
-	h.must(h.db.Exec(`DELETE FROM hall_prices WHERE hall_id = ? AND seat_type = 'couple'`, h.hallID).Error)
+	// Dropping every seat type's base price back to 0 (nothing configured)
+	// must report from_price 0, not a stale minimum.
+	h.must(h.db.Exec(`UPDATE seat_base_prices SET price = 0`).Error)
 
 	status, _, body = h.call(http.MethodGet, "/api/v1/pricing", "", nil)
 	if status != http.StatusOK {
-		t.Fatalf("after dropping a price: HTTP %d %v", status, body["message"])
+		t.Fatalf("after zeroing prices: HTTP %d %v", status, body["message"])
 	}
 	data = dataMap(body)
-	halls, _ = data["halls"].([]any)
-	if len(halls) != 0 {
-		t.Fatalf("halls = %d, want 0: a hall missing a seat-type price is not bookable", len(halls))
-	}
-	// An empty list must report 0, not a stale minimum.
 	if got := num(t, data, "from_price"); got != 0 {
-		t.Fatalf("from_price = %d on an empty list, want 0", got)
+		t.Fatalf("from_price = %d with nothing configured, want 0", got)
 	}
-}
-
-// An inactive hall is rejected for new showtimes, so it has no business on a
-// price page either.
-func TestHTTP_PublicPricingSkipsInactiveHalls(t *testing.T) {
-	h := newHTTPEnv(t)
-
-	// Set the flag directly: UpdateHall refuses to deactivate a hall that still has
-	// an open upcoming showtime, and that guard is not what this test is about -
-	// the `active = TRUE` filter in PublicPriceList is.
-	h.must(h.db.Exec(`UPDATE halls SET active = FALSE WHERE id = ?`, h.hallID).Error)
-
-	status, _, body := h.call(http.MethodGet, "/api/v1/pricing", "", nil)
-	if status != http.StatusOK {
-		t.Fatalf("HTTP %d %v", status, body["message"])
-	}
-	if halls, _ := dataMap(body)["halls"].([]any); len(halls) != 0 {
-		t.Fatalf("halls = %d, want an inactive hall left out", len(halls))
+	prices, _ = data["prices"].(map[string]any)
+	if len(prices) != 4 {
+		t.Fatalf("prices = %v, want all four seat types still listed (at 0)", prices)
 	}
 }

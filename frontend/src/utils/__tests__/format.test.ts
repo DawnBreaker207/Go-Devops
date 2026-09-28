@@ -13,7 +13,7 @@ import {
 } from '@/utils/format';
 
 describe('format thoi gian', () => {
-  // Backend tra cung mot thoi diem duoi hai offset khac nhau:
+  // Backend returns one instant under two offsets:
   // GET /showtimes -> "+07:00", POST /admin/showtimes -> "Z".
   const withOffset = '2026-09-18T17:00:00+07:00';
   const asUtc = '2026-09-18T10:00:00Z';
@@ -24,7 +24,7 @@ describe('format thoi gian', () => {
   });
 
   it('khong troi theo mui gio cua may chay test', () => {
-    // Neu format bang dayjs tran, may UTC se ra 10:00 thay vi 17:00.
+    // Plain dayjs formatting would print 10:00 instead of 17:00 on UTC machines.
     expect(toCinemaTime(asUtc).hour()).toBe(17);
   });
 
@@ -79,7 +79,7 @@ describe('toApiInstant / fromApiInstant', () => {
   });
 
   it('cung mot thoi diem gui bang Z hay +07:00 deu ra cung gio rap', () => {
-    // 12:30Z va 19:30+07:00 la CUNG mot thoi diem - backend tra ca hai kieu.
+    // 12:30Z and 19:30+07:00 are the SAME instant - the backend returns both styles.
     const zulu = fromApiInstant('2026-09-22T12:30:00Z');
     const offset = fromApiInstant('2026-09-22T19:30:00+07:00');
     expect(zulu.format()).toBe(offset.format());

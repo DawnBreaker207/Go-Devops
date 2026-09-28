@@ -8,26 +8,23 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// Seat grid params. With Template set, Rows/SeatsPerRow/SeatTypes/Gaps/Spans/
-// ScreenPosition/AisleAfterCols default to it; explicit fields override.
+// With Template set, explicit fields override its defaults.
 type HallRequest struct {
 	Name        string `json:"name" binding:"required,min=1,max=255" example:"Phong 2"`
 	Template    string `json:"template" binding:"omitempty,oneof=small medium large" example:"medium"`
 	Rows        int    `json:"rows" binding:"omitempty,min=1,max=50" example:"8"`
 	SeatsPerRow int    `json:"seats_per_row" binding:"omitempty,min=1,max=50" example:"12"`
-	// Optional: rows not listed are standard.
 	SeatTypes map[string][]string `json:"seat_types"`
 	Gaps      []string            `json:"gaps" binding:"omitempty,max=200" example:"[\"D5\",\"D6\"]"`
 	// Anchors of 2-column seats, e.g. ["D3"] spans D3-D4; the neighbor keeps no seat.
 	Spans          []string `json:"spans" binding:"omitempty,max=100" example:"[\"D3\"]"`
 	ScreenPosition string   `json:"screen_position" binding:"omitempty,oneof=front back" example:"front"`
-	// Column numbers after which there is a vertical aisle, display only.
+	// Display only.
 	AisleAfterCols []int `json:"aisle_after_cols" binding:"omitempty,max=49" example:"4"`
-	// Must hold a positive price for each of the 4 seat types.
-	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:70000,vip:100000,couple:160000,recliner:130000"`
+	// Nil defaults to true.
+	Active *bool `json:"active"`
 }
 
-// UpdateHallRequest changes name/screen/aisle/active; omitted fields keep current value.
 type UpdateHallRequest struct {
 	Name           *string `json:"name" binding:"omitempty,min=1,max=255"`
 	ScreenPosition *string `json:"screen_position" binding:"omitempty,oneof=front back"`
@@ -35,18 +32,16 @@ type UpdateHallRequest struct {
 	Active         *bool   `json:"active"`
 }
 
-// CloneHallRequest copies the full seat grid (incl. manual edits) under a new name.
+// Copies the full seat grid, incl. manual edits.
 type CloneHallRequest struct {
-	Name       string `json:"name" binding:"required,min=1,max=255" example:"Phong 3"`
-	CopyPrices bool   `json:"copy_prices"`
+	Name string `json:"name" binding:"required,min=1,max=255" example:"Phong 3"`
 }
 
-// SeatSelector picks which seats a bulk change applies to; exactly one field.
+// Exactly one field.
 type SeatSelector struct {
 	Labels []string `json:"labels" binding:"omitempty,max=500" example:"[\"A1\",\"A2\"]"`
 	Rows   []string `json:"rows" binding:"omitempty,max=50" example:"[\"A\",\"B\"]"`
 	Cols   []int    `json:"cols" binding:"omitempty,max=50" example:"1"`
-	// Inclusive rectangle, e.g. "A1:C4".
 	Range string `json:"range" binding:"omitempty,max=16" example:"A1:C4"`
 }
 
@@ -56,7 +51,7 @@ type SeatChange struct {
 	IsGap    *bool        `json:"is_gap"`
 }
 
-// BulkSeatUpdateRequest applies every change in one transaction; one failure rolls all back.
+// One transaction; one failure rolls all back.
 type BulkSeatUpdateRequest struct {
 	Changes []SeatChange `json:"changes" binding:"required,min=1,max=50,dive"`
 }
@@ -69,22 +64,18 @@ type HallTemplateResponse struct {
 	ByType      map[string]int `json:"seat_count_by_type"`
 }
 
-type PriceRequest struct {
-	Prices map[string]int64 `json:"prices" binding:"required" example:"standard:80000,vip:120000"`
-}
-
 type SeatUpdateRequest struct {
 	SeatType string `json:"seat_type" binding:"omitempty,oneof=standard vip couple recliner"`
 	IsGap    *bool  `json:"is_gap"`
 }
 
-// MergeSeatsRequest turns two adjacent standards into one couple (col_span=2); right seat deleted.
+// Two adjacent standards become one couple; right seat deleted.
 type MergeSeatsRequest struct {
 	LeftLabel  string `json:"left_label" binding:"required,max=8" example:"D3"`
 	RightLabel string `json:"right_label" binding:"required,max=8" example:"D4"`
 }
 
-// SplitSeatRequest turns one couple back into two standards; new seat at next column.
+// New seat at next column.
 type SplitSeatRequest struct {
 	Label string `json:"label" binding:"required,max=8" example:"D3"`
 }
@@ -159,12 +150,7 @@ func NewSeatResponses(seats []models.Seat) []SeatResponse {
 	return result
 }
 
-type HallPriceResponse struct {
-	SeatType string `json:"seat_type"`
-	Price    int64  `json:"price"`
-}
-
-// Excel-like row label to index: "A" -> 1, "AA" -> 27; 0 for an invalid label.
+// 0 for an invalid label.
 func RowNumber(label string) int {
 	n := 0
 	for _, ch := range strings.ToUpper(label) {
@@ -176,7 +162,6 @@ func RowNumber(label string) int {
 	return n
 }
 
-// 1-based row index to Excel-like label: 1 -> "A", 27 -> "AA".
 func RowLabel(n int) string {
 	var b strings.Builder
 	for n > 0 {
@@ -189,22 +174,4 @@ func RowLabel(n int) string {
 		s[i], s[j] = s[j], s[i]
 	}
 	return string(s)
-}
-
-// PublicHallPrices is one hall's price list for the public price page. Only
-// halls a customer can actually book appear (active, and all four seat types
-// priced) — the same gate the customer showtime query applies.
-type PublicHallPrices struct {
-	HallID   string `json:"hall_id"`
-	HallName string `json:"hall_name"`
-	// Keyed by seat type, whole VND. Always four entries.
-	Prices map[string]int64 `json:"prices"`
-}
-
-// PublicPriceListResponse is the whole price page in one payload. `from_price`
-// is the cheapest seat a customer can buy anywhere, which is the number a
-// "tickets from X" headline should use.
-type PublicPriceListResponse struct {
-	FromPrice int64              `json:"from_price"`
-	Halls     []PublicHallPrices `json:"halls"`
 }

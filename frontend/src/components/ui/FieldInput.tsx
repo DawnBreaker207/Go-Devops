@@ -6,7 +6,6 @@ export interface FieldInputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
 }
 
-/** Shared labeled input for customer auth forms. Fixed light colors by Figma design (form always sits on light, even inside dark overlays); unlike most customer components it never follows light/dark. */
 export const FieldInput = ({ label, hint, error, id, className, ...rest }: FieldInputProps) => (
   <div className="mb-3.5">
     <label htmlFor={id} className="mb-1.5 block text-[13px] text-[#444]">
@@ -14,8 +13,10 @@ export const FieldInput = ({ label, hint, error, id, className, ...rest }: Field
     </label>
     <input
       id={id}
+      aria-invalid={error ? true : undefined}
       className={[
-        'min-h-10 w-full rounded-lg border border-[var(--cp-surface-border)] bg-white px-3 text-sm text-[#141414]',
+        'min-h-10 w-full rounded-lg border bg-white px-3 text-sm text-[#141414]',
+        error ? 'border-danger' : 'border-[var(--cp-surface-border)]',
         'transition-[border-color] duration-fast ease-out focus:border-brand focus:outline-none',
         className ?? '',
       ]

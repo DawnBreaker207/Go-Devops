@@ -333,6 +333,7 @@ func TestConfirm_SlowPublisherDoesNotBlock(t *testing.T) {
 		PublicBaseURL: merchantURL,
 		HoldTTL:       10 * time.Minute,
 		MaxSeats:      4,
+		Pricing:       e.pricing,
 		Publisher:     blockingPublisher{},
 		Hub:           e.hub,
 	})

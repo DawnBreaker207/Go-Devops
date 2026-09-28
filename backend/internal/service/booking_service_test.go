@@ -219,7 +219,7 @@ func TestPayConfirm_HappyPath(t *testing.T) {
 	expectEvent(t, sub.Events, models.SeatStatusHeld, 3)
 
 	// E-HO9: a price change after the hold must not touch the booking.
-	e.must(e.db.Exec(`UPDATE hall_prices SET price = price * 2 WHERE hall_id = ?`, e.hallID).Error)
+	e.must(e.db.Exec(`UPDATE seat_base_prices SET price = price * 2`).Error)
 
 	pay, err := e.svc.Pay(e.ctx, u, h.BookingID, dto.PayRequest{Provider: "mock", ClientIP: "203.0.113.7"})
 	e.must(err)

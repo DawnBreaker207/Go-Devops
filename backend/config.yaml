@@ -106,11 +106,24 @@ payment:
       enabled: true
       display_name: "Cổng thử nghiệm (mock)"
       secret: dev-mock-secret-change-in-prod
+    # VNPay. Ships DISABLED and credential-less: fill tmn_code/hash_secret from the
+    # merchant portal (via env vars, not this file) and flip enabled to turn it on.
+    # Enabling it without credentials makes the server refuse to boot, on purpose.
+    #
+    # Two things must also be right outside this block, or the customer pays and the
+    # order never confirms:
+    #   * payment.public_base_url must be reachable FROM THE INTERNET - VNPay calls the
+    #     IPN from its own servers. The boot log warns when it is still localhost.
+    #   * payment.return_redirect_url must be an absolute URL to the frontend.
     vnpay:
       enabled: false
       display_name: "VNPay"
       tmn_code: ""
       hash_secret: ""
+      # Sandbox endpoints; swap both for the production pair when going live.
+      pay_url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+      api_url: https://sandbox.vnpayment.vn/merchant_webapi/api/transaction
+      locale: vn
 
 # Ticket emails use a mock mailer (no SMTP): each email is written as an
 # .html file into outbox_dir so it can be opened in a browser.

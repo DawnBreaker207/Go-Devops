@@ -1,4 +1,4 @@
-/** Standard BackEnd-CP envelope: { code, message, data }. */
+// Mirrors the Go response envelope { code, message, data }.
 export interface ApiResponse<T> {
   code: number;
   message: string;
@@ -26,7 +26,7 @@ export interface PageQuery {
 export interface ApiError {
   code: number;
   message: string;
-  details?: Record<string, string>;
-  // Stable machine-readable key (backend reason); absent on older errors.
   reason?: string;
+  rawMessage?: string;
+  details?: Record<string, string>;
 }

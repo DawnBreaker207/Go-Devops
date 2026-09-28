@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { App, Button, Input, Popconfirm, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import MovieFormModal from './components/MovieFormModal';
 import MoviePoster from './components/MoviePoster';
@@ -18,6 +17,13 @@ const STATUS_COLOR: Record<MovieStatus, string> = {
   coming_soon: 'blue',
   showing: 'green',
   ended: 'red',
+};
+
+/** The one-way quick-action path; `ended` and `showing` have no further forward step here -
+ *  going back a step (e.g. pulling a movie from `showing`) still goes through Edit. */
+const NEXT_STATUS: Partial<Record<MovieStatus, MovieStatus>> = {
+  draft: 'coming_soon',
+  coming_soon: 'showing',
 };
 
 export const MoviesPage = () => {
@@ -66,6 +72,36 @@ export const MoviesPage = () => {
     }
   };
 
+  const statusLabel = (status: MovieStatus) =>
+    t(`movie.status${status.charAt(0).toUpperCase()}${status.slice(1)}`);
+
+  // Shortcut to the next lifecycle step (draft -> coming_soon -> showing): full PUT replay of
+  // the row's own fields with only `status` changed, since PUT /movies/:id is a full replace.
+  const handlePromote = async (movie: Movie, nextStatus: MovieStatus) => {
+    try {
+      await updateMovie.mutateAsync({
+        id: movie.id,
+        payload: {
+          title: movie.title,
+          genre: movie.genre,
+          duration: movie.duration,
+          director: movie.director,
+          description: movie.description,
+          poster_url: movie.poster_url,
+          backdrop_url: movie.backdrop_url,
+          trailer_url: movie.trailer_url,
+          cast: movie.cast,
+          age_rating: movie.age_rating,
+          release_date: movie.release_date,
+          status: nextStatus,
+        },
+      });
+      message.success(t('movie.promotedTo', { status: statusLabel(nextStatus) }));
+    } catch (error) {
+      message.error(errorMessage(error, t('common.somethingWrong')));
+    }
+  };
+
   const columns: ColumnsType<Movie> = [
     {
       title: t('movie.cover'),
@@ -105,53 +141,66 @@ export const MoviesPage = () => {
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 120,
+      width: 150,
       align: 'right',
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            aria-label={`edit-${record.id}`}
-            onClick={() => openEdit(record)}
-          />
-          <Popconfirm
-            title={t('common.deleteConfirm')}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            onConfirm={() => handleDelete(record.id)}
-          >
+      render: (_, record) => {
+        const nextStatus = NEXT_STATUS[record.status];
+        return (
+          <Space>
+            {nextStatus ? (
+              <Popconfirm
+                title={t('movie.promoteConfirm', { status: statusLabel(nextStatus) })}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
+                onConfirm={() => void handlePromote(record, nextStatus)}
+              >
+                <Button
+                  type="text"
+                  icon={<PlayCircleOutlined />}
+                  aria-label={`promote-${record.id}`}
+                  title={t('movie.promoteTo', { status: statusLabel(nextStatus) })}
+                />
+              </Popconfirm>
+            ) : null}
             <Button
-              danger
               type="text"
-              icon={<DeleteOutlined />}
-              aria-label={`delete-${record.id}`}
+              icon={<EditOutlined />}
+              aria-label={`edit-${record.id}`}
+              onClick={() => openEdit(record)}
             />
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title={t('common.deleteConfirm')}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => handleDelete(record.id)}
+            >
+              <Button
+                danger
+                type="text"
+                icon={<DeleteOutlined />}
+                aria-label={`delete-${record.id}`}
+              />
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
   return (
     <>
-      <PageHeader
-        title={t('movie.title')}
-        extra={
-          <Space>
-            <Input.Search
-              allowClear
-              defaultValue={search}
-              placeholder={t('movie.searchPlaceholder')}
-              style={{ width: 280 }}
-              onSearch={setSearch}
-            />
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              {t('common.create')}
-            </Button>
-          </Space>
-        }
-      />
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          defaultValue={search}
+          placeholder={t('movie.searchPlaceholder')}
+          style={{ width: 280 }}
+          onSearch={setSearch}
+        />
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          {t('common.create')}
+        </Button>
+      </Space>
 
       <TableCard>
         <Table<Movie>

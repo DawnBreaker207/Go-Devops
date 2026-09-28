@@ -106,7 +106,8 @@ definitions:
       content:
         type: string
       slug:
-        description: Omitted slug auto-generates from title.
+        description: Auto-generated from title when omitted (a numeric suffix is appended
+          on a collision).
         example: khuyen-mai-thang-10
         maxLength: 255
         type: string
@@ -365,6 +366,10 @@ definitions:
     properties:
       active:
         type: boolean
+      campaign_id:
+        description: CampaignID is nil for a standalone code (PLAN_CAMPAIGN.md sections
+          1-10).
+        type: string
       code:
         type: string
       created_at:
@@ -395,7 +400,7 @@ definitions:
       code:
         type: string
       remaining:
-        description: Nil when the code has no max_uses (unlimited).
+        description: Remaining is nil when the code has no max_uses (unlimited).
         type: integer
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CampaignPublicResponse:
@@ -459,8 +464,6 @@ definitions:
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CloneHallRequest:
     properties:
-      copy_prices:
-        type: boolean
       name:
         example: Phong 3
         maxLength: 255
@@ -548,7 +551,9 @@ definitions:
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.CreateCampaignRequest:
     properties:
       active:
-        description: Omitted defaults to FALSE (draft until switched on explicitly).
+        description: |-
+          Omitted defaults to FALSE: a campaign is created as a draft, then
+          switched on explicitly once its codes/combos/articles are attached.
         type: boolean
       description:
         maxLength: 2000
@@ -660,7 +665,9 @@ definitions:
         example: percent
         type: string
       adjust_value:
-        description: 'Signed: negative discounts, positive surcharges.'
+        description: |-
+          Signed: negative is a discount, positive a surcharge. No sign is forced —
+          that is a business decision left open (PLAN_CAMPAIGN.md section 11).
         example: 10
         type: integer
       day_of_week:
@@ -777,6 +784,10 @@ definitions:
     properties:
       active:
         type: boolean
+      campaign_id:
+        description: CampaignID is nil for a standalone code (PLAN_CAMPAIGN.md sections
+          1-10).
+        type: string
       code:
         type: string
       created_at:
@@ -831,25 +842,12 @@ definitions:
       created_at:
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse:
-    properties:
-      from_price:
-        type: integer
-      prices:
-        additionalProperties:
-          format: int64
-          type: integer
-        type: object
-    type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse:
-    properties:
-      price:
-        type: integer
-      seat_type:
-        type: string
-    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest:
     properties:
+      active:
+        description: Nil defaults to true; a hall still being set up can be created
+          inactive.
+        type: boolean
       aisle_after_cols:
         description: Column numbers after which there is a vertical aisle, display
           only.
@@ -872,17 +870,6 @@ definitions:
         maxLength: 255
         minLength: 1
         type: string
-      prices:
-        additionalProperties:
-          format: int64
-          type: integer
-        description: Must hold a positive price for each of the 4 seat types.
-        example:
-          couple: 160000
-          recliner: 130000
-          standard: 70000
-          vip: 100000
-        type: object
       rows:
         example: 8
         maximum: 50
@@ -924,7 +911,6 @@ definitions:
         type: string
     required:
     - name
-    - prices
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallResponse:
     properties:
@@ -1366,19 +1352,6 @@ definitions:
       txn_ref:
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest:
-    properties:
-      prices:
-        additionalProperties:
-          format: int64
-          type: integer
-        example:
-          standard: 80000
-          vip: 120000
-        type: object
-    required:
-    - prices
-    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingQuoteResponse:
     properties:
       applied:
@@ -1417,27 +1390,15 @@ definitions:
       updated_at:
         type: string
     type: object
-  github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices:
-    properties:
-      hall_id:
-        type: string
-      hall_name:
-        type: string
-      prices:
-        additionalProperties:
-          format: int64
-          type: integer
-        description: Keyed by seat type, whole VND. Always four entries.
-        type: object
-    type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicPriceListResponse:
     properties:
       from_price:
         type: integer
-      halls:
-        items:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices'
-        type: array
+      prices:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.RedeemRequestBody:
     properties:
@@ -2123,6 +2084,9 @@ definitions:
         example: success
         type: string
       reason:
+        description: |-
+          Reason is a stable machine-readable key for an error ("discount_expired"), so the
+          frontend can translate without matching on the English sentence. Absent on success.
         type: string
     type: object
   github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Meta:
@@ -3698,87 +3662,6 @@ paths:
       summary: Regenerate a hall's whole seat grid
       tags:
       - halls
-  /admin/halls/{id}/prices:
-    get:
-      parameters:
-      - description: Hall ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse'
-                  type: array
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      security:
-      - BearerAuth: []
-      summary: Get the prices of a hall
-      tags:
-      - halls
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Hall ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Price per seat type
-        in: body
-        name: payload
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse'
-                  type: array
-              type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      security:
-      - BearerAuth: []
-      summary: Set prices for all seat types of a hall
-      tags:
-      - halls
   /admin/halls/{id}/seats:
     get:
       parameters:
@@ -3916,6 +3799,52 @@ paths:
       security:
       - BearerAuth: []
       summary: Change a seat's type or gap flag
+      tags:
+      - halls
+  /admin/halls/{id}/seats/columns:
+    post:
+      description: Never touches an existing seat - safe while the hall has a live
+        booking (409 only on an actual conflict), unlike regenerating the whole layout.
+      parameters:
+      - description: Hall ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
+      security:
+      - BearerAuth: []
+      summary: Append one new standard seat to every existing row, widening the hall
+        by one column
       tags:
       - halls
   /admin/halls/{id}/seats/merge:
@@ -6474,10 +6403,10 @@ paths:
       - payments
   /pricing:
     get:
-      description: 'Seat-type prices per bookable hall, plus the cheapest seat anywhere.
-        No auth: this is the customer price page. Only halls a customer can actually
-        book appear — active, and with all four seat types priced, the same gate the
-        customer showtime query uses.'
+      description: 'The global base price for each seat type, plus the cheapest configured
+        seat anywhere. No auth: this is the customer price page. Replaces the old
+        per-hall price list (PLAN_CAMPAIGN.md section 11.4, Phase 3) now that hall_prices
+        is gone - every hall shares the same prices.'
       produces:
       - application/json
       responses:
@@ -6495,30 +6424,6 @@ paths:
           schema:
             $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
       summary: Public ticket price list
-      tags:
-      - halls
-  /pricing/global:
-    get:
-      description: The global base price for each seat type, plus the cheapest configured
-        seat anywhere. No auth. Lives at /pricing/global because /pricing serves the
-        per-hall list.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-            - properties:
-                data:
-                  $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse'
-              type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body'
-      summary: Public global ticket price list
       tags:
       - pricing
   /pricing/quote:

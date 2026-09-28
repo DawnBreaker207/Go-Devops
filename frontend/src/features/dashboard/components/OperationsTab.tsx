@@ -227,12 +227,12 @@ export const OperationsTab = () => {
           title={t('dashboard.failedJobs')}
           count={alerts.failed_jobs.length}
           urgency="high"
-          viewAll={{ to: PATHS.batchJobs, label: t('dashboard.opsViewAll') }}
+          viewAll={{ to: PATHS.monitoring, label: t('dashboard.opsViewAll') }}
         >
           {alerts.failed_jobs.slice(0, 3).map((j) => (
             <QueueRow
               key={j.id}
-              to={PATHS.batchJobs}
+              to={PATHS.monitoring}
               code={j.job_name}
               middle={formatDateTime(j.started_at)}
               right=""

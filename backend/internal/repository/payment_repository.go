@@ -252,9 +252,7 @@ func (r *paymentRepository) DueForReconcile(ctx context.Context, limit int) ([]m
 	return out, nil
 }
 
-// StuckRefunds are refund attempts that have failed at least minAttempts
-// times in a row — the same threshold that triggers the payments.refund_stuck
-// alert audit row, surfaced here for the admin overview.
+// StuckRefunds failed >= minAttempts in a row; feeds refund_stuck alert + overview.
 func (r *paymentRepository) StuckRefunds(ctx context.Context, minAttempts, limit int) ([]models.Payment, error) {
 	var out []models.Payment
 	if err := r.db.WithContext(ctx).

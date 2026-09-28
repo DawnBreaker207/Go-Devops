@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Movie } from '@/types';
 import { movieBackdrop } from '../movieImage';
-import { youtubeEmbedUrl } from '../trailerEmbed';
+import { extractIframeSrc, youtubeEmbedUrl } from '../trailerEmbed';
+import PlayGlyph from './PlayGlyph';
 import {
   FOCUS_RING,
   HOME_HEADING,
@@ -14,28 +15,12 @@ import {
 } from '@/theme/customerTw';
 
 interface TrailersSectionProps {
-  /** Movies to draw trailers from; those without a `trailer_url` are skipped. */
   movies: Movie[];
 }
 
-/** Max thumbnails under the player, per the Figma. */
 const MAX_TRAILERS = 5;
 
-const PlayGlyph = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M10 8.2v7.6l6.2-3.8L10 8.2Z" fill="currentColor" />
-  </svg>
-);
-
-/** "Trailers" from QVisionShow frame 1-101: one large player over a row of up to five thumbnails,
- *  clicking a thumbnail swaps which trailer is featured.
- *
- *  Everything here is real: the list is the movies that actually carry a `trailer_url`, and the
- *  player is a click-to-load YouTube embed, so nothing is requested from YouTube until the viewer
- *  presses play. A movie whose trailer URL is not a YouTube link opens in a new tab instead of
- *  rendering a broken frame. When NO movie has a trailer the whole section returns null rather than
- *  showing an empty player. */
+// Each click reloads YouTube: site trailers open a new tab, missing trailers hide.
 export const TrailersSection = ({ movies }: TrailersSectionProps) => {
   const { t } = useTranslation();
   const withTrailer = movies.filter((movie) => movie.trailer_url).slice(0, MAX_TRAILERS);
@@ -44,9 +29,11 @@ export const TrailersSection = ({ movies }: TrailersSectionProps) => {
 
   if (withTrailer.length === 0) return null;
 
-  // Clamp a stale id after the list changes, the way the carousel clamps its index.
+  // Clamp the old id on list change, like the carousel.
   const active = withTrailer.find((movie) => movie.id === activeId) ?? withTrailer[0];
   const embed = youtubeEmbedUrl(active.trailer_url);
+  // A snippet iframe is not a valid href, so unwrap the URL first.
+  const rawUrl = extractIframeSrc((active.trailer_url ?? '').trim());
   const image = movieBackdrop(active);
 
   const select = (movie: Movie) => {
@@ -68,8 +55,7 @@ export const TrailersSection = ({ movies }: TrailersSectionProps) => {
             className="absolute inset-0 h-full w-full border-none"
             src={embed}
             title={t('customer.trailerOf', { title: active.title })}
-            // The real YouTube allow-list. `accelerated-download` is not a Permissions-Policy
-            // feature at all - Chrome rejects the whole token and logs an error.
+            // Non-allowlisted hosts break the whole chain in Chrome, so gate on the token.
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />
@@ -90,14 +76,13 @@ export const TrailersSection = ({ movies }: TrailersSectionProps) => {
               </button>
             ) : (
               <a
-                href={active.trailer_url}
+                href={rawUrl}
                 target="_blank"
                 rel="noreferrer"
                 aria-label={t('customer.trailerPlay', { title: active.title })}
                 className={`absolute inset-0 flex items-center justify-center no-underline ${FOCUS_RING}`}
               >
-                {/* Colour on the child: the unlayered `.cp-customer a` rule would otherwise paint
-                    this glyph brand instead of the white the frame draws. */}
+                {/* Colour on the child: unlayered `.cp-customer a` would otherwise paint this brand. */}
                 <span className={`text-white ${TRANSITION_FAST} hover-fine:text-brand`}>
                   <PlayGlyph size={72} />
                 </span>

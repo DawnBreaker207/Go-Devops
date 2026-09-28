@@ -4,7 +4,6 @@ import { Layout, theme as antdTheme } from 'antd';
 import Loading from '@/components/Loading';
 import { brandAlpha } from '@/theme';
 
-/** Ops-area shell (`/login`): centered antd Card on a light brand-tinted backdrop (no heavy components/logos here). */
 export const AuthLayout = () => {
   const { token } = antdTheme.useToken();
 

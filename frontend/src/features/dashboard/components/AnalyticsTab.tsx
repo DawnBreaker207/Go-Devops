@@ -179,8 +179,7 @@ export const AnalyticsTab = () => {
     );
   };
 
-  // Single-hall cinema: hall ranking is meaningless (one row, always 100%) -
-  // hide the hall cards and let films go full width.
+  // Single-hall cinema: hall ranking is meaningless (one row, always 100%), so hide it.
   const singleHall = data.halls.length <= 1;
 
   return (

@@ -8,12 +8,10 @@ import { formatDateTime, formatVND } from '@/utils/format';
 import { BOOKING_STATUS_COLOR, PAYMENT_STATUS_COLOR } from '../constants';
 
 interface OrderDetailDrawerProps {
-  /** Table row that opened the drawer; null means the drawer is closed. */
   order: AdminOrder | null;
   onClose: () => void;
 }
 
-/** Order detail drawer combining live detail with the opening row. */
 export const OrderDetailDrawer = ({ order, onClose }: OrderDetailDrawerProps) => {
   const { t } = useTranslation();
   const { data, isFetching, error } = useOrderDetail(order?.id ?? null);
@@ -99,7 +97,6 @@ export const OrderDetailDrawer = ({ order, onClose }: OrderDetailDrawerProps) =>
                   {customer.phone ? (
                     <Typography.Text type="secondary">{customer.phone}</Typography.Text>
                   ) : null}
-                  {/* Counter sales have no account; say so instead of leaving it blank. */}
                   {!customer.user_id ? (
                     <Typography.Text type="secondary">{t('booking.walkIn')}</Typography.Text>
                   ) : null}
@@ -120,8 +117,6 @@ export const OrderDetailDrawer = ({ order, onClose }: OrderDetailDrawerProps) =>
             <Descriptions.Item label={t('booking.createdAt')}>
               {formatDateTime(detail.created_at)}
             </Descriptions.Item>
-            {/* Three separate facts. The discount row only appears when there
-                is one, so an ordinary order reads exactly as it did before. */}
             <Descriptions.Item label={t('booking.subtotal')}>
               <span className="tabular-nums">{formatVND(detail.total_amount)}</span>
             </Descriptions.Item>

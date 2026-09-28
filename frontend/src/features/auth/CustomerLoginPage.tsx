@@ -11,7 +11,6 @@ interface LocationState {
   passwordReset?: boolean;
 }
 
-/** Customer login in the split shell. Form logic lives in CustomerLoginForm (shared with LoginBottomSheet). Direct links still land here; FilmPage's "Pick seats" uses the bottom sheet via useAuthCheckpoint to keep the selected show. */
 export const CustomerLoginPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();

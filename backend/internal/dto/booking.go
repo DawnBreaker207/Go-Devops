@@ -9,7 +9,7 @@ type HoldRequest struct {
 	IdempotencyKey string   `json:"idempotency_key" binding:"omitempty,min=1,max=128"`
 }
 
-// CounterSellRequest: walk-in sale, no account/provider; cash, confirmed immediately.
+// Walk-in sale: cash, confirmed immediately, no account/provider.
 type CounterSellRequest struct {
 	ShowID        string   `json:"show_id" binding:"required"`
 	SeatIDs       []string `json:"seat_ids" binding:"required,min=1"`
@@ -17,7 +17,7 @@ type CounterSellRequest struct {
 	CustomerPhone string   `json:"customer_phone" binding:"omitempty,max=20"`
 }
 
-// TicketQRResponse: ticket QR as base64 PNG (same encoding as ticket emails).
+// Base64 PNG, same encoding as ticket emails.
 type TicketQRResponse struct {
 	TicketID string `json:"ticket_id"`
 	Code     string `json:"code"`
@@ -42,17 +42,15 @@ type HoldResponse struct {
 	ReplacedBookingID string     `json:"replaced_booking_id,omitempty"`
 }
 
-// InitRequest opens a seatless PENDING booking; seats attach later via POST /orders/hold.
+// Seatless PENDING booking; seats attach later via POST /orders/hold.
 type InitRequest struct {
 	ShowID string `json:"show_id" binding:"required"`
 }
 
-// InitResponse mirrors the timing part of HoldResponse (no seats yet).
 type InitResponse struct {
 	BookingID  string    `json:"booking_id"`
 	ShowtimeID string    `json:"showtime_id"`
 	ExpiresAt  time.Time `json:"expires_at"`
-	// TTLSeconds lets the client run its ticker without clock math.
 	TTLSeconds int64 `json:"ttl_seconds"`
 	Reused     bool  `json:"reused"`
 }
@@ -62,7 +60,7 @@ type RefreshResponse struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// Empty provider uses the default (GET /payments/providers); amount always comes from the booking.
+// Empty provider uses the default; amount always comes from the booking.
 type PayRequest struct {
 	Provider string `json:"provider" binding:"omitempty,max=32" example:"mock"`
 	ClientIP string `json:"-"`
@@ -81,11 +79,7 @@ type OrderStatusResponse struct {
 	ShowtimeID   string `json:"showtime_id"`
 	Status       string `json:"status"`
 	StatusReason string `json:"status_reason,omitempty"`
-	// TotalAmount is the SEAT SUBTOTAL, before any discount. The amount the
-	// customer actually owes is PayableAmount below - a screen that renders
-	// total_amount as "amount due" is showing the wrong number on a discounted
-	// order. Both are always present (no omitempty) so the two can never be
-	// confused by one of them being absent.
+	// TotalAmount is the SEAT SUBTOTAL; PayableAmount is what the customer actually owes.
 	TotalAmount    int64           `json:"total_amount"`
 	DiscountAmount int64           `json:"discount_amount"`
 	PayableAmount  int64           `json:"payable_amount"`
@@ -108,7 +102,6 @@ type OrderShowtime struct {
 	Ended      bool      `json:"ended"`
 }
 
-// The frontend renders the QR from code.
 type TicketResponse struct {
 	ID             string `json:"id"`
 	ShowtimeSeatID string `json:"showtime_seat_id"`
@@ -128,7 +121,6 @@ type RedeemRequestBody struct {
 	ShowtimeID string `json:"showtime_id" binding:"required"`
 }
 
-// Status: ok | used | wrong_show | not_found | too_early | closed.
 type RedeemResponse struct {
 	Status     string     `json:"status"`
 	TicketID   string     `json:"ticket_id,omitempty"`
@@ -138,12 +130,11 @@ type RedeemResponse struct {
 	HallName   string     `json:"hall_name,omitempty"`
 	SeatLabel  string     `json:"seat_label,omitempty"`
 	StartAt    *time.Time `json:"start_at,omitempty"`
-	// Check-in window, so the gate can tell when the doors open or closed.
 	CheckinOpensAt  *time.Time `json:"checkin_opens_at,omitempty"`
 	CheckinClosesAt *time.Time `json:"checkin_closes_at,omitempty"`
 }
 
-// AdminOrderListQuery: operator list, unscoped (online + counter side by side).
+// Unscoped: online + counter side by side.
 // date/from/to bound created_at as local days, same as ShowtimeAdminListQuery.
 type AdminOrderListQuery struct {
 	PageQuery
@@ -154,7 +145,7 @@ type AdminOrderListQuery struct {
 	ShowtimeID    string `form:"showtime_id" binding:"omitempty,uuid"`
 	MovieID       string `form:"movie_id" binding:"omitempty,uuid"`
 	UserID        string `form:"user_id" binding:"omitempty,uuid"`
-	// Date narrows created_at to one calendar day and wins over From/To.
+	// Narrows to one calendar day, wins over From/To.
 	Date  string `form:"date" binding:"omitempty,datetime=2006-01-02"`
 	From  string `form:"from" binding:"omitempty,datetime=2006-01-02"`
 	To    string `form:"to" binding:"omitempty,datetime=2006-01-02"`
@@ -162,7 +153,7 @@ type AdminOrderListQuery struct {
 	Order string `form:"order" binding:"omitempty,oneof=asc desc"`
 }
 
-// OrderCustomer: online carries the account; counter carries only till name/phone.
+// Online carries the account; counter only till name/phone.
 type OrderCustomer struct {
 	UserID   string `json:"user_id,omitempty"`
 	Email    string `json:"email,omitempty"`
@@ -170,7 +161,6 @@ type OrderCustomer struct {
 	Phone    string `json:"phone,omitempty"`
 }
 
-// AdminOrderListItem: customer order shape plus buyer, sold_via and seat count.
 type AdminOrderListItem struct {
 	OrderStatusResponse
 	SoldVia  string         `json:"sold_via"`

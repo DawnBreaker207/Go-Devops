@@ -63,9 +63,7 @@ type EntityCountsRow struct {
 	Users     int64 `gorm:"column:users"`
 }
 
-// BreakdownRows: paid-money analytics for one window. Revenue follows the
-// closeDay rule (confirmed bookings by payment time); tickets count issued
-// tickets of those bookings. Top 10 each, by revenue.
+// BreakdownRows: paid-money analytics per window; confirmed bookings by paid_at.
 type BreakdownMovieRow struct {
 	MovieID string `gorm:"column:movie_id"`
 	Title   string `gorm:"column:title"`

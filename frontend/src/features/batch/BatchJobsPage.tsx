@@ -2,7 +2,6 @@ import { App, Alert, Button, Input, Space, Table, Tag } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import { useBatchJobList, useRunBatchJob } from './hooks/useBatchJobs';
 import { useListQuery } from '@/hooks/useListQuery';
@@ -19,7 +18,7 @@ const STATUS_COLOR: Record<BatchJobStatus, string> = {
   stopped: 'orange',
 };
 
-/** Job-run history + manual run of known jobs. Manual runs return 202 on enqueue; watch the table for the real outcome (it polls via refetchInterval in useBatchJobList). */
+// Manual runs answer 202; the real result shows up in the table via polling.
 export const BatchJobsPage = () => {
   const { t } = useTranslation();
   const { message, modal } = App.useApp();
@@ -106,18 +105,15 @@ export const BatchJobsPage = () => {
 
   return (
     <>
-      <PageHeader
-        title={t('batch.title')}
-        extra={
-          <Input.Search
-            allowClear
-            defaultValue={search}
-            placeholder={t('batch.searchPlaceholder')}
-            style={{ width: 260 }}
-            onSearch={setSearch}
-          />
-        }
-      />
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          defaultValue={search}
+          placeholder={t('batch.searchPlaceholder')}
+          style={{ width: 260 }}
+          onSearch={setSearch}
+        />
+      </Space>
 
       <Space wrap style={{ marginBottom: 16 }}>
         {BATCH_JOB_NAMES.map((name) => (

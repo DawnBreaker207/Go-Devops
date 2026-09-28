@@ -30,8 +30,7 @@ func NewBasePriceResponses(prices []models.SeatBasePrice) []BasePriceResponse {
 }
 
 // from_price is the cheapest CONFIGURED one.
-// Named Global*: hall-scoped PublicPriceListResponse already exists in hall.go.
-type GlobalPriceListResponse struct {
+type PublicPriceListResponse struct {
 	FromPrice int64            `json:"from_price"`
 	Prices    map[string]int64 `json:"prices"`
 }

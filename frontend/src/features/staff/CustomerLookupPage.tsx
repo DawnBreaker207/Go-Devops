@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Alert, Button, Input, Table, Typography } from 'antd';
+import { Alert, Button, Input, Space, Table, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import CustomerDetailDrawer from './components/CustomerDetailDrawer';
 import { useCustomerList } from './hooks/useCustomerLookup';
@@ -51,18 +50,15 @@ export const CustomerLookupPage = () => {
 
   return (
     <>
-      <PageHeader
-        title={t('customerLookup.title')}
-        extra={
-          <Input.Search
-            allowClear
-            defaultValue={search}
-            placeholder={t('customerLookup.searchPlaceholder')}
-            style={{ width: 320 }}
-            onSearch={setSearch}
-          />
-        }
-      />
+      <Space wrap style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          defaultValue={search}
+          placeholder={t('customerLookup.searchPlaceholder')}
+          style={{ width: 320 }}
+          onSearch={setSearch}
+        />
+      </Space>
 
       {error ? (
         <Alert

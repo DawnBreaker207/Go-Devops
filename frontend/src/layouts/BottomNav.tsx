@@ -4,7 +4,6 @@ import { PATHS, accountTicketsPath } from '@/routes/paths';
 import { useHasRole } from '@/hooks/useHasRole';
 import { INK_60 } from '@/theme/customerTw';
 
-/** 5 mobile items (<900px). "My tickets" is customer-only; the other 4 always show so the bar never jumps on login/logout. */
 export const BottomNav = () => {
   const { t } = useTranslation();
   const isCustomer = useHasRole('customer');

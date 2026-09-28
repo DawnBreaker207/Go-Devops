@@ -1,10 +1,20 @@
 import { useState } from 'react';
-import { App, Alert, Button, DatePicker, Popconfirm, Select, Space, Table, Tag } from 'antd';
+import {
+  App,
+  Alert,
+  Button,
+  DatePicker,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DeleteOutlined, EditOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import type dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import ShowtimeFormModal from './components/ShowtimeFormModal';
 import {
@@ -25,12 +35,11 @@ import { API_DATE_FORMAT, DATE_FORMAT, formatDateTime, toCinemaTime } from '@/ut
 const STATUS_COLOR: Record<ShowtimeStatus, string> = {
   open: 'green',
   closed: 'default',
-  // Cancelled is a refund, not a quiet close - it must not read as "default".
+  // Cancelled is a refund, not a quiet close - never the default color.
   cancelled: 'red',
 };
 
-/** A map, not a ternary. The old `value === 'open' ? 'Open' : 'Closed'` rendered
- *  a CANCELLED showtime as "closed", which is a different thing entirely. */
+// A map, not a ternary: a ternary once rendered CANCELLED as closed.
 const STATUS_LABEL_KEY: Record<ShowtimeStatus, string> = {
   open: 'showtime.statusOpen',
   closed: 'showtime.statusClosed',
@@ -44,7 +53,6 @@ export const ShowtimesPage = () => {
   const { message } = App.useApp();
 
   const { query, page, pageSize, setPage } = useListQuery();
-  // Screen-specific filters stay local; useListQuery owns only shared page/page_size/search.
   const [movieId, setMovieId] = useState<string>();
   const [hallId, setHallId] = useState<string>();
   const [status, setStatus] = useState<ShowtimeStatus>();
@@ -63,7 +71,7 @@ export const ShowtimesPage = () => {
     status,
     from: range?.[0]?.format(API_DATE_FORMAT),
     to: range?.[1]?.format(API_DATE_FORMAT),
-    // Time-ordered, so ascending with nearest first; backend default is start_at DESC.
+    // Nearest first; the backend defaults to start_at DESC.
     sort: 'start_at',
     order: 'asc',
   });
@@ -83,7 +91,7 @@ export const ShowtimesPage = () => {
     setModalOpen(true);
   };
 
-  // Don't catch here: the modal needs the raw error for input binding.
+  // Don't catch: the modal binds errors onto inputs itself.
   const handleSubmit = async (payload: ShowtimePayload) => {
     if (editing) {
       await updateShowtime.mutateAsync({ id: editing.id, payload });
@@ -101,14 +109,12 @@ export const ShowtimesPage = () => {
       await deleteShowtime.mutateAsync(id);
       message.success(t('common.deleteSuccess'));
     } catch (err) {
-      // Every showtime conflict shares 40900; tell apart by the backend message (already readable English), never swallow it.
+      // Every conflict shares 40900; tell apart by the backend sentence, never swallow it.
       message.error(errorMessage(err, t('common.somethingWrong')));
     }
   };
 
-  /** Cancel + refund. Separate from delete on purpose: DELETE is refused (409)
-   *  the moment a showtime has any booking, so this is the ONLY way to stop a
-   *  showtime that has already sold tickets — and it moves real money. */
+  // Cancel is a refund; DELETE 409s on any booking, so this is the only way to stop a sold showtime.
   const handleCancel = async (id: string) => {
     try {
       const result = await cancelShowtime.mutateAsync(id);
@@ -141,7 +147,7 @@ export const ShowtimesPage = () => {
       dataIndex: 'start_at',
       key: 'start_at',
       width: 170,
-      // Past shows stay visible (operator list) but dimmed so sellable ones scan first.
+      // Past shows stay visible but dimmed so sellable ones scan first.
       render: (value: string) => (
         <span style={toCinemaTime(value).isBefore(Date.now()) ? pastStyle : undefined}>
           {formatDateTime(value)}
@@ -172,48 +178,53 @@ export const ShowtimesPage = () => {
       width: 150,
       align: 'right',
       render: (_, record) => {
-        // A cancelled showtime is terminal: nothing left to edit, cancel or delete.
         const done = record.status === 'cancelled';
         return (
           <Space>
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              aria-label={`edit-${record.id}`}
-              disabled={done}
-              onClick={() => openEdit(record)}
-            />
-            <Popconfirm
-              title={t('showtime.cancelConfirm')}
-              description={t('showtime.cancelHint')}
-              okText={t('showtime.cancelCta')}
-              cancelText={t('common.cancel')}
-              okButtonProps={{ danger: true, loading: cancelShowtime.isPending }}
-              onConfirm={() => handleCancel(record.id)}
-            >
+            <Tooltip title={t('common.edit')}>
               <Button
-                danger
                 type="text"
-                icon={<StopOutlined />}
-                aria-label={`cancel-${record.id}`}
+                icon={<EditOutlined />}
+                aria-label={`edit-${record.id}`}
                 disabled={done}
+                onClick={() => openEdit(record)}
               />
-            </Popconfirm>
-            <Popconfirm
-              title={t('showtime.deleteConfirm')}
-              description={t('showtime.deleteHint')}
-              okText={t('common.confirm')}
-              cancelText={t('common.cancel')}
-              onConfirm={() => handleDelete(record.id)}
-            >
-              <Button
-                danger
-                type="text"
-                icon={<DeleteOutlined />}
-                aria-label={`delete-${record.id}`}
-                disabled={done}
-              />
-            </Popconfirm>
+            </Tooltip>
+            <Tooltip title={t('showtime.cancelCta')}>
+              <Popconfirm
+                title={t('showtime.cancelConfirm')}
+                description={t('showtime.cancelHint')}
+                okText={t('showtime.cancelCta')}
+                cancelText={t('common.cancel')}
+                okButtonProps={{ danger: true, loading: cancelShowtime.isPending }}
+                onConfirm={() => handleCancel(record.id)}
+              >
+                <Button
+                  danger
+                  type="text"
+                  icon={<StopOutlined />}
+                  aria-label={`cancel-${record.id}`}
+                  disabled={done}
+                />
+              </Popconfirm>
+            </Tooltip>
+            <Tooltip title={t('common.delete')}>
+              <Popconfirm
+                title={t('showtime.deleteConfirm')}
+                description={t('showtime.deleteHint')}
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
+                onConfirm={() => handleDelete(record.id)}
+              >
+                <Button
+                  danger
+                  type="text"
+                  icon={<DeleteOutlined />}
+                  aria-label={`delete-${record.id}`}
+                  disabled={done}
+                />
+              </Popconfirm>
+            </Tooltip>
           </Space>
         );
       },
@@ -224,16 +235,10 @@ export const ShowtimesPage = () => {
 
   return (
     <>
-      <PageHeader
-        title={t('showtime.title')}
-        extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            {t('common.create')}
-          </Button>
-        }
-      />
-
       <Space wrap style={{ marginBottom: 16 }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          {t('common.create')}
+        </Button>
         <Select
           allowClear
           showSearch
@@ -284,7 +289,6 @@ export const ShowtimesPage = () => {
         />
       </Space>
 
-      {/* List-level failure blocks the screen: inline Alert, not a toast. */}
       {error ? (
         <Alert
           type="error"

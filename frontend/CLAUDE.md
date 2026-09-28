@@ -1,7 +1,8 @@
 # FrontEnd-CP — Claude context
 
 Auto-loaded when a session opens here, and lazily when a session at `CinemaProject/` reads a file in this repo.
-Keep <280 lines (raised from 200 on 2026-09-22 — the project now has two zones to describe). Deep dives: `.claude/skills/fe-page/api-contract.md` (what the backend really returns),
+Keep <295 lines (200 -> 280 on 2026-09-22 for the second zone; -> 295 on 2026-09-26 for the account
+module and the reason-keyed error translation). Deep dives: `.claude/skills/fe-page/api-contract.md` (what the backend really returns),
 `.claude/context/decisions.md` (the conventions this repo had NOT decided yet — read it before inventing one),
 and `.claude/context/figma.md` (the design reference: how to open it, every frame's node-id, per-screen specs).
 This file cites symbol + file, not line numbers — line numbers drift, grep the symbol.
@@ -15,14 +16,16 @@ nothing alike on purpose — see "Two zones" below.
 `hall` (incl. a seat-grid editor at `/halls/:id/seats`), `booking`, `user`, `report`, `staff` (box office +
 customer lookup), `audit` (audit-log viewer), `batch` (background jobs), `profile`. 11 menu entries.
 
-**Customer zone** (`CustomerLayout`, Tailwind): `browse` (banner carousel + Now/Coming tabs + poster grid,
-`/films`, film detail with a day strip, plus static `/pricing` `/cinema` `/offers`), `booking-flow` (a
+**Customer zone** (`CustomerLayout`, Tailwind): `browse` (the home — rebuilt 2026-09-25 on the **QVisionShow**
+Figma frame: a full-bleed hero carousel, Now/Coming tabs, a grid of **wide 3:2** `MovieCardWide`s with a
+"Show more", and a real `TrailersSection`; `/films` keeps the portrait `PosterCard`, film detail with a day
+strip, plus static `/pricing` `/cinema` `/offers`), `booking-flow` (a
 **single route** `/select-seat/:showtimeId` holding a 3-step wizard — seats, combos, confirm+pay — then
 `/payment-result` and `/booking-success/:bookingId`), and `auth` (customer login, register, password
 recovery). "My tickets" is a **tab inside `/account`**, not its own route.
 
 Read `../.claude/context/cross-repo-gotchas.md` for the response-shape traps before adding a screen — it also
-lists the two features that exist in the UI with no backend behind them.
+used to list two UI features with no backend behind them; both were closed on 2026-09-22.
 
 **The visual language comes from a Figma file**; the information architecture does not — it mirrors the
 backend. **Before building a screen, open its Figma frame** and follow it: `.claude/context/figma.md` has every
@@ -52,7 +55,9 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
 - `src/api/<domain>.api.ts` — one `<domain>Api` object literal of arrow methods.
 - `src/features/<domain>/` — singular folder, **plural** page (`movie/MoviesPage.tsx`), plus `components/`,
   `hooks/`, `constants.ts`, `__tests__/`. Domains: `auth`, `dashboard`, `movie`, `showtime`, `hall`, `booking`,
-  `user`, `report`, `staff`, `audit`, `batch`, `profile`, `browse`, `booking-flow`.
+  `user`, `report`, `staff`, `audit`, `batch`, `profile`, `browse`, `booking-flow`, `account`.
+  `account` is the CUSTOMER account centre (`AccountPage` + eight tab sections), moved out of `browse` on
+  2026-09-26 — `browse` is movie browsing only. `user`/`profile` remain the OPERATOR ones; do not merge them.
   `auth` holds BOTH the operator `LoginPage` (an antd card in `AuthLayout`) and the customer account screens
   (a split panel) — they look nothing alike on purpose.
 - `src/components/` — cross-feature antd pieces: `Loading`, `PageHeader`, `TableCard`, `ErrorBoundary` (the
@@ -75,8 +80,14 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
   `appStore` (theme/language/siderCollapsed).
 - `src/types/` — hand-written mirrors of the Go DTOs, re-exported from `index.ts`.
 - `src/utils/` — `storage.ts` (`tokenStorage`, all keys prefixed `cp_`), `format.ts` (date/duration/money,
-  zone pinned to `Asia/Ho_Chi_Minh`), `error.ts` (`isApiError`, `errorMessage`, `fieldErrorsOf`),
-  `form.ts` (`applyApiFieldErrors`).
+  zone pinned to `Asia/Ho_Chi_Minh`), `error.ts` (`isApiError`, `errorMessage`, `fieldErrorsOf`,
+  `reasonMessage`, `isRecoverableRefreshError`), `errorReasons.ts`, `form.ts` (`applyApiFieldErrors`).
+  **Backend errors are already Vietnamese by the time a screen sees them.** `normalizeError` in
+  `api/client.ts` swaps `message` for `t('err.<reason>')` when the envelope carries a stable `reason`, so all
+  ~79 existing `errorMessage(...)` sites are translated without knowing; the untranslated sentence stays on
+  `rawMessage`. Never match on the English sentence — `errorReasons.test.ts` pins every key against both
+  locales, and `errorReasons.ts` is hand-mirrored from `BackEnd-CP/pkg/errors/errors.go`, so a sentinel added
+  upstream must be copied down.
 - `src/locales/` — `i18n.ts` + `vi.json` + `en.json`.
 - `src/theme/` — `tokens.ts` is the single source of every colour; `index.ts` maps them onto antd via
   `buildTheme(mode)` and re-exports them; **`customerTw.ts` holds the static Tailwind class strings** the
@@ -88,21 +99,32 @@ QueryClientProvider > RouterProvider`. The `QueryClient` is created once via `us
 
 This is the single most important thing to get right before touching a screen.
 
-|            | Operator zone                                 | Customer zone                                |
-| ---------- | --------------------------------------------- | -------------------------------------------- |
-| Shell      | `MainLayout` / `AuthLayout`                   | `CustomerLayout`                             |
-| Components | antd (Table, Form, Modal, DatePicker)         | `src/components/ui/*` + Tailwind utilities   |
-| Colour     | antd tokens via `antdTheme.useToken()`        | `customerTw.ts` alphas of `--cp-ink-rgb`     |
-| Dark mode  | antd `darkAlgorithm`                          | its OWN light/dark switch (`appStore.theme`) |
-| Errors     | `message.error` toast / inline antd `<Alert>` | `<Notice variant="error">`                   |
-| Empty      | antd `<Empty/>`                               | `<EmptyState>`                               |
+|            | Operator zone                                 | Customer zone                               |
+| ---------- | --------------------------------------------- | ------------------------------------------- |
+| Shell      | `MainLayout` / `AuthLayout`                   | `CustomerLayout`                            |
+| Components | antd (Table, Form, Modal, DatePicker)         | `src/components/ui/*` + Tailwind utilities  |
+| Colour     | antd tokens via `antdTheme.useToken()`        | `customerTw.ts` alphas of `--cp-ink-rgb`    |
+| Dark mode  | antd `darkAlgorithm`                          | own switch — `appStore.customerTheme`, DARK |
+| Errors     | `message.error` toast / inline antd `<Alert>` | `<Notice variant="error">`                  |
+| Empty      | antd `<Empty/>`                               | `<EmptyState>`                              |
 
 **Never mix them.** An antd `Table` on a customer screen drags in the whole operator token system; a raw
 Tailwind utility on an operator screen bypasses `darkAlgorithm` and breaks dark mode.
 
-Two customer routes carry layout flags in their `handle`, which `CustomerLayout` reads via `useMatches()`:
-`forceDark` (seat map, checkout, tickets — the seat palette only reads correctly on dark) and `fullBleed` (the
-account split panel, which must escape `<main>`'s max-width). Set them there, not as props.
+Customer routes carry layout flags in their `handle`, which `CustomerLayout` reads via `useMatches()`:
+`forceDark` (seat map, checkout, tickets — the seat palette only reads correctly on dark), `fullBleed` (the
+account split panel and the home, which must escape `<main>`'s max-width AND padding, so every section then
+carries its own container) and `overlayHeader` (the home only — the header floats on the hero with no bar,
+gaining its background on scroll). Set them there, not as props.
+
+`overlayHeader`'s negative margin is CONSTANT for the life of the page; only the background changes on scroll.
+Tying the margin to scroll instead jumped the page down 80px mid-scroll — asking for `scrollY` 200 landed on 280.
+
+**Two unlayered CSS rules beat every Tailwind utility on an `<a>`**: `.cp-customer a { color: var(--cp-brand) }`
+in `index.css`, and an `a { background-color: transparent }` antd injects at runtime. A colour or a fill set on
+an anchor therefore parses, sits in the class list and paints nothing — it cost the card titles, the whole nav
+and the active nav chip's brand fill. The fix is never `!important`: move the declaration to an inner `<span>`,
+because a direct declaration always beats an inherited one whatever the layers do.
 
 ## Critical conventions
 
@@ -187,12 +209,15 @@ customer screens use Tailwind utilities over the same tokens. No CSS modules, no
 Use `import type` for type-only imports. Model enums as string unions (`'draft' | 'showing' | 'ended'`) with a
 `Record<Union, string>` for labels — no TS `enum` anywhere.
 
-**Comments.** Un-accented Vietnamese, sparingly, only for non-obvious intent. Match the existing style.
+**Comments.** English only — the un-accented Vietnamese convention was retired on 2026-09-28 and the whole
+`src/` tree was translated. Keep them sparse: one line, only for intent the code cannot show (why a hack exists,
+a backend contract, a race/fencing rule). Never restate the code, never a banner, never an ad/filter note.
+`/// <reference ... />` and swagger annotations are not optional.
 
 ## Never
 
 - Never build a screen against an endpoint you have not found in `BackEnd-CP/internal/router/router.go`.
-  `docs/swagger.json` documents 89 of the 95 operations, so 6 aliases are invisible to it.
+  `docs/swagger.json` documents 102 of the 108 operations, so 6 aliases are invisible to it.
 - Never assume the response is `{items, meta}` — several list endpoints return a bare array.
 - Never send `ApiResponse<...>` through `unwrap()` for `DELETE /admin/halls/:id` or `DELETE /users/me`: both
   answer **204 with an empty body**.
@@ -244,7 +269,7 @@ Use `import type` for type-only imports. Model enums as string unions (`'draft' 
 | Typecheck only   | `npx tsc --noEmit -p tsconfig.app.json`          | **passes today**; fastest correctness gate                                                                                 |
 | Lint             | `npm run lint` / `npm run lint:fix`              | **passes today**                                                                                                           |
 | Format           | `npm run format`                                 | `src/` only. Root config files are still covered by lint-staged, which basename-matches `*.{ts,tsx}` and `*.{css,json,md}` |
-| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **12 files / 172 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach             |
+| Tests            | `npm test` (`vitest run`) / `npm run test:watch` | **17 files / 210 tests pass today**; no coverage provider installed. Stores reset in `setupTests.ts` afterEach             |
 | E2E              | `npm run test:e2e`                               | Playwright, booking flow. Needs the stack up on :3000 and :8080; reports are git-ignored                                   |
 | Install          | `npm install`                                    | **Mandatory after a pull** — `npm ls --depth=0` reports lockfile drift                                                     |
 | Production build | `npm run build` (`tsc -b && vite build`)         | typecheck then bundle to `dist/`                                                                                           |

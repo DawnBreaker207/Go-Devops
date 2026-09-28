@@ -9,10 +9,9 @@ export const SEAT_TYPE_STYLE: Record<SeatType, { bg: string; fg: string }> = {
   recliner: seatTypeToken.recliner,
 };
 
-/** Price form scale: whole VND, no minor units. */
-export const MIN_SEAT_PRICE = 1;
-export const MAX_SEAT_PRICE = 100_000_000;
-
 /** Backend ceiling on dto.HallRequest (binding min=1, max=50). */
 export const MAX_ROWS = 50;
 export const MAX_SEATS_PER_ROW = 50;
+
+/** Quick-create's starting row width - 1 would trap every row at a single seat. */
+export const QUICK_CREATE_SEATS_PER_ROW = 10;

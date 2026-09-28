@@ -39,10 +39,8 @@ func Init(env, level string) error {
 	return nil
 }
 
-// L returns the current logger.
 func L() *zap.Logger { return global }
 
-// Sync flushes buffers before the program exits.
 func Sync() { _ = global.Sync() }
 
 func Info(msg string, fields ...zap.Field)  { wrapper.Info(msg, fields...) }

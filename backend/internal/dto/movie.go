@@ -15,17 +15,16 @@ type MovieRequest struct {
 	Director    string `json:"director" binding:"required,max=255" example:"Christopher Nolan"`
 	Description string `json:"description" binding:"omitempty,max=5000"`
 	PosterURL   string `json:"poster_url" binding:"omitempty,url,max=512"`
-	// BackdropURL is the landscape still used by the customer home hero and cards.
+	// Landscape still for the customer home hero and cards.
 	BackdropURL string `json:"backdrop_url" binding:"omitempty,url,max=512"`
 	TrailerURL  string `json:"trailer_url" binding:"omitempty,url,max=512" example:"https://www.youtube.com/watch?v=YoHD9XEInc0"`
 	Cast        string `json:"cast" binding:"omitempty,max=2000" example:"Leonardo DiCaprio, Joseph Gordon-Levitt"`
-	// AgeRating is Vietnamese film classification; empty defaults to P.
+	// Vietnamese film classification; empty defaults to P.
 	AgeRating   string `json:"age_rating" binding:"omitempty,oneof=P K T13 T16 T18" example:"T18"`
 	ReleaseDate string `json:"release_date" binding:"required,datetime=2006-01-02" example:"2010-07-16"`
 	Status      string `json:"status" binding:"required,oneof=draft coming_soon showing ended" example:"showing"`
 }
 
-// Binding validates the format, so errors only occur on direct calls.
 func (r MovieRequest) ParseReleaseDate() (time.Time, error) {
 	return time.Parse(DateLayout, r.ReleaseDate)
 }

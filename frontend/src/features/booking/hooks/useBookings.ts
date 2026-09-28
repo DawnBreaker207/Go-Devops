@@ -11,7 +11,7 @@ export const useAdminOrderList = (query: AdminOrderListQuery) =>
     placeholderData: (previous) => previous,
   });
 
-/** Empty id means the drawer is closed; fetch nothing. */
+// Empty id means the drawer is closed; fetch nothing.
 export const useOrderDetail = (id: string | null) =>
   useQuery({
     queryKey: [BOOKING_QUERY_KEY, 'detail', id],

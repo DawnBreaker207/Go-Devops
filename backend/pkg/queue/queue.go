@@ -25,7 +25,6 @@ const (
 
 var errClosed = errors.New("queue client is closed")
 
-// Client manages a connection to one RabbitMQ broker.
 type Client struct {
 	url    string
 	mu     sync.Mutex
@@ -33,7 +32,6 @@ type Client struct {
 	closed bool
 }
 
-// Dial opens the initial connection to the broker.
 func Dial(url string) (*Client, error) {
 	conn, err := dial(url)
 	if err != nil {
@@ -74,7 +72,6 @@ func (c *Client) Publish(ctx context.Context, queueName string, body []byte) err
 	return err
 }
 
-// connection returns the live connection, dialing a new one when it dropped.
 func (c *Client) connection() (*amqp.Connection, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

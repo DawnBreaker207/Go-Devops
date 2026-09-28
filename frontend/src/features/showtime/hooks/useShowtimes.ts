@@ -7,14 +7,12 @@ import type { ShowtimeListQuery, ShowtimePayload } from '@/types';
 
 export const SHOWTIME_QUERY_KEY = 'showtimes';
 
-/** Refresh all showtime caches after a mutation. */
 const invalidateShowtimeCaches = (queryClient: ReturnType<typeof useQueryClient>) => {
   queryClient.invalidateQueries({ queryKey: [SHOWTIME_QUERY_KEY] });
   queryClient.invalidateQueries({ queryKey: [BROWSE_QUERY_KEY] });
 };
 
-// The hall list belongs to the hall domain; re-export so there is exactly ONE 'halls' cache key
-// and one place defining it.
+// The hall list belongs to the hall domain; re-export for exactly one 'halls' cache key.
 export { useHallOptions } from '@/features/hall/hooks/useHalls';
 
 export const useShowtimeList = (query: ShowtimeListQuery) =>
@@ -22,13 +20,12 @@ export const useShowtimeList = (query: ShowtimeListQuery) =>
     queryKey: [SHOWTIME_QUERY_KEY, query],
     queryFn: () => showtimeApi.list(query),
     placeholderData: (previous) => previous,
-    // The same admin is editing this list (proactive invalidate above) -
-    // no refetch-on-mount needed within one short working session.
+    // Same admin just edited this list, so skip refetching within one short working session.
     staleTime: 30_000,
   });
 
-/** Movie picker list for the showtime form. */
-const PICKER_PAGE_SIZE = 100;
+/** Shared picker page size (backend hard ceiling is 100). */
+export const PICKER_PAGE_SIZE = 100;
 
 export const useMovieOptions = () =>
   useQuery({
@@ -54,9 +51,7 @@ export const useUpdateShowtime = () => {
   });
 };
 
-/** Cancel + refund. Invalidates the showtime list AND the order/booking caches:
- *  the cascade flips paid bookings to `refunded`, so a stale order list would
- *  keep showing them as confirmed. */
+// Cancelling refunds: the cascade flips paid bookings to refunded, so invalidate the order/booking caches too.
 export const useCancelShowtime = () => {
   const queryClient = useQueryClient();
   return useMutation({

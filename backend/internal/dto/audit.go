@@ -6,8 +6,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// AuditLogListQuery filters the admin audit trail. from/to bound created_at
-// (RFC 3339 or YYYY-MM-DD), the same convention as the daily report.
+// from/to bound created_at (RFC 3339 or YYYY-MM-DD), same as the daily report.
 type AuditLogListQuery struct {
 	PageQuery
 	Action       string `form:"action" binding:"omitempty,max=64"`
@@ -20,7 +19,6 @@ type AuditLogListQuery struct {
 	To           string `form:"to" binding:"omitempty"`
 }
 
-// AuditLogResponse mirrors models.AuditLog for the admin read API.
 type AuditLogResponse struct {
 	ID           string         `json:"id"`
 	ActorID      string         `json:"actor_id,omitempty"`

@@ -9,7 +9,6 @@ import { authApi } from '@/api/auth.api';
 import { PATHS } from '@/routes/paths';
 import { errorMessage, fieldErrorsOf } from '@/utils/error';
 
-/** Step 2: reset via ?token= from the email link. */
 export const ResetPasswordPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -18,19 +17,22 @@ export const ResetPasswordPage = () => {
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    setFieldErrors({});
 
-    if (password !== confirm) {
-      setFieldErrors({ confirm: t('customer.passwordMismatch') });
-      return;
+    const nextFieldErrors: Record<string, string> = {};
+    if (!password) nextFieldErrors.new_password = t('auth.passwordRequired');
+    if (!confirm) nextFieldErrors.confirm = t('common.requiredField');
+    if (!nextFieldErrors.confirm && password !== confirm) {
+      nextFieldErrors.confirm = t('customer.passwordMismatch');
     }
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) return;
 
     setBusy(true);
     try {
@@ -71,8 +73,13 @@ export const ResetPasswordPage = () => {
             required
             minLength={6}
             maxLength={72}
+            placeholder="••••••"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (fieldErrors.new_password)
+                setFieldErrors((current) => ({ ...current, new_password: undefined }));
+            }}
             error={fieldErrors.new_password}
           />
 
@@ -81,8 +88,13 @@ export const ResetPasswordPage = () => {
             label={t('customer.confirmPassword')}
             type="password"
             required
+            placeholder="••••••"
             value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
+            onChange={(event) => {
+              setConfirm(event.target.value);
+              if (fieldErrors.confirm)
+                setFieldErrors((current) => ({ ...current, confirm: undefined }));
+            }}
             error={fieldErrors.confirm}
           />
 

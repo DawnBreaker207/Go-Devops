@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import PosterCard from './components/PosterCard';
-import PosterGridSkeleton from './components/PosterGridSkeleton';
+import MovieCardWide from './components/MovieCardWide';
+import WideGridSkeleton from './components/WideGridSkeleton';
 import BrowseTabs, { type BrowseTab } from './components/BrowseTabs';
 import BookingModal from './components/BookingModal';
 import { useNowShowing } from './hooks/useBrowse';
@@ -12,7 +12,7 @@ import Notice from '@/components/ui/Notice';
 import EmptyState from '@/components/ui/EmptyState';
 import Panel from '@/components/ui/Panel';
 import SectionHead from '@/components/ui/SectionHead';
-import { BROWSE_GRID } from '@/theme/customerTw';
+import { HOME_GRID } from '@/theme/customerTw';
 
 const PAGE_SIZE = 100;
 
@@ -55,7 +55,7 @@ export const FilmsPage = () => {
           <Notice variant="error">{errorMessage(error, t('common.somethingWrong'))}</Notice>
         ) : null}
 
-        {isLoading && tab !== 'special' ? <PosterGridSkeleton /> : null}
+        {isLoading && tab !== 'special' ? <WideGridSkeleton count={12} /> : null}
 
         {!isLoading && visible.length === 0 && !error ? (
           <EmptyState>
@@ -68,9 +68,14 @@ export const FilmsPage = () => {
         ) : null}
 
         {visible.length > 0 ? (
-          <div className={BROWSE_GRID}>
-            {visible.map((movie) => (
-              <PosterCard key={movie.id} movie={movie} onBook={setBookingMovie} />
+          <div className={HOME_GRID}>
+            {visible.map((movie, i) => (
+              <MovieCardWide
+                key={movie.id}
+                movie={movie}
+                onBook={movie.status === 'showing' ? setBookingMovie : undefined}
+                eager={i < 4}
+              />
             ))}
           </div>
         ) : null}

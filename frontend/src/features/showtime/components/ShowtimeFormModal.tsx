@@ -1,4 +1,4 @@
-import { App, DatePicker, Form, Modal, Select } from 'antd';
+import { App, DatePicker, Form, Modal, Select, Typography } from 'antd';
 import type dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import type { Showtime, ShowtimePayload } from '@/types';
@@ -11,9 +11,7 @@ interface FormValues {
   movie_id: string;
   hall_id: string;
   start_at: dayjs.Dayjs;
-  /** Only the SETTABLE statuses: the select offers SHOWTIME_STATUSES, and a
-   *  full-replace PUT carrying 'cancelled' would mark a showtime cancelled while
-   *  leaving its paid bookings alone. Cancelling goes through its own endpoint. */
+  // Cancelling goes through its own endpoint; this PUT only takes open/closed.
   status: 'open' | 'closed';
 }
 
@@ -22,7 +20,7 @@ interface ShowtimeFormModalProps {
   showtime: Showtime | null;
   confirmLoading: boolean;
   onCancel: () => void;
-  /** Throw on failure so the modal stays open and surfaces it. */
+  // Throw so the modal stays open binding errors onto inputs.
   onSubmit: (payload: ShowtimePayload) => Promise<void>;
 }
 
@@ -43,14 +41,20 @@ export const ShowtimeFormModal = ({
   const movies = useMovieOptions();
   const halls = useHallOptions();
 
-  // Seed via initialValues, never via setFieldsValue in a useEffect (StrictMode would wipe the values).
+  // end_at is derived by the backend from runtime; shown here as preview only.
+  const watchedMovieId = Form.useWatch('movie_id', form);
+  const watchedStartAt = Form.useWatch('start_at', form);
+  const selectedMovie = movies.data?.items.find((m) => m.id === watchedMovieId);
+  const estimatedEndAt =
+    selectedMovie && watchedStartAt ? watchedStartAt.add(selectedMovie.duration, 'minute') : null;
+
+  // Seed via initialValues, never setFieldsValue in an effect: StrictMode wipes it.
   const initialValues: Partial<FormValues> = showtime
     ? {
         movie_id: showtime.movie_id,
         hall_id: showtime.hall_id,
         start_at: fromApiInstant(showtime.start_at),
-        // A cancelled showtime is terminal; the select cannot show that value,
-        // and the form is disabled for it anyway (see ShowtimesPage).
+        // Cancelled is terminal and unpickable; the form disables itself too.
         status: showtime.status === 'cancelled' ? 'closed' : showtime.status,
       }
     : { status: 'open' };
@@ -58,7 +62,7 @@ export const ShowtimeFormModal = ({
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
-      // PUT requires the full movie_id + hall_id + start_at even for a status-only change.
+      // PUT wants full movie+hall+start_at even for a status-only change.
       await onSubmit({
         movie_id: values.movie_id,
         hall_id: values.hall_id,
@@ -100,9 +104,7 @@ export const ShowtimeFormModal = ({
             placeholder={t('showtime.moviePlaceholder')}
             options={(movies.data?.items ?? []).map((m) => ({
               value: m.id,
-              // The backend only accepts `showing` movies (400 `movie must be showing`
-              // otherwise) - lock it right in the dropdown like the inactive-hall
-              // handling below, instead of failing only after Save.
+              // The backend only takes showing movies, so lock it in the dropdown instead of failing on Save.
               label:
                 m.status === 'showing'
                   ? m.title
@@ -126,11 +128,19 @@ export const ShowtimeFormModal = ({
           />
         </Form.Item>
 
-        {/* Entered time is CINEMA time. end_at is derived by the backend from the movie runtime. */}
+        {/* Gio nhap la gio rap, end_at backend tu suy tu runtime, duoi chi la uoc tinh. */}
         <Form.Item
           name="start_at"
           label={t('showtime.startAt')}
-          extra={t('showtime.startAtHint')}
+          extra={
+            estimatedEndAt ? (
+              <Typography.Text type="secondary">
+                {t('showtime.estimatedEndAt', { time: estimatedEndAt.format('HH:mm DD/MM') })}
+              </Typography.Text>
+            ) : (
+              t('showtime.startAtHint')
+            )
+          }
           rules={[required]}
         >
           <DatePicker
@@ -140,7 +150,7 @@ export const ShowtimeFormModal = ({
           />
         </Form.Item>
 
-        {/* POST ignores status (always creates 'open'), so only offer it when editing. */}
+        {/* POST luon tao open nen chi hien status khi sua. */}
         {showtime ? (
           <Form.Item name="status" label={t('showtime.status')} rules={[required]}>
             <Select

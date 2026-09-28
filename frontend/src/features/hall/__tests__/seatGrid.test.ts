@@ -3,16 +3,28 @@ import {
   AISLE_WIDTH,
   MAX_CHANGES_PER_CALL,
   SEAT_SIZE,
+  ZOOM_MAX,
+  ZOOM_MIN,
   areAdjacentSeats,
   buildGridLayout,
+  buildPendingColumn,
   buildPendingRow,
   buildSeatChangeBatches,
   chunkLabels,
   cleanSeatLabel,
+  clampZoom,
+  computeFitScale,
   diffChangedSeats,
+  diffMergeSplitOps,
+  gridPixelWidth,
   groupSeatsByRow,
+  isPendingColSeatId,
   isPendingSeatId,
+  isPendingSplitSeatId,
+  isUnsavedSeatId,
+  makeSplitSeatId,
   normalizeAisles,
+  pendingColIndexOf,
   pendingRowIndexOf,
   rowLabelFromIndex,
   sellableCapacity,
@@ -36,8 +48,7 @@ const seat = (
 
 describe('groupSeatsByRow', () => {
   it('keeps backend order, never re-sorts alphabetically', () => {
-    // Backend sorts by row_index, so row 27 is AA and must stand AFTER Z.
-    // String sort would put AA before B - exactly the bug to avoid.
+    // Backend sorts by row_index, so row 27 is AA and must stand after Z; a string sort would wrongly put AA before B.
     const rows = groupSeatsByRow([seat('Z', 1), seat('AA', 1), seat('AB', 1)]);
     expect(rows.map((r) => r.rowLabel)).toEqual(['Z', 'AA', 'AB']);
   });
@@ -52,8 +63,7 @@ describe('groupSeatsByRow', () => {
 
 describe('normalizeAisles', () => {
   it('drops out-of-range aisle values', () => {
-    // The backend ONLY checks array length (max=49), never values, so real
-    // data may hold 0, negatives or over-column numbers.
+    // Backend only checks array length (max=49), never values, so real data may hold 0/negatives/over-column numbers.
     expect(normalizeAisles([0, -3, 4, 99, 12], 12)).toEqual([4]);
   });
 
@@ -172,12 +182,53 @@ describe('pending row helpers', () => {
   it('id ghe THAT (tu server) khong bi coi la pending', () => {
     expect(isPendingSeatId('a1b2c3')).toBe(false);
   });
+
+  it('buildPendingRow voi totalWidth rong hon seatsPerRow: cot du la O TRONG, khong phai ghe thuong (co pending column tu truoc)', () => {
+    const row = buildPendingRow(2, 4, 'G', 'hall-1', 6);
+    expect(row).toHaveLength(6);
+    expect(row.map((s) => s.is_gap)).toEqual([false, false, false, false, true, true]);
+  });
+});
+
+describe('pending column helpers', () => {
+  it('buildPendingColumn sinh 1 ghe moi hang, mac dinh la O TRONG (khop AddColumn that su tren backend)', () => {
+    const col = buildPendingColumn(0, ['A', 'B', 'C'], 5, 'hall-1');
+    expect(col).toHaveLength(3);
+    expect(col.map((s) => s.label)).toEqual(['A5', 'B5', 'C5']);
+    col.forEach((seat) => {
+      expect(isPendingColSeatId(seat.id)).toBe(true);
+      expect(isUnsavedSeatId(seat.id)).toBe(true);
+      expect(pendingColIndexOf(seat.id)).toBe(0);
+      expect(seat.seat_type).toBe('standard');
+      expect(seat.is_gap).toBe(true);
+      expect(seat.col_number).toBe(5);
+    });
+  });
+
+  it('pending row va pending column dung prefix rieng, khong bi nham lan', () => {
+    const rowSeat = buildPendingRow(0, 1, 'A', 'hall-1')[0];
+    const colSeat = buildPendingColumn(0, ['A'], 1, 'hall-1')[0];
+    expect(isPendingSeatId(rowSeat.id)).toBe(true);
+    expect(isPendingColSeatId(rowSeat.id)).toBe(false);
+    expect(isPendingSeatId(colSeat.id)).toBe(false);
+    expect(isPendingColSeatId(colSeat.id)).toBe(true);
+  });
+
+  it('id ghe THAT khong bi coi la unsaved', () => {
+    expect(isUnsavedSeatId('a1b2c3')).toBe(false);
+  });
 });
 
 describe('diffChangedSeats', () => {
-  it('bo qua ghe pending - chua len server nen khong the la mot THAY DOI', () => {
+  it('bo qua ghe pending row - chua len server nen khong the la mot THAY DOI', () => {
     const saved = [seat('A', 1)];
     const draft = [...saved, ...buildPendingRow(0, 1, 'B', 'hall-1')];
+    expect(diffChangedSeats(saved, draft)).toEqual([]);
+  });
+
+  it('bo qua ghe pending column - chua len server nen khong the la mot THAY DOI', () => {
+    const saved = [seat('A', 1)];
+    const draft = [...saved, ...buildPendingColumn(0, ['A'], 2, 'hall-1')];
     expect(diffChangedSeats(saved, draft)).toEqual([]);
   });
 
@@ -232,6 +283,75 @@ describe('buildSeatChangeBatches', () => {
   });
 });
 
+describe('pending split helper', () => {
+  it('makeSplitSeatId sinh id doc duoc lai qua isPendingSplitSeatId, va no la unsaved', () => {
+    const id = makeSplitSeatId('real-seat-id');
+    expect(isPendingSplitSeatId(id)).toBe(true);
+    expect(isUnsavedSeatId(id)).toBe(true);
+    // Not mistaken for a pending row/column id.
+    expect(isPendingSeatId(id)).toBe(false);
+    expect(isPendingColSeatId(id)).toBe(false);
+  });
+
+  it('id ghe THAT khong bi coi la pending split', () => {
+    expect(isPendingSplitSeatId('a1b2c3')).toBe(false);
+  });
+});
+
+describe('diffMergeSplitOps', () => {
+  it('phat hien MOT merge tren cap ghe da luu san (merge/split lam ngay tren draft, khong can save truoc)', () => {
+    // Bug scenario: an already-saved couple pair gets merged locally while the grid is otherwise
+    // clean - draft mirrors exactly what handleMergeCouple produces (left absorbs, right dropped).
+    const baseline = [seat('A', 3), seat('A', 4)];
+    const draft = [{ ...seat('A', 3), col_span: 2 as ColSpan, seat_type: 'vip' as SeatType }];
+    const { merges, splits } = diffMergeSplitOps(baseline, draft);
+    expect(splits).toEqual([]);
+    expect(merges).toEqual([{ leftLabel: 'A3', rightLabel: 'A4' }]);
+  });
+
+  it('phat hien mot split tren ghe doi da luu san', () => {
+    const baseline = [seat('A', 3, { col_span: 2 })];
+    const draft = [
+      { ...seat('A', 3, { col_span: 1 }) },
+      { ...seat('A', 4), id: makeSplitSeatId('A3') },
+    ];
+    const { merges, splits } = diffMergeSplitOps(baseline, draft);
+    expect(merges).toEqual([]);
+    expect(splits).toEqual([{ label: 'A3' }]);
+  });
+
+  it('phat hien merge NGAY trong mot hang MOI them (chua luu) - dung baseline la seat vua tao', () => {
+    // Mirrors handleSave: baseline is savedSnapshot + the seats a fresh addRow just created, all
+    // still single-width; the draft already shows the local merge the admin made before Save ran.
+    const newSeatDefaults = [seat('G', 1), seat('G', 2), seat('G', 3)];
+    const draft = [
+      { ...seat('G', 1), col_span: 2 as ColSpan, seat_type: 'couple' as SeatType },
+      seat('G', 3),
+    ];
+    const { merges, splits } = diffMergeSplitOps(newSeatDefaults, draft);
+    expect(splits).toEqual([]);
+    expect(merges).toEqual([{ leftLabel: 'G1', rightLabel: 'G2' }]);
+  });
+
+  it('merge roi split lai dung cap do trong mot phien thi trung hoa, khong sinh thao tac nao', () => {
+    const baseline = [seat('A', 3), seat('A', 4)];
+    // Net result of merge-then-split-back on the very same pair: both labels present, single again.
+    const draft = [seat('A', 3), seat('A', 4)];
+    expect(diffMergeSplitOps(baseline, draft)).toEqual({ merges: [], splits: [] });
+  });
+
+  it('khong doi gi thi khong co merge/split nao', () => {
+    const baseline = [seat('A', 1), seat('A', 2, { col_span: 2 })];
+    expect(diffMergeSplitOps(baseline, baseline)).toEqual({ merges: [], splits: [] });
+  });
+
+  it('ghe doi bi xoa ca hang (khong con trong draft) khong bi hieu nham la split', () => {
+    const baseline = [seat('A', 3, { col_span: 2 })];
+    const draft: typeof baseline = [];
+    expect(diffMergeSplitOps(baseline, draft)).toEqual({ merges: [], splits: [] });
+  });
+});
+
 describe('areAdjacentSeats', () => {
   it('adjacent same-row singles merge', () => {
     expect(areAdjacentSeats(seat('A', 3), seat('A', 4))).toBe(true);
@@ -253,5 +373,51 @@ describe('areAdjacentSeats', () => {
 
   it('mot trong hai la o trong thi khong ghep duoc', () => {
     expect(areAdjacentSeats(seat('A', 3, { is_gap: true }), seat('A', 4))).toBe(false);
+  });
+});
+
+describe('gridPixelWidth', () => {
+  it('tinh tong be rong tracks cong gap giua chung', () => {
+    const layout = buildGridLayout(5, []);
+    // 5 seats * 40px + 4 gaps * 4px default.
+    expect(gridPixelWidth(layout.templateColumns)).toBe(5 * SEAT_SIZE + 4 * 4);
+  });
+
+  it('tinh ca track loi di', () => {
+    const layout = buildGridLayout(6, [3]);
+    // 6 seats + 1 aisle track = 7 tracks, 6 gaps.
+    expect(gridPixelWidth(layout.templateColumns)).toBe(6 * SEAT_SIZE + AISLE_WIDTH + 6 * 4);
+  });
+
+  it('gap tuy chinh', () => {
+    const layout = buildGridLayout(3, []);
+    expect(gridPixelWidth(layout.templateColumns, 0)).toBe(3 * SEAT_SIZE);
+  });
+});
+
+describe('computeFitScale', () => {
+  it('khong xuong duoi 100% (ZOOM_MIN) du luoi rong hon container - van phai cuon ngang', () => {
+    expect(computeFitScale(1000, 500)).toBe(ZOOM_MIN);
+  });
+
+  it('khong phong to qua 1 (max mac dinh) du container rong hon luoi', () => {
+    expect(computeFitScale(500, 1000)).toBe(1);
+  });
+
+  it('khong nho hon ZOOM_MIN du luoi rat rong', () => {
+    expect(computeFitScale(10_000, 100)).toBe(ZOOM_MIN);
+  });
+
+  it('tra ve mac dinh 1 khi thieu kich thuoc that (chua do duoc DOM)', () => {
+    expect(computeFitScale(0, 500)).toBe(1);
+    expect(computeFitScale(1000, 0)).toBe(1);
+  });
+});
+
+describe('clampZoom', () => {
+  it('gioi han trong [ZOOM_MIN, ZOOM_MAX]', () => {
+    expect(clampZoom(0.1)).toBe(ZOOM_MIN);
+    expect(clampZoom(5)).toBe(ZOOM_MAX);
+    expect(clampZoom(1.2)).toBe(1.2);
   });
 });

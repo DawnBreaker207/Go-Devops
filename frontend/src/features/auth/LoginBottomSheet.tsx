@@ -5,14 +5,12 @@ import CustomerLoginForm from './CustomerLoginForm';
 import { PATHS } from '@/routes/paths';
 
 export interface LoginBottomSheetProps {
-  /** Contextual prompt, e.g. "Sign in to pick seats for the 20:00 show at X". */
   contextMessage: string;
   onClose: () => void;
-  /** Fired only on in-sheet login success (including login from another tab; see useAuthCheckpoint). */
   onSuccess: () => void;
 }
 
-/** Login checkpoint as a bottom sheet over a dim backdrop (keeps the selected show). Shares CustomerLoginForm with the full page, only the shell differs. Mounted only while open so the form is fresh each time, no reset effect. Slide/fade on mount uses `transition` (not keyframes) so prefers-reduced-motion via --motion-duration-* applies; only transform/opacity animate. */
+// Keeps picked seats, mounts only when open, animated with reduced-motion support.
 export const LoginBottomSheet = ({ contextMessage, onClose, onSuccess }: LoginBottomSheetProps) => {
   const { t } = useTranslation();
 

@@ -1,4 +1,4 @@
-import { Alert, App, Form, Input, Modal, Switch } from 'antd';
+import { App, Form, Input, Modal } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { CloneHallPayload, Hall } from '@/types';
 import { errorMessage } from '@/utils/error';
@@ -7,7 +7,6 @@ import { useCloneHall } from '../hooks/useHalls';
 
 interface FormValues {
   name: string;
-  copy_prices: boolean;
 }
 
 interface CloneHallModalProps {
@@ -26,18 +25,15 @@ export const CloneHallModal = ({ open, hall, onCancel, onDone }: CloneHallModalP
   const [form] = Form.useForm<FormValues>();
   const clone = useCloneHall();
 
-  // copy_prices defaults to false on the backend, but TRUE here: a hall
-  // without prices vanishes from every customer list with no warning.
   const initialValues: FormValues = {
     name: hall ? t('hall.cloneNameSuggestion', { name: hall.name }) : '',
-    copy_prices: true,
   };
 
   const handleOk = async () => {
     if (!hall) return;
     try {
       const values = await form.validateFields();
-      const payload: CloneHallPayload = { name: values.name, copy_prices: values.copy_prices };
+      const payload: CloneHallPayload = { name: values.name };
       await clone.mutateAsync({ id: hall.id, payload });
       message.success(t('hall.cloneSuccess'));
       onDone();
@@ -73,10 +69,6 @@ export const CloneHallModal = ({ open, hall, onCancel, onDone }: CloneHallModalP
         >
           <Input />
         </Form.Item>
-        <Form.Item name="copy_prices" label={t('hall.copyPrices')} valuePropName="checked">
-          <Switch />
-        </Form.Item>
-        <Alert type="info" showIcon message={t('hall.copyPricesHint')} />
       </Form>
     </Modal>
   );

@@ -13,10 +13,7 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// ComboService sells concession/combo products independently of the ticket
-// booking flow (F5): a combo order failing must never roll back or block a
-// booking, and a booking failing must never roll back a combo order. Neither
-// side opens a shared transaction with the other.
+// ComboService sells combos independently of ticket booking; neither side shares a transaction.
 type ComboService interface {
 	ListActive(ctx context.Context) ([]dto.ComboResponse, error)
 	CreateOrder(ctx context.Context, userID string, req dto.CreateComboOrderRequest) (*dto.ComboOrderResponse, error)
@@ -31,17 +28,14 @@ type ComboService interface {
 }
 
 type comboService struct {
-	// db is only for the operator catalogue writes below, which pair a change with
-	// its audit row. The customer-facing order path deliberately keeps its own
-	// single-statement transaction inside ComboOrderRepository.
+	// db is only for operator writes (change + audit row in one tx).
 	db          *gorm.DB
 	combos      repository.ComboRepository
 	orders      repository.ComboOrderRepository
 	bookingRepo repository.BookingRepository // optional ownership check only; may be nil
 }
 
-// NewComboService: bookingRepo may be nil, which simply skips the ownership
-// check when an order names a booking_id.
+// NewComboService: nil bookingRepo skips ownership check.
 func NewComboService(db *gorm.DB, combos repository.ComboRepository, orders repository.ComboOrderRepository, bookingRepo repository.BookingRepository) ComboService {
 	return &comboService{db: db, combos: combos, orders: orders, bookingRepo: bookingRepo}
 }
@@ -135,12 +129,7 @@ func (s *comboService) ListMyOrders(ctx context.Context, userID string, q dto.Pa
 	return result, total, nil
 }
 
-/* -------------------------------------------------------------------------- */
-/* Operator catalogue management                                              */
-/* -------------------------------------------------------------------------- */
-
-// AdminList shows the catalogue an operator manages: paged, searchable, and it
-// includes INACTIVE products, which the public ListActive never returns.
+// AdminList includes INACTIVE products (public ListActive never does).
 func (s *comboService) AdminList(ctx context.Context, q dto.AdminComboListQuery) ([]dto.ComboResponse, int64, error) {
 	combos, total, err := s.combos.List(ctx, q.Page, q.PageSize, strings.TrimSpace(q.Search), q.Active)
 	if err != nil {
@@ -167,7 +156,7 @@ func (s *comboService) AdminCreate(ctx context.Context, req dto.CreateComboReque
 		Description: strings.TrimSpace(req.Description),
 		Price:       req.Price,
 		ImageURL:    strings.TrimSpace(req.ImageURL),
-		// A product added from the admin screen goes on sale unless told otherwise.
+		// Default on sale unless told otherwise.
 		Active: req.Active == nil || *req.Active,
 	}
 
@@ -199,8 +188,7 @@ func (s *comboService) AdminUpdate(ctx context.Context, id string, req dto.Updat
 	}
 	before := comboAuditFields(current)
 
-	// Only the fields the caller actually sent; a map (not a struct) so price 0
-	// and active false are written rather than skipped as Go zero values.
+	// Map write so price 0 / active false are stored, not skipped as zero values.
 	fields := make(map[string]any, 5)
 	if req.Name != nil {
 		current.Name = strings.TrimSpace(*req.Name)
@@ -237,8 +225,7 @@ func (s *comboService) AdminUpdate(ctx context.Context, id string, req dto.Updat
 	return &result, nil
 }
 
-// AdminDelete soft-deletes: combo_order_items still point here by FK, and a past
-// receipt must stay readable after a product is retired.
+// AdminDelete soft-deletes so past receipts stay readable.
 func (s *comboService) AdminDelete(ctx context.Context, id string) error {
 	current, err := s.combos.FindByID(ctx, id)
 	if err != nil {
@@ -256,9 +243,7 @@ func (s *comboService) AdminDelete(ctx context.Context, id string) error {
 	})
 }
 
-// comboAuditFields is the audited projection of a product. Deliberately a plain
-// map, never the model: audit.Record.Before/After are map[string]any and a model
-// would leak whatever the struct grows later.
+// comboAuditFields: plain map so audit never leaks future model fields.
 func comboAuditFields(c *models.Combo) map[string]any {
 	return map[string]any{
 		"name":   c.Name,
@@ -267,8 +252,7 @@ func comboAuditFields(c *models.Combo) map[string]any {
 	}
 }
 
-// auditCombo is a no-op when there is no middleware.Audit in play (e.g. a direct
-// service-level test), matching how the rest of the services treat a miss.
+// auditCombo is no-op without middleware audit in context.
 func (s *comboService) auditCombo(ctx context.Context, tx *gorm.DB, id string, before, after map[string]any) error {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {

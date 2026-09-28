@@ -70,10 +70,6 @@ func (h *DiscountHandler) Remove(c *gin.Context) {
 	response.OK(c, cleared)
 }
 
-/* -------------------------------------------------------------------------- */
-/* Operator catalogue: /admin/discounts - ADMIN ONLY                           */
-/* -------------------------------------------------------------------------- */
-
 // @Summary		List discount codes (admin)
 // @Tags			discounts
 // @Produce		json

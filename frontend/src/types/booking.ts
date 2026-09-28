@@ -26,7 +26,6 @@ export type BookingStatusReason =
   | 'amount_mismatch'
   | 'paid_after_expiry'
   | 'canceled'
-  /** Operator-cancelled show (not a customer fault); order flips to `refunded` with automatic refund. */
   | 'showtime_cancelled';
 
 export type PaymentStatusReason = 'create_failed' | 'declined' | 'abandoned' | 'duplicate_payment';
@@ -62,13 +61,8 @@ export interface OrderStatus {
   showtime_id: string;
   status: BookingStatus;
   status_reason?: BookingStatusReason;
-  /** SEAT SUBTOTAL, before any discount. NOT the amount due - rendering this as
-   *  "amount to pay" shows the wrong number on a discounted order. */
   total_amount: number;
-  /** What a discount code took off. 0 when none is applied. */
   discount_amount: number;
-  /** total_amount - discount_amount: what the gateway will actually charge.
-   *  Always present (no omitempty on the backend), so it never silently reads 0. */
   payable_amount: number;
   created_at: string;
   expires_at?: string;
@@ -78,7 +72,6 @@ export interface OrderStatus {
   showtime?: OrderShowtime;
 }
 
-/** Online with account: { user_id, email, full_name, phone? }. Counter without account: { full_name?, phone? } only. Counter with neither has no object at all. */
 export interface OrderCustomer {
   user_id?: string;
   email?: string;
@@ -86,7 +79,6 @@ export interface OrderCustomer {
   phone?: string;
 }
 
-/** One row of GET /admin/orders. */
 export interface AdminOrder extends OrderStatus {
   sold_via: SoldVia;
   seats: number;
@@ -103,27 +95,23 @@ export interface Ticket {
   status: TicketStatus;
 }
 
-/** GET /tickets/:id/qr. `qr_base64` is PNG without the `data:image/...` prefix; prepend for `src`. Works after showtime. */
 export interface TicketQR {
   ticket_id: string;
   code: string;
   qr_base64: string;
 }
 
-/** GET /staff/orders/:id. No customer/sold_via/seats (customer e-ticket shape); the admin drawer joins those from the opening table row. */
 export interface OrderDetail extends OrderStatus {
   tickets: Ticket[];
 }
 
 export interface AdminOrderListQuery extends PageQuery {
   status?: BookingStatus;
-  /** Matches held-payment orders only; open-checkout holds never match. */
   payment_status?: PaymentStatus;
   sold_via?: SoldVia;
   showtime_id?: string;
   movie_id?: string;
   user_id?: string;
-  /** YYYY-MM-DD on created_at. Wins over from/to. */
   date?: string;
   from?: string;
   to?: string;
@@ -131,12 +119,10 @@ export interface AdminOrderListQuery extends PageQuery {
   order?: 'asc' | 'desc';
 }
 
-/** POST /tickets/:id/redeem. `id` is a ticket id OR a QR code. */
 export interface RedeemPayload {
   showtime_id: string;
 }
 
-/** Outside check-in window; see checkin_opens_at/checkin_closes_at. */
 export type RedeemStatus = 'ok' | 'used' | 'wrong_show' | 'not_found' | 'too_early' | 'closed';
 
 export interface RedeemResult {

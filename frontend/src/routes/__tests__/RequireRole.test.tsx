@@ -74,9 +74,7 @@ describe('RequireRole', () => {
   });
 
   it('customers blocked from ops screens still get their own home link', () => {
-    // Before the customer zone existed, customers had nowhere to go so the button hid.
-    // Now `useLandingPath` returns PATHS.home, which is why LoginPage no longer
-    // drops customers straight into /dashboard and a 403.
+    // `useLandingPath` returns PATHS.home for customers instead of dropping them into /dashboard and a 403.
     asRole('customer');
     renderGuard(ROLES_OPERATOR);
 

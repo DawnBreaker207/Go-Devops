@@ -13,8 +13,7 @@ import (
 
 const emailChunk = 500
 
-// NewSendTicketEmails mails confirmed bookings still without a ticket email. It retries
-// failed sends and is the only path while the broker is down.
+// Only path while the broker is down; failed sends retried.
 func NewSendTicketEmails(emails service.TicketEmailService) *batch.Job {
 	return &batch.Job{
 		Name:     "sendTicketEmails",
@@ -33,8 +32,7 @@ func NewSendTicketEmails(emails service.TicketEmailService) *batch.Job {
 	}
 }
 
-// ConsumeTicketEmails blocks until ctx is canceled. Every message is acked: a failed send
-// is left to the sendTicketEmails cron instead of looping at the queue head.
+// Every message acked; failed sends left to the cron, not looped at queue head.
 func ConsumeTicketEmails(ctx context.Context, q *queue.Client, emails service.TicketEmailService) {
 	err := q.Consume(ctx, service.TicketEmailQueue, func(ctx context.Context, body []byte) error {
 		var msg struct {

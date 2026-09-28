@@ -111,7 +111,10 @@ func TestMovies_ListCachedUntilWriteInvalidates(t *testing.T) {
 }
 
 // T54: showtime listings (public, by date) are cached and a write — a new
-// showtime, or a hall price change that moves from_price — bumps them.
+// showtime, or a base-price change that moves from_price — bumps them.
+// from_price used to be MIN(hall_prices.price) for the showtime's own hall;
+// Phase 2 of the pricing redesign (PLAN_CAMPAIGN.md section 11.3) made prices
+// global, so it is now MIN(seat_base_prices.price) across every seat type.
 func TestShowtimes_CachedUntilWriteInvalidates(t *testing.T) {
 	e := newEnv(t)
 	c := cache.New(redisAddr(), "", 0)
@@ -123,9 +126,18 @@ func TestShowtimes_CachedUntilWriteInvalidates(t *testing.T) {
 	t.Cleanup(func() { _ = c.Close() })
 
 	hallRepo := repository.NewHallRepository(e.db)
-	halls := service.NewHallService(e.db, hallRepo, c)
-	showtimes := service.NewShowtimeService(e.db, repository.NewShowtimeRepository(e.db), hallRepo,
-		repository.NewMovieRepository(e.db), 20, time.UTC, c, time.Minute)
+	showtimeRepo := repository.NewShowtimeRepository(e.db)
+	pricing := service.NewPricingService(e.db, repository.NewPricingRepository(e.db), showtimeRepo, time.UTC, c)
+	showtimes := service.NewShowtimeService(e.db, showtimeRepo, hallRepo,
+		repository.NewMovieRepository(e.db), pricing, 20, time.UTC, c, time.Minute)
+
+	// Pin every seat type to a known base price: seat_base_prices is
+	// process-global (migration 000013 seeds it once, never reset between
+	// tests - see newEnv's DELETE list), so its starting value can't be
+	// assumed. "standard" is the lowest, same as fullPrices() elsewhere.
+	if _, err := pricing.AdminSetBasePrices(e.ctx, dto.BasePriceRequest{Prices: fullPrices()}); err != nil {
+		t.Fatalf("seed base prices: %v", err)
+	}
 
 	var show models.Showtime
 	e.must(e.db.First(&show, "id = ?", e.showID).Error)
@@ -137,17 +149,18 @@ func TestShowtimes_CachedUntilWriteInvalidates(t *testing.T) {
 		t.Fatalf("first list = %+v", first)
 	}
 
-	// Directly raising the DB price must not show up while the cache is warm.
-	e.must(e.db.Exec(`UPDATE hall_prices SET price = price * 10 WHERE hall_id = ? AND seat_type = 'standard'`, e.hallID).Error)
+	// Directly raising every base price in the DB must not show up while the
+	// cache is warm.
+	e.must(e.db.Exec(`UPDATE seat_base_prices SET price = price * 10`).Error)
 	second, err := showtimes.ListByDate(e.ctx, day)
 	e.must(err)
 	if second[0].FromPrice != first[0].FromPrice {
 		t.Fatalf("second list should be the cached one: from_price %d, want %d", second[0].FromPrice, first[0].FromPrice)
 	}
 
-	// SetPrices through the service bumps the shared generation.
-	if _, err := halls.SetPrices(e.ctx, e.hallID, dto.PriceRequest{Prices: fullPrices()}); err != nil {
-		t.Fatalf("set prices: %v", err)
+	// AdminSetBasePrices through the service bumps the shared generation.
+	if _, err := pricing.AdminSetBasePrices(e.ctx, dto.BasePriceRequest{Prices: fullPrices()}); err != nil {
+		t.Fatalf("reset base prices: %v", err)
 	}
 	third, err := showtimes.ListByDate(e.ctx, day)
 	e.must(err)

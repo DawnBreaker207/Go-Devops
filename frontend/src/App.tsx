@@ -17,7 +17,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 
 type AntdLocale = ConfigProviderProps['locale'];
 
-/** antd locales arrive double-default-wrapped via Vite CJS re-export; unwrap or ConfigProvider silently falls back to English. */
+// Unwrap the double-defaulted antd locale, else it silently falls back to English.
 const unwrapLocale = (mod: unknown): AntdLocale => {
   const once = (mod as { default?: unknown }).default ?? mod;
   return ((once as { default?: unknown }).default ?? once) as AntdLocale;
@@ -28,21 +28,17 @@ const ANTD_LOCALE: Record<'vi' | 'en', AntdLocale> = {
   en: unwrapLocale(enUS),
 };
 
-/** Paths under the operator area (MainLayout). */
 const OPERATOR_ONLY_PATHS = [
   PATHS.login,
   PATHS.dashboard,
   PATHS.profile,
-  PATHS.movies,
-  PATHS.showtimes,
-  PATHS.halls,
+  PATHS.catalog,
+  PATHS.counter,
   PATHS.bookings,
   PATHS.users,
-  PATHS.reports,
-  PATHS.boxOffice,
-  PATHS.customerLookup,
-  PATHS.auditLogs,
-  PATHS.batchJobs,
+  PATHS.promotions,
+  PATHS.pricingAdmin,
+  PATHS.monitoring,
 ];
 
 const createQueryClient = () =>
@@ -67,14 +63,10 @@ export const App = () => {
     void bootstrap();
   }, [bootstrap]);
 
-  // DatePicker month/day names come from the global dayjs locale, not ConfigProvider.
   useEffect(() => {
     dayjs.locale(language);
   }, [language]);
 
-  // Fired on refresh failure. Redirect to /login only inside the operator area;
-  // the customer zone is mostly public, so just sign out silently and stay
-  // (useAuthCheckpoint re-prompts exactly when needed).
   useEffect(() => {
     const handleUnauthorized = () => {
       logout();

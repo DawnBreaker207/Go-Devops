@@ -4,28 +4,27 @@ import SectionHead from '@/components/ui/SectionHead';
 import Panel from '@/components/ui/Panel';
 import Notice from '@/components/ui/Notice';
 import EmptyState from '@/components/ui/EmptyState';
-import { hallApi } from '@/api/hall.api';
+import { pricingApi } from '@/api/pricing.api';
 import { SEAT_TYPES } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { formatVND } from '@/utils/format';
 import { INK_60, INK_65 } from '@/theme/customerTw';
 
-/** Public price page, read from GET /pricing.
- *
- *  It used to be a hardcoded four-row table claiming weekday/weekend tiers. The
- *  backend has no such concept, and the numbers in it (75/90/110/190k) did not
- *  match a single row of `hall_prices` (70/100/160/130k) — so the page told
- *  customers a price they would never be charged. Prices are per HALL and per
- *  seat type, which is why this renders one block per hall. */
+/** Public price page, read from GET /pricing. Global pricing redesign (PLAN_CAMPAIGN.md section
+ *  11.4, Phase 3): prices are no longer per-hall, so this renders ONE panel with the 4 seat
+ *  types' single global price instead of one panel per hall. */
 export const PricingPage = () => {
   const { t } = useTranslation();
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-pricing'],
-    queryFn: () => hallApi.publicPrices(),
+    queryFn: () => pricingApi.publicPrices(),
     staleTime: 5 * 60_000,
   });
 
-  const halls = data?.halls ?? [];
+  // "Empty" used to mean "no halls have prices set"; now there is only one global block, so
+  // empty means no base price has been configured at all (from_price === 0, per
+  // dto.PublicPriceListResponse: "0 when nothing is configured yet").
+  const isEmpty = data !== undefined && data.from_price <= 0;
 
   return (
     <>
@@ -37,7 +36,7 @@ export const PricingPage = () => {
 
       {isLoading ? <p className={INK_60}>{t('common.loading')}</p> : null}
 
-      {!isLoading && !error && halls.length === 0 ? (
+      {!isLoading && !error && isEmpty ? (
         <EmptyState>{t('customer.pricingEmpty')}</EmptyState>
       ) : null}
 
@@ -47,23 +46,22 @@ export const PricingPage = () => {
         </p>
       ) : null}
 
-      {halls.map((hall) => (
-        <Panel key={hall.hall_id} className="mx-auto mb-4 max-w-160">
-          <h2 className="mt-0 mb-3 text-base font-bold">{hall.hall_name}</h2>
+      {data && !isEmpty ? (
+        <Panel className="mx-auto mb-4 max-w-160">
           <div className="divide-y divide-white/10">
             {/* SEAT_TYPES, not Object.keys: the map's key order is not guaranteed
                 and every other screen shows the four types in this same order. */}
             {SEAT_TYPES.map((seatType) => (
               <div key={seatType} className="flex items-center justify-between py-3">
                 <span>{t(`hall.seatType_${seatType}`)}</span>
-                <span className="font-bold tabular-nums">{formatVND(hall.prices[seatType])}</span>
+                <span className="font-bold tabular-nums">{formatVND(data.prices[seatType])}</span>
               </div>
             ))}
           </div>
         </Panel>
-      ))}
+      ) : null}
 
-      {halls.length > 0 ? (
+      {data && !isEmpty ? (
         <p className={`mx-auto mt-4 max-w-160 text-center text-xs ${INK_65}`}>
           {t('customer.pricingNote')}
         </p>

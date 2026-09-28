@@ -175,6 +175,7 @@ type env struct {
 	accounts service.UserService
 	reports  service.ReportService
 	movies   service.MovieService
+	pricing  service.PricingService
 	now      time.Time // clock of the login lockout
 }
 
@@ -194,16 +195,24 @@ func newEnv(t *testing.T) *env {
 	// DELETE, not TRUNCATE: far faster on tiny tables (no new relfilenodes and fsync).
 	// Child-before-parent throughout: combo_order_items references both
 	// combo_orders and concession_items, combo_orders references users,
-	// bookings.discount_code_id references discount_codes, and the campaign
-	// link tables plus articles reference campaigns/articles/users.
+	// bookings.discount_code_id references discount_codes, and
+	// articles.author_id references users.
 	e.must(testDB.Exec(`DELETE FROM audit_logs; DELETE FROM batch_jobs; DELETE FROM daily_aggregates;
 		DELETE FROM combo_order_items; DELETE FROM combo_orders;
+		-- Campaign (000015): children of discount_codes/concession_items/articles/
+		-- campaigns before their parents, same child-before-parent rule as the rest
+		-- of this block.
 		DELETE FROM discount_redemptions; DELETE FROM campaign_combos; DELETE FROM campaign_articles;
 		DELETE FROM campaigns; DELETE FROM concession_items;
 		DELETE FROM tickets; DELETE FROM booking_seats;
 		DELETE FROM payments; DELETE FROM bookings; DELETE FROM discount_codes; DELETE FROM showtime_seats;
-		DELETE FROM showtimes; DELETE FROM hall_prices; DELETE FROM seats; DELETE FROM halls;
+		DELETE FROM showtimes; DELETE FROM seats; DELETE FROM halls;
 		DELETE FROM movies; DELETE FROM refresh_tokens; DELETE FROM password_reset_tokens; DELETE FROM articles; DELETE FROM users;
+		-- Pricing Phase 1 (000013): pricing_rules is per-test config, reset every
+		-- run. seat_base_prices is NOT reset: migration 000013 seeds its
+		-- 4 rows exactly once (like a global setting, never per-hall), so
+		-- clearing it here would leave every test after the first with zero
+		-- rows to read.
 		DELETE FROM pricing_rules;`).Error)
 
 	for i := 0; i < 8; i++ {
@@ -224,13 +233,26 @@ func newEnv(t *testing.T) *env {
 		Name: "Hall 1", Rows: 2, SeatsPerRow: 5,
 		SeatTypes: map[string][]string{"vip": {"2"}},
 		Gaps:      []string{"A5"},
-		Prices:    fullPrices(),
 	})
 	e.must(err)
 	e.hallID = hall.ID
 
-	e.showtimes = service.NewShowtimeService(testDB, repository.NewShowtimeRepository(testDB), hallRepo,
-		repository.NewMovieRepository(testDB), 20, time.UTC, nil, 0)
+	showtimeRepo := repository.NewShowtimeRepository(testDB)
+	// One PricingService shared by ShowtimeService (seatmap prices), BookingService
+	// (hold/counter-sell snapshot) and the HTTP Pricing handler (buildEngine) - all
+	// three must see the same base prices/rules, same as production wiring in
+	// cmd/server/main.go (PLAN_CAMPAIGN.md section 11.3).
+	e.pricing = service.NewPricingService(testDB, repository.NewPricingRepository(testDB), showtimeRepo, time.UTC, nil)
+	// seat_base_prices is process-global and NOT reset by the DELETE block
+	// above (see its comment), so a fresh test DB leaves it at the migration's
+	// zero backfill. Every test that holds/sells a seat needs a real,
+	// deterministic base price - mirror the old per-hall fullPrices() here so
+	// existing price assertions (priceStandard/priceVIP) still hold now that
+	// the source is global instead of per-hall (PLAN_CAMPAIGN.md 11.3).
+	_, err = e.pricing.AdminSetBasePrices(ctx, dto.BasePriceRequest{Prices: fullPrices()})
+	e.must(err)
+	e.showtimes = service.NewShowtimeService(testDB, showtimeRepo, hallRepo,
+		repository.NewMovieRepository(testDB), e.pricing, 20, time.UTC, nil, 0)
 	e.showID = e.newShowtime(3 * time.Hour)
 	e.seat = e.seatsOf(e.showID)
 
@@ -250,6 +272,7 @@ func newEnv(t *testing.T) *env {
 		PublicBaseURL: merchantURL,
 		HoldTTL:       10 * time.Minute,
 		MaxSeats:      4,
+		Pricing:       e.pricing,
 		// Generous lifetime so refresh tests can extend; hold-replace tests
 		// (T21) never call Refresh and stay pinned to the old expiry.
 		RefreshMaxLifetime: 30 * time.Minute,

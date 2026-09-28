@@ -7,25 +7,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// Discount kinds. A new value needs the Go const, the `oneof=` binding tag on
-// every DTO that accepts it, and the SQL CHECK in a NEW migration.
+// New values need the Go const, the `oneof=` DTO tag and the SQL CHECK.
 const (
-	// DiscountPercent takes Value percent off, capped by MaxDiscount when set.
 	DiscountPercent = "percent"
-	// DiscountAmount takes a flat Value VND off.
 	DiscountAmount = "amount"
 )
 
-// AllDiscountKinds is the display order; no endpoint returns this list, so the
-// frontend hard-codes it too (src/types/discount.ts).
+// Display order; the frontend hard-codes it too.
 var AllDiscountKinds = []string{DiscountPercent, DiscountAmount}
 
-// DiscountCode is a code a customer applies to a PENDING order before paying.
-// It never touches bookings.total_amount, which stays the seat subtotal: see
-// Booking.Payable and migration 000010 for why.
-//
-// Soft delete keeps past bookings' discount_code_id valid after a code is
-// retired; Active is the separate on/off switch an operator flips day to day.
+// Never touches bookings.total_amount (see Booking.Payable).
+// Soft delete keeps past bookings' discount_code_id valid; Active is the on/off switch.
 type DiscountCode struct {
 	ID string `gorm:"type:uuid;primaryKey" json:"id"`
 	// Stored and matched UPPERCASE; the service uppercases on the way in.
@@ -33,22 +25,18 @@ type DiscountCode struct {
 	Description string `gorm:"type:text" json:"description,omitempty"`
 	Kind        string `gorm:"type:varchar(16);not null" json:"kind"`
 	Value       int64  `gorm:"not null" json:"value"`
-	// MaxDiscount caps a percentage code; nil means uncapped. Meaningless for
-	// DiscountAmount and rejected there by the service.
+	// Caps percent codes; meaningless (rejected) for DiscountAmount.
 	MaxDiscount *int64 `json:"max_discount,omitempty"`
-	// MinOrder is the subtotal required before the code applies. 0 = no minimum.
+	// Subtotal required; 0 = no minimum.
 	MinOrder int64 `gorm:"not null;default:0" json:"min_order"`
 	// Nil on either side means open-ended in that direction.
 	StartsAt *time.Time `json:"starts_at,omitempty"`
 	EndsAt   *time.Time `json:"ends_at,omitempty"`
-	// MaxUses nil means unlimited.
 	MaxUses   *int `json:"max_uses,omitempty"`
 	UsedCount int  `gorm:"not null;default:0" json:"used_count"`
 	// CampaignID nil = standalone; a linked code also needs its campaign running.
 	CampaignID *string `gorm:"type:uuid" json:"campaign_id,omitempty"`
-	// No `default:` tag on purpose - GORM omits a zero-valued field from an
-	// INSERT when the column has a default, so a code created as active=false
-	// would silently come back on. Same trap as models.Combo.Active.
+	// No `default:` tag: GORM omits zero-valued fields with a default, silently re-enabling active=false.
 	Active    bool           `gorm:"not null" json:"active"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -64,9 +52,7 @@ func (d *DiscountCode) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
-// DiscountFor computes what this code takes off `subtotal`, in whole VND, and
-// never returns more than the subtotal. It answers the arithmetic only —
-// validity (active, window, uses, minimum order) is the service's job.
+// DiscountFor answers the arithmetic only; validity is the service's job.
 func (d *DiscountCode) DiscountFor(subtotal int64) int64 {
 	if subtotal <= 0 {
 		return 0

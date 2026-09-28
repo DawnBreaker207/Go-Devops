@@ -10,13 +10,12 @@ interface CustomerAuthShellProps {
   foot?: ReactNode;
 }
 
-/** Customer split-panel auth shell (Figma Sign In 77-626). Fixed dark-greeting/light-form halves regardless of customer light/dark; unlike AuthLayout's centered card. */
+// Fixed two-panel customer shell, theme-independent unlike AuthLayout.
 export const CustomerAuthShell = ({ title, children, foot }: CustomerAuthShellProps) => {
   const { t } = useTranslation();
 
   return (
     <div className="grid min-h-[calc(100svh_-_5rem)] flex-1 grid-cols-2 max-[820px]:grid-cols-1">
-      {/* Viewport minus header (5rem) so both halves stretch evenly and the footer scrolls below. */}
       <aside
         className="flex flex-col justify-between px-10 py-9 text-white max-[820px]:hidden"
         style={{ backgroundColor: 'var(--cp-backdrop-base)', backgroundImage: cinemaGradientPanel }}

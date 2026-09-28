@@ -8,7 +8,6 @@ interface TableCardProps {
   children: ReactNode;
 }
 
-/** Card wrapper fitting a table flush with no body padding. */
 export const TableCard = ({ title, extra, style, children }: TableCardProps) => {
   const { token } = antdTheme.useToken();
 

@@ -116,9 +116,7 @@ func (s *reportService) DailyReport(ctx context.Context, from, to string) (*dto.
 	return res, nil
 }
 
-// Breakdown aggregates paid money live for [from, to] (default last 7 days):
-// daily line, top movies/halls and the payment-method split for the Analytics
-// tab. Same money rule as closeDay throughout.
+// Breakdown aggregates paid money live for [from, to]; same money rule as closeDay.
 func (s *reportService) Breakdown(ctx context.Context, from, to string) (*dto.BreakdownResponse, error) {
 	fromDay, toDay, err := s.parseRange(from, to)
 	if err != nil {

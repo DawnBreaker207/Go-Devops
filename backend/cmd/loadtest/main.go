@@ -212,8 +212,6 @@ func errRate(errs, total int) float64 {
 	return 100 * float64(errs) / float64(total)
 }
 
-// --- a tiny HTTP client for the public/customer API surface ---
-
 type apiClient struct {
 	base string
 	http *http.Client

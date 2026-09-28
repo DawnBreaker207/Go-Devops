@@ -5,7 +5,6 @@ import type { PageQuery } from '@/types';
 
 export const BROWSE_QUERY_KEY = 'browse';
 
-/** Public movie list for the home page, filtered client-side. */
 export const useNowShowing = (query: PageQuery) =>
   useQuery({
     queryKey: [BROWSE_QUERY_KEY, 'movies', query],
@@ -22,7 +21,6 @@ export const useMovieDetail = (id: string | undefined) =>
     staleTime: 60_000,
   });
 
-/** Showtimes of one movie for a single day. */
 export const useMovieShowtimes = (id: string | undefined, date?: string) =>
   useQuery({
     queryKey: [BROWSE_QUERY_KEY, 'showtimes', id, date],
@@ -31,7 +29,6 @@ export const useMovieShowtimes = (id: string | undefined, date?: string) =>
     staleTime: 30_000,
   });
 
-/** Showtimes of one movie across several days, grouped by day. */
 export const useMovieShowtimesRange = (id: string | undefined, dates: string[]) => {
   const results = useQueries({
     queries: dates.map((date) => ({
@@ -51,7 +48,7 @@ export const useMovieShowtimesRange = (id: string | undefined, dates: string[]) 
   return { groups, isFetching, error };
 };
 
-/** Title search running only after the first character. */
+// Name search, only after the first character is typed.
 export const useMovieSearch = (search: string) =>
   useQuery({
     queryKey: [BROWSE_QUERY_KEY, 'search', search],

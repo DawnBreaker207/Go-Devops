@@ -46,18 +46,20 @@ func TestShowtimeListing_DayFilters(t *testing.T) {
 		t.Fatalf("bad date: err = %v", err)
 	}
 
-	// T30
-	e.must(e.db.Exec(`DELETE FROM hall_prices WHERE hall_id = ? AND seat_type = 'couple'`, e.hallID).Error)
+	// T30: base prices are global now (PLAN_CAMPAIGN.md section 11.3) - a seat
+	// type missing its base price hides EVERY showtime from the picker, not
+	// just the one hall that used to be missing its own hall_prices row.
+	e.must(e.db.Exec(`DELETE FROM seat_base_prices WHERE seat_type = 'couple'`).Error)
 	if items, _ := e.showtimes.ListByDate(e.ctx, day); hasShowtime(items, e.showID) {
-		t.Fatal("hall without full prices still listed")
+		t.Fatal("showtime listed while a seat type has no base price")
 	}
 	if items, _ := e.showtimes.ListByMovie(e.ctx, e.movieID, day); hasShowtime(items, e.showID) {
-		t.Fatal("hall without full prices still listed for the movie")
+		t.Fatal("showtime listed for the movie while a seat type has no base price")
 	}
-	_, err = e.halls.SetPrices(e.ctx, e.hallID, dto.PriceRequest{Prices: fullPrices()})
+	_, err = e.pricing.AdminSetBasePrices(e.ctx, dto.BasePriceRequest{Prices: map[string]int64{"couple": 160000}})
 	e.must(err)
 	if items, _ := e.showtimes.ListByDate(e.ctx, day); !hasShowtime(items, e.showID) {
-		t.Fatal("showtime not back after prices were restored")
+		t.Fatal("showtime not back after base prices were restored")
 	}
 
 	// T29: ended movie
@@ -76,14 +78,16 @@ func TestShowtimeListing_DayFilters(t *testing.T) {
 	}
 }
 
-// T31 / T32: the grid follows rows, seat types and gaps; every seat type needs a positive price.
-func TestHallCreate_GridAndPrices(t *testing.T) {
+// T31 / T32: the grid follows rows, seat types and gaps. Prices are no
+// longer a hall concern (PLAN_CAMPAIGN.md section 11.4, Phase 3: hall_prices
+// is gone) - every-seat-type-priced is now a seat_base_prices gate, covered
+// by TestShowtimeListing_DayFilters (T30) above.
+func TestHallCreate_Grid(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
 		Name: "Grid Hall", Rows: 4, SeatsPerRow: 6,
 		SeatTypes: map[string][]string{"vip": {"2"}, "couple": {"3"}, "recliner": {"4"}},
 		Gaps:      []string{"A1", "D6"},
-		Prices:    fullPrices(),
 	})
 	e.must(err)
 	seats, err := e.halls.SeatsByHall(e.ctx, hall.ID)
@@ -108,30 +112,13 @@ func TestHallCreate_GridAndPrices(t *testing.T) {
 	if !slices.Equal(gaps, []string{"A1", "D6"}) {
 		t.Fatalf("gaps = %v", gaps)
 	}
-	if prices, _ := e.halls.PricesByHall(e.ctx, hall.ID); len(prices) != 4 {
-		t.Fatalf("prices = %d, want 4", len(prices))
-	}
 
-	missing := fullPrices()
-	delete(missing, models.SeatRecliner)
-	if _, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "No Price Hall", Rows: 2, SeatsPerRow: 2,
-		SeatTypes: map[string][]string{"vip": {"2"}}, Prices: missing}); httpStatus(err) != http.StatusBadRequest {
-		t.Fatalf("hall without every price: err = %v", err)
-	}
-	if n := e.count(`SELECT COUNT(*) FROM halls WHERE name = 'No Price Hall'`); n != 0 {
-		t.Fatal("hall created without every price")
-	}
-	zero := fullPrices()
-	zero[models.SeatVIP] = 0
-	if _, err := e.halls.SetPrices(e.ctx, hall.ID, dto.PriceRequest{Prices: zero}); httpStatus(err) != http.StatusBadRequest {
-		t.Fatalf("zero price: err = %v", err)
-	}
 	if _, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Grid Hall", Rows: 1, SeatsPerRow: 1,
-		SeatTypes: map[string][]string{"vip": {"1"}}, Prices: fullPrices()}); httpStatus(err) != http.StatusConflict {
+		SeatTypes: map[string][]string{"vip": {"1"}}}); httpStatus(err) != http.StatusConflict {
 		t.Fatalf("duplicate name: err = %v", err)
 	}
 	if _, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Bad Gap", Rows: 2, SeatsPerRow: 2,
-		SeatTypes: map[string][]string{"vip": {"2"}}, Gaps: []string{"Z9"}, Prices: fullPrices()}); httpStatus(err) != http.StatusBadRequest {
+		SeatTypes: map[string][]string{"vip": {"2"}}, Gaps: []string{"Z9"}}); httpStatus(err) != http.StatusBadRequest {
 		t.Fatalf("gap outside the grid: err = %v", err)
 	}
 }

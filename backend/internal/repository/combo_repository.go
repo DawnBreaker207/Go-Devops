@@ -17,17 +17,13 @@ type ComboRepository interface {
 	// ListActive returns every combo currently on sale, name-ordered.
 	ListActive(ctx context.Context) ([]models.Combo, error)
 	FindByID(ctx context.Context, id string) (*models.Combo, error)
-	// FindActiveByIDs is used to price and validate an order's items in one
-	// round trip; combos that are missing, soft-deleted or inactive are simply
-	// absent from the returned map.
+// FindActiveByIDs prices/validates order items in one trip; missing/inactive
+// combos are simply absent from map.
 	FindActiveByIDs(ctx context.Context, ids []string) (map[string]models.Combo, error)
 
-	// List is the operator view: paged, name/description search, and it shows
-	// INACTIVE products too (ListActive above deliberately never does).
-	// active == nil means no filter.
+// List is operator view: paged, search, shows INACTIVE too. nil active = no filter.
 	List(ctx context.Context, page, pageSize int, search string, active *bool) ([]models.Combo, int64, error)
-	// The three writes take the caller's tx so the service can put the audit row
-	// in the same transaction (see .claude/rules/service-repo-layer.md).
+// The three writes take caller tx so service puts audit row in same tx.
 	Create(ctx context.Context, tx *gorm.DB, combo *models.Combo) error
 	// Update writes only the columns named in `fields`, so a partial request can
 	// never blank the columns it did not mention.
@@ -136,9 +132,8 @@ func (r *comboRepository) FindActiveByIDs(ctx context.Context, ids []string) (ma
 	return byID, nil
 }
 
-// ComboOrderRepository stores combo/concession purchases. Every write here is
-// its own, independent transaction: a combo order failing must never roll back
-// or block a ticket booking.
+// ComboOrderRepository stores purchases; each write is own tx so combo failure
+// never rolls back or blocks ticket booking.
 type ComboOrderRepository interface {
 	// Create inserts the order and its items atomically (its own transaction,
 	// never the caller's).

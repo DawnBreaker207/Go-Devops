@@ -36,7 +36,6 @@ func (r *Registry) Get(name string) (Provider, bool) {
 	return p, ok
 }
 
-// List returns providers in registration order.
 func (r *Registry) List() []Provider {
 	out := make([]Provider, 0, len(r.order))
 	for _, name := range r.order {
@@ -45,7 +44,7 @@ func (r *Registry) List() []Provider {
 	return out
 }
 
-// SetDefault picks the provider used when a pay request names none; empty means the customer must choose.
+// Empty means the customer must choose.
 func (r *Registry) SetDefault(name string) error {
 	if name != "" {
 		if _, ok := r.byName[name]; !ok {

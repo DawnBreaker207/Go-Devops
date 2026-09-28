@@ -3,11 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type HallRepository struct {
@@ -146,38 +144,22 @@ func (r *HallRepository) HasUnfinishedShowtimes(tx *gorm.DB, hallID string) (boo
 	return count > 0, err
 }
 
-// UpdateHall persists name/screen/aisle/active. It must run inside a transaction.
-//
-// The column whitelist deliberately excludes `rows` and `seats_per_row`: this
-// method backs PUT /admin/halls/:id, whose dto.UpdateHallRequest carries no grid
-// fields, and the whitelist is what guarantees that endpoint can never resize a
-// hall out from under its own seats. Layout writes go through UpdateHallLayout.
+// UpdateHall persists name/screen/aisle/active in a transaction. Whitelist excludes rows/
+// seats_per_row so PUT /admin/halls/:id can never resize a hall; layout writes use UpdateHallLayout.
 func (r *HallRepository) UpdateHall(tx *gorm.DB, hall *models.Hall) error {
 	return tx.Model(hall).
 		Select("name", "screen_position", "aisle_after_cols", "active", "updated_at").
 		Updates(hall).Error
 }
 
-// UpdateHallLayout persists the grid itself - rows/seats_per_row plus the two
-// display fields the layout request also carries - and is the ONLY write path
-// allowed to change a hall's declared size. It must run inside a transaction,
-// after the new seats have been written.
-//
-// It exists because RegenerateLayout used to call UpdateHall, whose whitelist
-// silently dropped the rows/seats_per_row assignment: regenerating a 4x5 hall
-// into 6x8 wrote 48 seats up to column 8 while `halls` kept saying 4x5 forever,
-// and the PUT's own response disagreed with every later GET because it
-// serialises the in-memory struct. `name` and `active` stay out on purpose -
-// regenerating a layout is not a rename and must not flip a hall back on.
+// UpdateHallLayout: ONLY write path for rows/seats_per_row; runs in tx after seats written.
 func (r *HallRepository) UpdateHallLayout(tx *gorm.DB, hall *models.Hall) error {
 	return tx.Model(hall).
 		Select("rows", "seats_per_row", "screen_position", "aisle_after_cols", "updated_at").
 		Updates(hall).Error
 }
 
-// DeleteHall soft-deletes a hall, also turning off active so the two flags
-// never disagree forever (a deleted hall is never "still active"). Must run
-// inside a transaction.
+// DeleteHall soft-deletes and deactivates together; must run in a transaction.
 func (r *HallRepository) DeleteHall(tx *gorm.DB, hallID string) error {
 	if err := tx.Model(&models.Hall{}).Where("id = ?", hallID).Update("active", false).Error; err != nil {
 		return err
@@ -238,55 +220,3 @@ func (r *HallRepository) CreateShowtimeSeatsForSeats(tx *gorm.DB, hallID string,
 		WHERE st.hall_id = ? AND st.deleted_at IS NULL AND se.id IN ?`, hallID, seatIDs).Error
 }
 
-func (r *HallRepository) PricesByHall(ctx context.Context, hallID string) ([]models.HallPrice, error) {
-	var prices []models.HallPrice
-	err := r.db.WithContext(ctx).Where("hall_id = ?", hallID).Order("seat_type").Find(&prices).Error
-	return prices, err
-}
-
-// PublicPriceRow is one hall/seat-type price for the public price list.
-type PublicPriceRow struct {
-	HallID   string `gorm:"column:hall_id"`
-	HallName string `gorm:"column:hall_name"`
-	SeatType string `gorm:"column:seat_type"`
-	Price    int64  `gorm:"column:price"`
-}
-
-// PublicPriceList returns every ACTIVE hall's seat-type prices in one query.
-//
-// It mirrors the gate the customer showtime query uses: a hall missing one of the
-// four seat-type prices never reaches a customer, so listing it on a price page
-// would advertise a hall nobody can book. `price > 0` for the same reason — 0
-// means NOT CONFIGURED in this schema, not free.
-func (r *HallRepository) PublicPriceList(ctx context.Context) ([]PublicPriceRow, error) {
-	var rows []PublicPriceRow
-	err := r.db.WithContext(ctx).Raw(`
-		SELECT h.id AS hall_id, h.name AS hall_name, hp.seat_type, hp.price
-		FROM halls h
-		JOIN hall_prices hp ON hp.hall_id = h.id
-		WHERE h.deleted_at IS NULL AND h.active = TRUE AND hp.price > 0
-		  AND h.id IN (
-		      SELECT hall_id FROM hall_prices WHERE price > 0
-		      GROUP BY hall_id HAVING count(DISTINCT seat_type) = 4
-		  )
-		ORDER BY h.name, hp.seat_type`).Scan(&rows).Error
-	if err != nil {
-		return nil, fmt.Errorf("list public prices: %w", err)
-	}
-	return rows, nil
-}
-
-func (r *HallRepository) UpsertPrices(tx *gorm.DB, hallID string, prices map[string]int64) error {
-	rows := make([]models.HallPrice, 0, len(prices))
-	for seatType, price := range prices {
-		rows = append(rows, models.HallPrice{
-			HallID:   hallID,
-			SeatType: seatType,
-			Price:    price,
-		})
-	}
-	return tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "hall_id"}, {Name: "seat_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"price", "updated_at"}),
-	}).Create(&rows).Error
-}

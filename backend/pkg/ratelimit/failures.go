@@ -37,7 +37,6 @@ func NewFailureLimiter(max int, lockout time.Duration, now func() time.Time) *Fa
 	return &FailureLimiter{max: max, lockout: lockout, now: now, entries: make(map[string]*failureEntry)}
 }
 
-// Blocked reports whether key is locked out and for how much longer.
 func (l *FailureLimiter) Blocked(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -52,7 +51,6 @@ func (l *FailureLimiter) Blocked(key string) (bool, time.Duration) {
 	return false, 0
 }
 
-// Fail records a failure and reports whether it started a lockout.
 func (l *FailureLimiter) Fail(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -78,7 +76,6 @@ func (l *FailureLimiter) Fail(key string) bool {
 	return false
 }
 
-// Reset forgets the failures of key (successful login).
 func (l *FailureLimiter) Reset(key string) {
 	l.mu.Lock()
 	delete(l.entries, key)

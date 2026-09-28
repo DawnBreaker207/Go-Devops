@@ -10,26 +10,65 @@ API service của **Cinema Project**, viết bằng Go + Gin + GORM + PostgreSQL
 | Go | >= 1.26 |
 | PostgreSQL | >= 14 (khuyến nghị 16) |
 | Docker | tuỳ chọn, để chạy `docker compose` |
-| golang-migrate | tuỳ chọn: `brew install golang-migrate` |
+| golang-migrate | cần cho `make migrate` (đường không dùng Docker): `brew install golang-migrate` |
 | swag | tuỳ chọn: `go install github.com/swaggo/swag/cmd/swag@latest` |
 
 ## Chạy dev
 
-```bash
-cp ../.env.example ../.env               # cho `docker compose` o root (sửa DATABASE_* và JWT_* cho phù hợp)
-cp ../.env.example .env                  # cho `make run` trong backend/
-openssl rand -hex 32                       # sinh secret cho JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
+Bốn bước. **Bỏ bước `migrate-seed` thì database rỗng hoàn toàn**: không phim, không
+phòng, không suất chiếu, và giao diện khách chỉ còn các trạng thái "chưa có dữ liệu".
 
-docker compose up -d postgres            # hoặc dùng Postgres sẵn có
-docker compose up -d redis                # tuỳ chọn: bật read cache (REDIS_ADDR đang trống = không cache)
-make run                                   # http://localhost:8080
+```bash
+cp .env.example .env                      # sửa DATABASE_* và JWT_* cho phù hợp
+openssl rand -hex 32                      # sinh secret cho JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
+
+docker compose up -d postgres             # hoặc dùng Postgres sẵn có
+docker compose up -d redis                # tuỳ chọn: bật read cache (REDIS_ADDR trống = không cache)
+
+make migrate                              # schema (cần CLI golang-migrate, xem bảng bên trên)
+make migrate-seed                         # dữ liệu mẫu (cần postgres của docker compose đang chạy)
+make run                                  # http://localhost:8080
 ```
+
+Không muốn cài CLI `golang-migrate`? Dùng đường Docker ở mục dưới — service
+`migrate` trong compose chạy schema giúp, nhưng `make migrate-seed` vẫn phải gọi riêng.
+
+### Sau khi seed sẽ có gì
+
+| | |
+| --- | --- |
+| Phim | 7 (5 `showing`, 2 `coming_soon`), đủ `poster_url`, `backdrop_url` và `trailer_url` |
+| Phòng chiếu | 3 (60 / 120 / 196 ghế), mỗi phòng đủ **4 loại giá** |
+| Suất chiếu | 18 suất cho 3 ngày tới, cộng tối đa **3 suất còn lại trong hôm nay** (khe nào vượt quá nửa đêm thì bỏ, nên seed lúc khuya sẽ được ít hơn) |
+| Bắp nước | 7 sản phẩm (6 đang bán, 1 đã ngừng) |
+| Tài khoản | `admin@cinema.local` / `admin123` (chỉ seed khi bảng `users` còn rỗng và `APP_ENV != production`) |
+
+Đủ bốn thứ trên thì trang chủ khách hàng hiện đúng như máy dev: banner hero, lưới
+phim, khối trailer, và luồng đặt vé chạy được từ đầu đến cuối.
+
+Giá ghế phải đủ **cả 4 loại** cho mỗi phòng, nếu không phòng đó biến mất khỏi mọi
+danh sách phía khách — truy vấn suất chiếu có `HAVING count(DISTINCT seat_type) = 4`.
+
+### Dữ liệu cũ đi thì chạy lại seed
+
+Suất chiếu chỉ có ích khi còn ở **tương lai**, nên `010005_seed_showtimes.sql` tính
+giờ theo đồng hồ lúc chạy chứ không ghi ngày cố định, và **chạy lại thì làm mới lịch**
+thay vì bỏ qua:
+
+```bash
+make migrate-seed     # đẩy lịch chiếu về lại hôm nay -> +3 ngày
+```
+
+Nó chỉ đụng vào những suất do chính nó tạo, bỏ qua suất đã có người giữ/đặt ghế, và
+bỏ qua khe giờ nào trùng với suất sẵn có trong cùng phòng. Các seed còn lại vẫn là
+`ON CONFLICT DO NOTHING` nên chạy bao nhiêu lần cũng không ghi đè dữ liệu thật.
 
 Chạy toàn bộ bằng Docker (postgres + rabbitmq + redis + migrate + backend):
 
 ```bash
 make docker-up      # local: đặt APP_ENV=development (và JWT_*/PAYMENT_PROVIDERS_MOCK_SECRET) trong .env,
                     # vì mặc định compose chạy production và từ chối secret trống
+make migrate-seed   # service `migrate` chỉ chạy schema, KHÔNG chạy seed
 make docker-down
 ```
 

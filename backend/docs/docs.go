@@ -2537,142 +2537,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/admin/halls/{id}/prices": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "halls"
-                ],
-                "summary": "Get the prices of a hall",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Hall ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "halls"
-                ],
-                "summary": "Set prices for all seat types of a hall",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Hall ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Price per seat type",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                        }
-                    }
-                }
-            }
-        },
         "/admin/halls/{id}/seats": {
             "get": {
                 "security": [
@@ -2769,6 +2633,79 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.SeatResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/halls/{id}/seats/columns": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Never touches an existing seat - safe while the hall has a live booking (409 only on an actual conflict), unlike regenerating the whole layout.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "halls"
+                ],
+                "summary": "Append one new standard seat to every existing row, widening the hall by one column",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Hall ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "allOf": [
                                 {
@@ -7086,12 +7023,12 @@ const docTemplate = `{
         },
         "/pricing": {
             "get": {
-                "description": "Seat-type prices per bookable hall, plus the cheapest seat anywhere. No auth: this is the customer price page. Only halls a customer can actually book appear — active, and with all four seat types priced, the same gate the customer showtime query uses.",
+                "description": "The global base price for each seat type, plus the cheapest configured seat anywhere. No auth: this is the customer price page. Replaces the old per-hall price list (PLAN_CAMPAIGN.md section 11.4, Phase 3) now that hall_prices is gone - every hall shares the same prices.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "halls"
+                    "pricing"
                 ],
                 "summary": "Public ticket price list",
                 "responses": {
@@ -7107,44 +7044,6 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicPriceListResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                        }
-                    }
-                }
-            }
-        },
-        "/pricing/global": {
-            "get": {
-                "description": "The global base price for each seat type, plus the cheapest configured seat anywhere. No auth. Lives at /pricing/global because /pricing serves the per-hall list.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "pricing"
-                ],
-                "summary": "Public global ticket price list",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_pkg_response.Body"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse"
                                         }
                                     }
                                 }
@@ -8701,7 +8600,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "slug": {
-                    "description": "Omitted slug auto-generates from title.",
+                    "description": "Auto-generated from title when omitted (a numeric suffix is appended on a collision).",
                     "type": "string",
                     "maxLength": 255,
                     "example": "khuyen-mai-thang-10"
@@ -9081,6 +8980,10 @@ const docTemplate = `{
                 "active": {
                     "type": "boolean"
                 },
+                "campaign_id": {
+                    "description": "CampaignID is nil for a standalone code (PLAN_CAMPAIGN.md sections 1-10).",
+                    "type": "string"
+                },
                 "code": {
                     "type": "string"
                 },
@@ -9126,7 +9029,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "remaining": {
-                    "description": "Nil when the code has no max_uses (unlimited).",
+                    "description": "Remaining is nil when the code has no max_uses (unlimited).",
                     "type": "integer"
                 }
             }
@@ -9225,9 +9128,6 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
-                "copy_prices": {
-                    "type": "boolean"
-                },
                 "name": {
                     "type": "string",
                     "maxLength": 255,
@@ -9358,7 +9258,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "active": {
-                    "description": "Omitted defaults to FALSE (draft until switched on explicitly).",
+                    "description": "Omitted defaults to FALSE: a campaign is created as a draft, then\nswitched on explicitly once its codes/combos/articles are attached.",
                     "type": "boolean"
                 },
                 "description": {
@@ -9507,7 +9407,7 @@ const docTemplate = `{
                     "example": "percent"
                 },
                 "adjust_value": {
-                    "description": "Signed: negative discounts, positive surcharges.",
+                    "description": "Signed: negative is a discount, positive a surcharge. No sign is forced —\nthat is a business decision left open (PLAN_CAMPAIGN.md section 11).",
                     "type": "integer",
                     "example": 10
                 },
@@ -9668,6 +9568,10 @@ const docTemplate = `{
                 "active": {
                     "type": "boolean"
                 },
+                "campaign_id": {
+                    "description": "CampaignID is nil for a standalone code (PLAN_CAMPAIGN.md sections 1-10).",
+                    "type": "string"
+                },
                 "code": {
                     "type": "string"
                 },
@@ -9750,39 +9654,16 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.GlobalPriceListResponse": {
-            "type": "object",
-            "properties": {
-                "from_price": {
-                    "type": "integer"
-                },
-                "prices": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
-                    }
-                }
-            }
-        },
-        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallPriceResponse": {
-            "type": "object",
-            "properties": {
-                "price": {
-                    "type": "integer"
-                },
-                "seat_type": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.HallRequest": {
             "type": "object",
             "required": [
-                "name",
-                "prices"
+                "name"
             ],
             "properties": {
+                "active": {
+                    "description": "Nil defaults to true; a hall still being set up can be created inactive.",
+                    "type": "boolean"
+                },
                 "aisle_after_cols": {
                     "description": "Column numbers after which there is a vertical aisle, display only.",
                     "type": "array",
@@ -9810,20 +9691,6 @@ const docTemplate = `{
                     "maxLength": 255,
                     "minLength": 1,
                     "example": "Phong 2"
-                },
-                "prices": {
-                    "description": "Must hold a positive price for each of the 4 seat types.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
-                    },
-                    "example": {
-                        "couple": 160000,
-                        "recliner": 130000,
-                        "standard": 70000,
-                        "vip": 100000
-                    }
                 },
                 "rows": {
                     "type": "integer",
@@ -10498,25 +10365,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PriceRequest": {
-            "type": "object",
-            "required": [
-                "prices"
-            ],
-            "properties": {
-                "prices": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
-                    },
-                    "example": {
-                        "standard": 80000,
-                        "vip": 120000
-                    }
-                }
-            }
-        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PricingQuoteResponse": {
             "type": "object",
             "properties": {
@@ -10575,35 +10423,17 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices": {
-            "type": "object",
-            "properties": {
-                "hall_id": {
-                    "type": "string"
-                },
-                "hall_name": {
-                    "type": "string"
-                },
-                "prices": {
-                    "description": "Keyed by seat type, whole VND. Always four entries.",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer",
-                        "format": "int64"
-                    }
-                }
-            }
-        },
         "github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicPriceListResponse": {
             "type": "object",
             "properties": {
                 "from_price": {
                     "type": "integer"
                 },
-                "halls": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_Cinema-Project-Juann_BackEnd-CP_internal_dto.PublicHallPrices"
+                "prices": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
                     }
                 }
             }
@@ -11606,6 +11436,7 @@ const docTemplate = `{
                     "example": "success"
                 },
                 "reason": {
+                    "description": "Reason is a stable machine-readable key for an error (\"discount_expired\"), so the\nfrontend can translate without matching on the English sentence. Absent on success.",
                     "type": "string"
                 }
             }

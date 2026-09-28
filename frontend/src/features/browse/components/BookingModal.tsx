@@ -46,7 +46,7 @@ const CheckIcon = () => (
   </svg>
 );
 
-/** Showtime picker modal from "Book" on a movie card. One scrollable day-grouped list (3-col time grid); picking highlights only, "Confirm" below advances. Unlike FilmPage (day tabs), this has no tabs; both UIs stay. Backend returns ONE day per call, so fan out one query/day over DAYS_AHEAD and merge client-side (useMovieShowtimesRange). No per-show seat counts from the API, so no "x/y seats" line or sold-out disabled state; true sellout is detected on Confirm via seatMapApi.forShowtime. */
+// Pick a showtime by day; the backend answers one day per call, so fan out 7 days then merge. Real seat counts surface at Confirm.
 export const BookingModal = ({ movieId, movieTitle, onClose }: BookingModalProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();

@@ -6,7 +6,6 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// UserResponse is user info returned to the client (no password).
 type UserResponse struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
@@ -39,15 +38,13 @@ func NewUserResponses(users []models.User) []UserResponse {
 	return out
 }
 
-// UserListQuery filters the admin user list.
 type UserListQuery struct {
 	PageQuery
 	Role   string `form:"role" binding:"omitempty,oneof=customer staff admin"`
 	Active *bool  `form:"active"`
 }
 
-// CreateUserRequest creates a staff (or admin) account; customers register
-// themselves
+// Staff (or admin) only; customers self-register.
 type CreateUserRequest struct {
 	Email    string `json:"email" binding:"required,email,max=255" example:"staff1@cinema.local"`
 	Password string `json:"password" binding:"required,min=6,max=72"`
@@ -55,26 +52,23 @@ type CreateUserRequest struct {
 	Role     string `json:"role" binding:"required,oneof=staff admin" example:"staff"`
 }
 
-// UpdateUserRequest locks/unlocks an account and/or changes its role; send at
-// least one field.
+// Send at least one field.
 type UpdateUserRequest struct {
 	Active *bool   `json:"active"`
 	Role   *string `json:"role" binding:"omitempty,oneof=customer staff admin" example:"staff"`
 }
 
-// UpdateProfileRequest is what a signed-in user may change about themselves.
 type UpdateProfileRequest struct {
 	FullName string `json:"full_name" binding:"required,min=2,max=255" example:"Nguyen Van A"`
 	Phone    string `json:"phone" binding:"omitempty,max=20" example:"0901234567"`
 }
 
-// DeleteAccountRequest re-confirms the password before an irreversible erasure.
+// Re-confirms the password before irreversible erasure.
 type DeleteAccountRequest struct {
 	Password string `json:"password" binding:"required" example:"secret123"`
 }
 
-// NotificationPreferenceResponse is what a signed-in user currently receives.
-// A user with no row yet gets the same shape, backed by the model defaults.
+// No row yet reads as model defaults.
 type NotificationPreferenceResponse struct {
 	BookingReminders bool `json:"booking_reminders"`
 	PromoOffers      bool `json:"promo_offers"`
@@ -87,8 +81,7 @@ func NewNotificationPreferenceResponse(p *models.NotificationPreference) Notific
 	}
 }
 
-// UpdateNotificationPreferenceRequest replaces both flags at once; both false is
-// allowed, since nothing forces a user to keep any notification category on.
+// Replaces both flags at once; both false is allowed.
 type UpdateNotificationPreferenceRequest struct {
 	BookingReminders bool `json:"booking_reminders"`
 	PromoOffers      bool `json:"promo_offers"`

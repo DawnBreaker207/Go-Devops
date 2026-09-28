@@ -22,7 +22,7 @@ import { MAX_FLOW_SEATS, useBookingFlowStore, type FlowSeat } from '@/stores/boo
 import { PATHS, bookingSuccessPath } from '@/routes/paths';
 import type { SeatMap, SeatMapSeat } from '@/types';
 import type { ComboOrderItemPayload } from '@/types';
-import { errorMessage } from '@/utils/error';
+import { errorMessage, isRecoverableRefreshError } from '@/utils/error';
 import { formatVND } from '@/utils/format';
 import Button from '@/components/ui/Button';
 import Notice from '@/components/ui/Notice';
@@ -35,19 +35,18 @@ import SeatStep from './steps/SeatStep';
 import ComboStep from './steps/ComboStep';
 import CheckoutStep from './steps/CheckoutStep';
 
-/** Max combos per order (backend `max=20`). */
+// Backend max is 20 seats per booking.
 const MAX_QTY = 20;
 
 type FlowStep = 0 | 1 | 2;
 
-/** Single-route booking flow (seats→combo→checkout); confirmed orders go to the success page; parent holds picks, holds, combos and the recovery order. */
 export const BookingFlowPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { showtimeId } = useParams<{ showtimeId: string }>();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const queryClient = useQueryClient();
-  // Holds are RequireRoles(customer): operators see the map but pay 403s. Say so upfront instead of on click.
+  // Holds are customer-only: operators see the map but pay 403s, so say so upfront instead of on click.
   const isCustomer = useHasRole('customer');
 
   const storeShowtimeId = useBookingFlowStore((s) => s.showtimeId);
@@ -57,22 +56,18 @@ export const BookingFlowPage = () => {
   const setBooking = useBookingFlowStore((s) => s.setBooking);
 
   const [step, setStep] = useState<FlowStep | null>(null);
-  // Counts sidebar "Pay" presses at checkout - CheckoutStep listens and pays (not a ref). Monotonic, so one press never fires twice.
+  // Monotonic Pay-press counter; one press fires exactly once.
   const [paySignal, setPaySignal] = useState(0);
-  // Navigate by handler only (no setState in effects): current step = user
-  // pick, else derived from the saved order.
+  // Navigate by handler only, never setState in effects.
   const goStep = useCallback((n: FlowStep) => setStep(n), []);
 
-  // Entering with a different showtime = new run: ignore the old booking (store writes happen on successful hold, in the handler).
+  // Entering with a different showtime is a new run: drop the old booking.
   const bookingId =
     showtimeId && showtimeId !== storeShowtimeId ? undefined : (storeBookingId ?? undefined);
 
-  // Recovery order (F5 / opened from My tickets): confirmed -> SEPARATE
-  // SUCCESS page; pending WITH seats -> checkout; empty pending (fresh entry
-  // shell) -> stay on seats. Manual `step` wins once set.
+  // F5 recovery: confirmed -> success page; pending+seats -> checkout; empty pending -> seats.
   const savedOrder = useOrderDetail(bookingId);
-  // A just-created entry order (seatless) must not auto-jump to checkout -
-  // state (not ref) so render can read it.
+  // A freshly created seatless order must not auto-jump to checkout.
   const [entryFresh, setEntryFresh] = useState(false);
   const autoStep: FlowStep =
     !bookingId || savedOrder.error || !savedOrder.data || savedOrder.data.status === 'confirmed'
@@ -82,11 +77,8 @@ export const BookingFlowPage = () => {
         : 0;
   const effectiveStep: FlowStep = step ?? autoStep;
 
-  // Warn on tab close mid-flow (picking seats or holding an order).
   const pendingOrder = savedOrder.data?.status === 'pending' ? savedOrder.data : null;
 
-  // --- Step 0: map + pick; ORDER OPENS AT ENTRY (init), hold on Continue ---
-  // Entry opens an empty order + countdown; clicks only flip local state; hold attaches at step change. Deselect-all cancels the order, killing the countdown.
   const selectedIds = useBookingFlowStore((s) => s.selectedIds);
   const toggleSeat = useBookingFlowStore((s) => s.toggleSeat);
   const clearBooking = useBookingFlowStore((s) => s.clearBooking);
@@ -119,16 +111,16 @@ export const BookingFlowPage = () => {
     [queryClient, showtimeId]
   );
 
-  // Primary seat-state source (hook owns the SSE protocol); `sseDown` flags dead realtime.
+  // SSE is the live source; sseDown flags dead realtime.
   const { sseDown } = useSeatMapRealtime(showtimeId, canWatchSeats, applySeatUpdates);
 
   const seatMap = useQuery({
     queryKey: [SEATMAP_QUERY_KEY, showtimeId],
     queryFn: () => seatMapApi.forShowtime(showtimeId as string),
     enabled: canWatchSeats,
-    // SSE is the live source; long staleTime since this is only fallback for remounts / first entry.
+    // SSE is live; the long staleTime is fallback-only.
     staleTime: 60_000,
-    // sseDown: SSE broken (weak net, mid-flow token expiry...) - re-poll so the map never freezes waiting on SSE recovery.
+    // Dead SSE falls back to polling so the map never freezes waiting on reconnect.
     refetchInterval: sseDown ? 5000 : false,
   });
 
@@ -146,10 +138,9 @@ export const BookingFlowPage = () => {
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
   const total = selectedSeats.reduce((sum, s) => sum + s.price, 0);
 
-  // Poster/genre for the sidebar header - SeatMap omits both, fetched separately by movie_id.
+  // SeatMap omits poster/genre, so fetch them separately.
   const movieDetail = useMovieDetail(seatMap.data?.movie_id);
 
-  // Step-0 countdown reads the held (pending) order - hidden pre-hold.
   const step0Countdown = useCountdown(
     bookingId && savedOrder.data?.status === 'pending' ? savedOrder.data.expires_at : undefined
   );
@@ -161,20 +152,20 @@ export const BookingFlowPage = () => {
       try {
         const result = await hold.mutateAsync({
           show_id: showtimeId,
-          // MUST be showtime_seat_id. seats.id 400s ("seat does not belong to this showtime").
+          // Must be showtime_seat_id: seats.id 400s ("seat does not belong to this showtime").
           seat_ids: details.map((d) => d.seatId),
         });
-        // enterShowtime BEFORE setBooking (resets only on showtime change, never wipes same-showtime temp picks).
+        // enterShowtime must run before setBooking, or it resets the picks setBooking just wrote.
         enterShowtime(showtimeId);
         setBooking(result.booking_id, details);
-        // Hold mints a new order (uncached query): prefetch while the button loads so combo step has data (else page + sidebar flash). Prefetch errors are fine (sidebar retries).
+        // Hold mints an uncached order; prefetch now so the combo step has data instead of flashing.
         await queryClient.prefetchQuery({
           queryKey: [ORDER_QUERY_KEY, 'detail', result.booking_id],
           queryFn: () => orderApi.detail(result.booking_id),
         });
         return true;
       } catch (error) {
-        // Mid-flow 409: someone else grabbed a seat. Keep picks so the customer swaps seats.
+        // Mid-flow 409 means a lost seat; keep picks so the customer can swap seats.
         setHoldError(errorMessage(error, t('common.somethingWrong')));
         void seatMap.refetch();
         return false;
@@ -183,7 +174,7 @@ export const BookingFlowPage = () => {
     [showtimeId, hold, setBooking, enterShowtime, queryClient, seatMap, t]
   );
 
-  // Entry: open an empty order so countdown runs immediately (idempotent: a live order returns as-is). StrictMode double-fires the effect in dev - ref-guarded.
+  // Opening an empty order is idempotent; ref-guarded against StrictMode's dev double-fire.
   useEffect(() => {
     if (!showtimeId || !isCustomer || bookingId) return;
     if (initTriedRef.current === showtimeId) return;
@@ -191,7 +182,6 @@ export const BookingFlowPage = () => {
     initOrder
       .mutateAsync(showtimeId)
       .then((res) => {
-        // Fresh entry orders (seatless) must not auto-jump to checkout.
         if (!res.reused) setEntryFresh(true);
         enterShowtime(showtimeId);
         setBooking(res.booking_id, []);
@@ -202,8 +192,7 @@ export const BookingFlowPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showtimeId, isCustomer, bookingId]);
 
-  // Continue: ALWAYS hold picked seats first (empty init or old order both get
-  // replaced), then combo. Never skip the hold.
+  // Continue always holds picked seats first, never skips straight to combo.
   const handleProceed = useCallback(async () => {
     const ok = await doHold(
       selectedIds.map((id) => {
@@ -219,13 +208,14 @@ export const BookingFlowPage = () => {
     if (ok) goStep(1);
   }, [doHold, selectedIds, seats, goStep]);
 
-  // Silent 45s heartbeat: extends within the lifetime cap. Failures (cap hit,
-  // seats lost, showtime closed) -> back to step 0 with an error, beat stops.
+  // Silent 45s heartbeat extends the hold within the lifetime cap; on cap hit, lost seats or a closed showtime, back to step 0 and stop beating.
   const refreshRef = useRef(() => {});
   useEffect(() => {
     refreshRef.current = () => {
       if (!bookingId) return;
-      refreshOrder.mutateAsync(bookingId).catch((error) => {
+      refreshOrder.mutateAsync(bookingId).catch((error: unknown) => {
+        // Never clear the hold on a refresh 409 while checkout is open: that would cancel the order right before payment.
+        if (isRecoverableRefreshError(error)) return;
         clearBooking();
         setFlowError(errorMessage(error, t('common.somethingWrong')));
         goStep(0);
@@ -238,8 +228,7 @@ export const BookingFlowPage = () => {
     return () => window.clearInterval(id);
   }, [bookingId, effectiveStep]);
 
-  // Expiry on steps 0/1: home (sweeper reaps the order). Step 2 never
-  // self-navigates (gateway tab may be open elsewhere) - the screen shows expiry itself.
+  // Expiry on steps 0/1 goes home (the sweeper reaps the order); step 2 never self-navigates since the gateway tab may still be open.
   const expiredClient =
     bookingId != null &&
     savedOrder.data?.status === 'pending' &&
@@ -253,7 +242,6 @@ export const BookingFlowPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiredClient]);
 
-  // --- Step 1: combo ---
   const combos = useCombos();
   const createOrder = useCreateComboOrder();
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -284,15 +272,12 @@ export const BookingFlowPage = () => {
       await createOrder.mutateAsync({ booking_id: bookingId, items });
       goStep(2);
     } catch (error) {
-      // Combo-order errors must never block the ticket order - flag it so a
-      // retry keeps items (pressing Continue again re-tries).
+      // Combo errors must never block the ticket order; flag it so pressing Continue again retries.
       setComboError(errorMessage(error, t('customer.comboOrderError')));
     }
   }, [bookingId, items, createOrder, goStep, t]);
 
-  // --- Step navigation ---
-  // Confirming belongs to /payment-result post-gateway - no outbound events from CheckoutStep anymore.
-
+  // Confirming belongs to /payment-result post-gateway; CheckoutStep emits no outbound events.
   useEffect(() => {
     const guard = (event: BeforeUnloadEvent) => {
       if (selected.size > 0 || pendingOrder) event.preventDefault();
@@ -306,7 +291,7 @@ export const BookingFlowPage = () => {
   }
 
   if (!isAuthenticated) {
-    // /shows/:id/seats needs JWT, so unauthenticated users can't fetch it.
+    // /shows/:id/seats needs JWT, so signed-out users can't fetch it.
     return (
       <Notice variant="info" role="status">
         <span>{t('customer.seatsNeedLogin')}</span>
@@ -314,8 +299,7 @@ export const BookingFlowPage = () => {
     );
   }
 
-  // Confirmed orders (reopened old order / F5 at confirm time / stale store run)
-  // never stay in-flow - straight to the separate success page.
+  // Confirmed orders (reopened / F5 at confirm time / stale store run) never stay in-flow; go straight to success.
   if (bookingId && !savedOrder.isLoading && savedOrder.data?.status === 'confirmed') {
     return <Navigate to={bookingSuccessPath(bookingId)} replace />;
   }
@@ -327,14 +311,11 @@ export const BookingFlowPage = () => {
   ];
 
   if (seatMap.error && effectiveStep === 0) {
-    // 404 here means two things ("missing" and "no longer on sale") under one
-    // 40400 code, distinguishable only by the backend's English sentence - so
-    // render it verbatim instead of guessing.
+    // One 404 covers both "missing" and "no longer on sale"; render the backend sentence verbatim.
     return (
       <Notice variant="error">{errorMessage(seatMap.error, t('common.somethingWrong'))}</Notice>
     );
   }
-  // Wait for the seat map (step 0) or the recovery order before painting anything.
   if ((seatMap.isLoading && effectiveStep === 0) || (bookingId && savedOrder.isLoading)) {
     return <p className={INK_62}>{t('common.loading')}</p>;
   }

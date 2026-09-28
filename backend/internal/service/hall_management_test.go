@@ -22,7 +22,7 @@ func TestHallTemplates_PreviewMatchesCreatedGrid(t *testing.T) {
 		if tpl.SeatCount <= 0 || tpl.Rows <= 0 || tpl.SeatsPerRow <= 0 {
 			t.Fatalf("template %s = %+v", tpl.Name, tpl)
 		}
-		hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "From " + tpl.Name, Template: tpl.Name, Prices: fullPrices()})
+		hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "From " + tpl.Name, Template: tpl.Name})
 		if err != nil {
 			t.Fatalf("create from template %s: %v", tpl.Name, err)
 		}
@@ -44,7 +44,7 @@ func TestHallTemplates_PreviewMatchesCreatedGrid(t *testing.T) {
 func TestHallTemplates_ExplicitFieldsOverride(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
-		Name: "Override", Template: "small", SeatsPerRow: 4, Prices: fullPrices(),
+		Name: "Override", Template: "small", SeatsPerRow: 4,
 	})
 	e.must(err)
 	if hall.SeatsPerRow != 4 {
@@ -55,11 +55,14 @@ func TestHallTemplates_ExplicitFieldsOverride(t *testing.T) {
 	}
 }
 
-// T73a: cloning copies the exact current grid (including a manual edit made
-// after creation, not the original template) and, when asked, the prices.
-func TestHallClone_CopiesGridAndPrices(t *testing.T) {
+// T73a: cloning copies the exact current grid, including a manual edit made
+// after creation (not the original template). Prices are no longer part of
+// a hall at all (PLAN_CAMPAIGN.md section 11.4, Phase 3: hall_prices is
+// gone, every hall shares the global seat_base_prices), so Clone has nothing
+// price-related left to copy.
+func TestHallClone_CopiesGrid(t *testing.T) {
 	e := newEnv(t)
-	source, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Source", Rows: 2, SeatsPerRow: 3, Prices: fullPrices()})
+	source, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Source", Rows: 2, SeatsPerRow: 3})
 	e.must(err)
 	seats, err := e.halls.SeatsByHall(e.ctx, source.ID)
 	e.must(err)
@@ -73,7 +76,7 @@ func TestHallClone_CopiesGridAndPrices(t *testing.T) {
 	_, err = e.halls.UpdateSeat(e.ctx, source.ID, a1, dto.SeatUpdateRequest{SeatType: vip})
 	e.must(err)
 
-	clone, err := e.halls.Clone(e.ctx, source.ID, dto.CloneHallRequest{Name: "Clone", CopyPrices: true})
+	clone, err := e.halls.Clone(e.ctx, source.ID, dto.CloneHallRequest{Name: "Clone"})
 	e.must(err)
 	cloneSeats, err := e.halls.SeatsByHall(e.ctx, clone.ID)
 	e.must(err)
@@ -92,24 +95,13 @@ func TestHallClone_CopiesGridAndPrices(t *testing.T) {
 	if !found {
 		t.Fatal("clone missing A1")
 	}
-	prices, err := e.halls.PricesByHall(e.ctx, clone.ID)
-	e.must(err)
-	if len(prices) != len(models.AllSeatTypes) {
-		t.Fatalf("clone prices = %d, want %d", len(prices), len(models.AllSeatTypes))
-	}
-
-	uncopied, err := e.halls.Clone(e.ctx, source.ID, dto.CloneHallRequest{Name: "Clone 2", CopyPrices: false})
-	e.must(err)
-	if p, err := e.halls.PricesByHall(e.ctx, uncopied.ID); err != nil || len(p) != 0 {
-		t.Fatalf("uncopied clone prices = %v, %v, want none", p, err)
-	}
 }
 
 // T74: bulk seat edit covers all 4 selector kinds, is atomic, and is blocked
 // by a live booking exactly like a single-seat edit.
 func TestHallBulkUpdateSeats(t *testing.T) {
 	e := newEnv(t)
-	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Bulk Hall", Rows: 4, SeatsPerRow: 4, Prices: fullPrices()})
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Bulk Hall", Rows: 4, SeatsPerRow: 4})
 	e.must(err)
 
 	byLabel := func() map[string]models.Seat {
@@ -171,6 +163,65 @@ func TestHallBulkUpdateSeats(t *testing.T) {
 	}
 }
 
+// AddColumn widens every row by one GAP (not a standard seat) - the admin fills in only the rows
+// that need a seat there afterward. Blocked once the hall has any live booking, same gate as
+// AddRow/BulkUpdateSeats.
+func TestHallAddColumn(t *testing.T) {
+	e := newEnv(t)
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Column Hall", Rows: 2, SeatsPerRow: 2})
+	e.must(err)
+
+	added, err := e.halls.AddColumn(e.ctx, hall.ID)
+	e.must(err)
+	if len(added) != 2 {
+		t.Fatalf("added = %d seats, want 2 (one per row)", len(added))
+	}
+	for _, s := range added {
+		if s.Col != 3 || s.SeatType != models.SeatStandard || !s.IsGap {
+			t.Fatalf("new seat = %+v, want col 3 standard gap", s)
+		}
+	}
+
+	updated, err := e.halls.GetByID(e.ctx, hall.ID)
+	e.must(err)
+	if updated.SeatsPerRow != 3 {
+		t.Fatalf("hall.seats_per_row = %d, want 3", updated.SeatsPerRow)
+	}
+	seats, err := e.halls.SeatsByHall(e.ctx, hall.ID)
+	e.must(err)
+	if len(seats) != 6 {
+		t.Fatalf("seats = %d, want 6 (2 rows x 3 cols)", len(seats))
+	}
+
+	show, err := e.showtimes.Create(e.ctx, dto.ShowtimeRequest{MovieID: e.movieID, HallID: hall.ID, StartAt: time.Now().Add(5 * time.Hour)})
+	e.must(err)
+	seatMap, err := e.showtimes.SeatMap(e.ctx, show.ID)
+	e.must(err)
+	if _, err := e.svc.Hold(e.ctx, e.users[0], dto.HoldRequest{ShowID: show.ID, SeatIDs: []string{seatMap.Seats[0].ShowtimeSeatID}}); err != nil {
+		t.Fatalf("hold on the column hall: %v", err)
+	}
+	if _, err := e.halls.AddColumn(e.ctx, hall.ID); !isAppErr(err, apperrors.ErrHallHasBookings) {
+		t.Fatalf("add column with a live hold: err = %v", err)
+	}
+}
+
+// A hall's last remaining row can't be deleted: halls.rows has a DB CHECK (rows > 0), and DeleteRow
+// must refuse cleanly before ever reaching that constraint.
+func TestHallDeleteRow_RefusesTheLastRow(t *testing.T) {
+	e := newEnv(t)
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "One Row Hall", Rows: 1, SeatsPerRow: 2})
+	e.must(err)
+
+	if _, err := e.halls.DeleteRow(e.ctx, hall.ID, "A"); !isAppErr(err, apperrors.ErrHallLastRow) {
+		t.Fatalf("delete the only row: err = %v", err)
+	}
+	seats, err := e.halls.SeatsByHall(e.ctx, hall.ID)
+	e.must(err)
+	if len(seats) != 2 {
+		t.Fatalf("seats = %d, want 2 (row not actually deleted)", len(seats))
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 // T75: deactivating a hall is refused while an open showtime is still to
@@ -178,7 +229,7 @@ func boolPtr(b bool) *bool { return &b }
 func TestHallUpdate_DeactivateBlocksNewShowtimes(t *testing.T) {
 	e := newEnv(t)
 	name := "Deactivate Hall"
-	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: name, Rows: 1, SeatsPerRow: 2, Prices: fullPrices()})
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: name, Rows: 1, SeatsPerRow: 2})
 	e.must(err)
 	show, err := e.showtimes.Create(e.ctx, dto.ShowtimeRequest{MovieID: e.movieID, HallID: hall.ID, StartAt: time.Now().Add(3 * time.Hour)})
 	e.must(err)
@@ -203,10 +254,10 @@ func TestHallUpdate_DeactivateBlocksNewShowtimes(t *testing.T) {
 // even one whose showtime was later deleted; regenerating rebuilds the grid.
 func TestHallRegenerateLayout_BlockedAfterAnyBooking(t *testing.T) {
 	e := newEnv(t)
-	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Layout Hall", Rows: 2, SeatsPerRow: 2, Prices: fullPrices()})
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Layout Hall", Rows: 2, SeatsPerRow: 2})
 	e.must(err)
 
-	regenerated, err := e.halls.RegenerateLayout(e.ctx, hall.ID, dto.HallRequest{Rows: 3, SeatsPerRow: 5, Prices: fullPrices()})
+	regenerated, err := e.halls.RegenerateLayout(e.ctx, hall.ID, dto.HallRequest{Rows: 3, SeatsPerRow: 5})
 	e.must(err)
 	if regenerated.Rows != 3 || regenerated.SeatsPerRow != 5 {
 		t.Fatalf("regenerated hall = %+v", regenerated)
@@ -226,7 +277,7 @@ func TestHallRegenerateLayout_BlockedAfterAnyBooking(t *testing.T) {
 	_, err = e.svc.Cancel(e.ctx, e.users[0], held.BookingID)
 	e.must(err)
 
-	if _, err := e.halls.RegenerateLayout(e.ctx, hall.ID, dto.HallRequest{Rows: 1, SeatsPerRow: 1, Prices: fullPrices()}); !isAppErr(err, apperrors.ErrHallEverHadBookings) {
+	if _, err := e.halls.RegenerateLayout(e.ctx, hall.ID, dto.HallRequest{Rows: 1, SeatsPerRow: 1}); !isAppErr(err, apperrors.ErrHallEverHadBookings) {
 		t.Fatalf("regenerate after a canceled (but real) booking: err = %v", err)
 	}
 }
@@ -234,7 +285,7 @@ func TestHallRegenerateLayout_BlockedAfterAnyBooking(t *testing.T) {
 // T77: deleting a hall is refused while it has a showtime not yet ended.
 func TestHallDelete_BlockedByUnfinishedShowtime(t *testing.T) {
 	e := newEnv(t)
-	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Delete Hall", Rows: 1, SeatsPerRow: 2, Prices: fullPrices()})
+	hall, err := e.halls.Create(e.ctx, dto.HallRequest{Name: "Delete Hall", Rows: 1, SeatsPerRow: 2})
 	e.must(err)
 	show, err := e.showtimes.Create(e.ctx, dto.ShowtimeRequest{MovieID: e.movieID, HallID: hall.ID, StartAt: time.Now().Add(3 * time.Hour)})
 	e.must(err)
@@ -280,14 +331,14 @@ func TestHallDelete_BlockedByUnfinishedShowtime(t *testing.T) {
 func TestHallRegenerateLayout_PersistsNewGridSize(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
-		Name: "Resize Hall", Rows: 4, SeatsPerRow: 5, Prices: fullPrices(),
+		Name: "Resize Hall", Rows: 4, SeatsPerRow: 5,
 	})
 	e.must(err)
 
 	back := "back"
 	regenerated, err := e.halls.RegenerateLayout(e.ctx, hall.ID, dto.HallRequest{
 		Name: hall.Name, Rows: 6, SeatsPerRow: 8,
-		ScreenPosition: back, AisleAfterCols: []int{4}, Prices: fullPrices(),
+		ScreenPosition: back, AisleAfterCols: []int{4},
 	})
 	e.must(err)
 	if regenerated.Rows != 6 || regenerated.SeatsPerRow != 8 {
@@ -332,7 +383,7 @@ func TestHallRegenerateLayout_PersistsNewGridSize(t *testing.T) {
 func TestHallUpdate_CannotResizeTheGrid(t *testing.T) {
 	e := newEnv(t)
 	hall, err := e.halls.Create(e.ctx, dto.HallRequest{
-		Name: "Metadata Hall", Rows: 3, SeatsPerRow: 4, Prices: fullPrices(),
+		Name: "Metadata Hall", Rows: 3, SeatsPerRow: 4,
 	})
 	e.must(err)
 

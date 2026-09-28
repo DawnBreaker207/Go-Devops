@@ -7,15 +7,20 @@ import {
   Popconfirm,
   Select,
   Space,
-  Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  CheckCircleOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  StopOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import ConcessionFormModal from './components/ConcessionFormModal';
 import {
@@ -29,14 +34,10 @@ import { useListQuery } from '@/hooks/useListQuery';
 import { errorMessage } from '@/utils/error';
 import { formatVND } from '@/utils/format';
 
-/** The backend takes a Go pointer, so "no filter" must OMIT the field rather than send false. */
+// The backend takes a Go pointer, so "no filter" must OMIT the field rather than send false.
 type ActiveFilter = 'all' | 'active' | 'inactive';
 
-/** Concession catalogue (popcorn/drinks) behind step 2 of the booking wizard.
- *
- *  Operator scope: admin AND staff, like halls and showtimes. Putting a product
- *  back on sale is counter work, not an admin decision — which is why this page
- *  is NOT under ROLES_ADMIN. */
+// Concession stock for step 2; admin + staff, since restocking is counter work.
 export const ConcessionsPage = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -45,7 +46,6 @@ export const ConcessionsPage = () => {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Combo | null>(null);
-  /** Row awaiting the server, so only that row locks. */
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data, isFetching, error } = useConcessionList({
@@ -57,7 +57,7 @@ export const ConcessionsPage = () => {
   const updateConcession = useUpdateConcession();
   const deleteConcession = useDeleteConcession();
 
-  // Don't catch here: the modal needs the raw error to bind 400/40001 to inputs.
+  // Don't catch here: the modal binds 400/40001 onto inputs.
   const handleSubmit = async (payload: CreateComboPayload | UpdateComboPayload) => {
     if (editing) {
       await updateConcession.mutateAsync({ id: editing.id, payload });
@@ -70,8 +70,7 @@ export const ConcessionsPage = () => {
     setEditing(null);
   };
 
-  /** The inline switch sends ONLY `active`, which is the whole point of PATCH:
-   *  a full-replace PUT here would need every other field resent correctly. */
+  // The inline switch sends ONLY `active` - that's the whole point of PATCH.
   const toggleActive = async (row: Combo, next: boolean) => {
     setPendingId(row.id);
     try {
@@ -128,8 +127,7 @@ export const ConcessionsPage = () => {
       key: 'price',
       width: 150,
       align: 'right',
-      // 0 is a real, chosen price (a giveaway), never "unset" - say so rather
-      // than rendering a bare 0 d that reads like missing data.
+      // 0 is a real, chosen price (a giveaway), never "unset"; say so rather than showing a bare "0 d".
       render: (value: number) =>
         value === 0 ? <Tag color="warning">{t('concession.priceFree')}</Tag> : formatVND(value),
     },
@@ -137,50 +135,61 @@ export const ConcessionsPage = () => {
       title: t('concession.status'),
       dataIndex: 'active',
       key: 'active',
-      width: 180,
-      render: (value: boolean, record) => (
-        <Space size={8}>
-          <Switch
-            size="small"
-            checked={value}
-            disabled={pendingId === record.id}
-            aria-label={`active-${record.id}`}
-            onChange={(next) => void toggleActive(record, next)}
-          />
-          <Typography.Text type={value ? undefined : 'secondary'}>
-            {t(value ? 'concession.onSale' : 'concession.offSale')}
-          </Typography.Text>
-        </Space>
+      width: 130,
+      render: (value: boolean) => (
+        <Tag color={value ? 'green' : 'default'} bordered={false}>
+          {t(value ? 'concession.onSale' : 'concession.offSale')}
+        </Tag>
       ),
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 140,
+      width: 170,
       render: (_, record) => (
         <Space size={4}>
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            aria-label={`edit-${record.id}`}
-            onClick={() => openEdit(record)}
-          />
-          <Popconfirm
-            title={t('concession.deleteConfirm')}
-            description={t('concession.deleteHint')}
-            okText={t('common.delete')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true }}
-            onConfirm={() => void handleDelete(record)}
-          >
+          <Tooltip title={record.active ? t('concession.markOffSale') : t('concession.markOnSale')}>
+            <Popconfirm
+              title={record.active ? t('concession.offSaleConfirm') : t('concession.onSaleConfirm')}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => void toggleActive(record, !record.active)}
+            >
+              <Button
+                type="text"
+                icon={record.active ? <StopOutlined /> : <CheckCircleOutlined />}
+                aria-label={`toggle-active-${record.id}`}
+                disabled={pendingId === record.id}
+                loading={pendingId === record.id}
+              />
+            </Popconfirm>
+          </Tooltip>
+          <Tooltip title={t('common.edit')}>
             <Button
-              danger
               type="text"
-              icon={<DeleteOutlined />}
-              aria-label={`delete-${record.id}`}
-              disabled={pendingId === record.id}
+              icon={<EditOutlined />}
+              aria-label={`edit-${record.id}`}
+              onClick={() => openEdit(record)}
             />
-          </Popconfirm>
+          </Tooltip>
+          <Tooltip title={t('common.delete')}>
+            <Popconfirm
+              title={t('concession.deleteConfirm')}
+              description={t('concession.deleteHint')}
+              okText={t('common.delete')}
+              cancelText={t('common.cancel')}
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void handleDelete(record)}
+            >
+              <Button
+                danger
+                type="text"
+                icon={<DeleteOutlined />}
+                aria-label={`delete-${record.id}`}
+                disabled={pendingId === record.id}
+              />
+            </Popconfirm>
+          </Tooltip>
         </Space>
       ),
     },
@@ -188,25 +197,17 @@ export const ConcessionsPage = () => {
 
   return (
     <>
-      <PageHeader
-        title={t('concession.title')}
-        extra={
-          <Space>
-            <Input.Search
-              allowClear
-              defaultValue={search}
-              placeholder={t('concession.searchPlaceholder')}
-              style={{ width: 300 }}
-              onSearch={setSearch}
-            />
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              {t('common.create')}
-            </Button>
-          </Space>
-        }
-      />
-
       <Space wrap style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          defaultValue={search}
+          placeholder={t('concession.searchPlaceholder')}
+          style={{ width: 300 }}
+          onSearch={setSearch}
+        />
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          {t('common.create')}
+        </Button>
         <Select<ActiveFilter>
           style={{ width: 200 }}
           value={activeFilter}
@@ -222,8 +223,7 @@ export const ConcessionsPage = () => {
         />
       </Space>
 
-      {/* The difference between this list and what a customer sees is the one
-          thing an operator has to understand about this screen. */}
+      {/* Key point for operators: this list differs from what a customer sees. */}
       <Alert
         type="info"
         showIcon

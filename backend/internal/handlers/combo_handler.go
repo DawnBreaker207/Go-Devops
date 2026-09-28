@@ -83,10 +83,6 @@ func (h *ComboHandler) ListMyOrders(c *gin.Context) {
 	response.List(c, orders, q.Page, q.PageSize, total)
 }
 
-/* -------------------------------------------------------------------------- */
-/* Operator catalogue: /admin/concessions (admin AND staff, like halls)        */
-/* -------------------------------------------------------------------------- */
-
 // @Summary		List the concession catalogue (operator)
 // @Description	Unlike the public GET /combos this is paged and INCLUDES inactive products, so an operator can put one back on sale.
 // @Tags			combos

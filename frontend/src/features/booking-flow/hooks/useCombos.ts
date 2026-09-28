@@ -12,8 +12,7 @@ export const useCombos = () =>
     staleTime: 60_000,
   });
 
-/** POST /combo-orders - independent of /orders/hold, invalidates nothing of the ticket flow. Its errors must never block checkout.
- *  It DOES invalidate the combo-order list, so the checkout summary below picks the new order up. */
+/** POST /combo-orders - independent of /orders/hold; errors must never block checkout. Invalidates the combo-order list so the checkout summary picks it up. */
 export const useCreateComboOrder = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -24,12 +23,7 @@ export const useCreateComboOrder = () => {
 
 export const COMBO_ORDER_QUERY_KEY = 'combo-orders';
 
-/** The combo order attached to THIS booking, or null.
- *
- *  Read from the server rather than from the wizard's own state so it survives a
- *  reload, and matched on `booking_id` because /combo-orders/me is the whole
- *  history. Newest-first and one page is enough: the order for the booking being
- *  checked out was created seconds ago. */
+/** The combo order attached to THIS booking, read from the server (survives reload) and matched by `booking_id` since /combo-orders/me is the full history; one page suffices since it was created seconds ago. */
 export const useComboOrderForBooking = (bookingId: string | undefined) => {
   const query = useQuery({
     queryKey: [COMBO_ORDER_QUERY_KEY, { page: 1, page_size: 10 }],

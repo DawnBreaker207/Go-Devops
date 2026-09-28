@@ -43,7 +43,6 @@ type Manager struct {
 	jobs map[string]*Job
 	cron *cronScheduler
 
-	// Canceled by Stop so running jobs wind down.
 	ctx    context.Context
 	cancel context.CancelFunc
 	manual sync.WaitGroup
@@ -66,7 +65,6 @@ func (m *Manager) Names() []string {
 	return names
 }
 
-// Start marks orphan RUNNING runs stopped, then schedules jobs.
 func (m *Manager) Start(ctx context.Context) error {
 	stopped, err := m.repo.StopOrphans(ctx)
 	if err != nil {
@@ -94,7 +92,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// A tick finding the previous run still going is recorded as skipped, not an error.
+// A tick on a still-running job records skipped, not an error.
 func (m *Manager) runScheduled(name string) {
 	ctx, cancel := context.WithTimeout(m.ctx, runTimeout)
 	defer cancel()
@@ -130,7 +128,6 @@ func (m *Manager) Stop(ctx context.Context) {
 	}
 }
 
-// Run executes a job; ErrJobRunning if already running.
 func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	job, run, err := m.begin(ctx, name, triggeredBy)
 	if err != nil {
@@ -139,7 +136,7 @@ func (m *Manager) Run(ctx context.Context, name, triggeredBy string) error {
 	return m.execute(ctx, job, run)
 }
 
-// Trigger starts a run in background; returns once the RUNNING row exists.
+// Returns once the RUNNING row exists.
 func (m *Manager) Trigger(name, triggeredBy string) (string, error) {
 	job, run, err := m.begin(m.ctx, name, triggeredBy)
 	if err != nil {
@@ -209,7 +206,7 @@ func (m *Manager) execute(ctx context.Context, job *Job, run *models.BatchJob) (
 
 const ItemAttempts = 3
 
-// NoRetry marks an item error an immediate retry can't fix; RunInChunks skips the item at once.
+// An immediate retry can't fix this; skip at once.
 func NoRetry(err error) error {
 	if err == nil {
 		return nil
@@ -221,7 +218,7 @@ type noRetryError struct{ error }
 
 func (e noRetryError) Unwrap() error { return e.error }
 
-// RunInChunks saves progress per chunk; a failing item retries up to ItemAttempts, then is skipped.
+// Progress saved per chunk; items retry up to ItemAttempts, then skipped.
 func RunInChunks[T any](ctx context.Context, opts RunOptions, all []T, each func(ctx context.Context, item T) error) error {
 	const chunkSize = 500
 	processed, skipped := 0, 0

@@ -8,32 +8,26 @@ import {
   Typography,
   theme as antdTheme,
 } from 'antd';
-import { CopyOutlined, DeleteOutlined, DollarOutlined, EditOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, PoweroffOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import type { Hall, HallPrice } from '@/types';
-import { isPriceSetComplete } from '../hooks/useHalls';
+import type { Hall } from '@/types';
 
 interface HallCardProps {
   hall: Hall;
-  /** undefined = prices still loading. */
-  priceRows: HallPrice[] | undefined;
   selected: boolean;
   onSelect: () => void;
-  onEdit: () => void;
-  onPrice: () => void;
   onClone: () => void;
+  onToggleActive: () => void;
   onDelete: () => void;
 }
 
-/** Hall card selecting on click with actions isolated from selection. */
+/** Hall card selecting on click, with actions isolated from selection. */
 export const HallCard = ({
   hall,
-  priceRows,
   selected,
   onSelect,
-  onEdit,
-  onPrice,
   onClone,
+  onToggleActive,
   onDelete,
 }: HallCardProps) => {
   const { t } = useTranslation();
@@ -62,14 +56,17 @@ export const HallCard = ({
             </Typography.Text>
           </div>
           <Space size={0} onClick={(e) => e.stopPropagation()}>
-            <Tooltip title={t('hall.prices')}>
-              <Button type="text" size="small" icon={<DollarOutlined />} onClick={onPrice} />
-            </Tooltip>
             <Tooltip title={t('hall.clone')}>
               <Button type="text" size="small" icon={<CopyOutlined />} onClick={onClone} />
             </Tooltip>
-            <Tooltip title={t('common.edit')}>
-              <Button type="text" size="small" icon={<EditOutlined />} onClick={onEdit} />
+            <Tooltip title={t(hall.active ? 'hall.deactivate' : 'hall.activate')}>
+              <Button
+                type="text"
+                size="small"
+                danger={hall.active}
+                icon={<PoweroffOutlined />}
+                onClick={onToggleActive}
+              />
             </Tooltip>
             <Popconfirm
               title={t('hall.deleteConfirm')}
@@ -83,21 +80,6 @@ export const HallCard = ({
         </Space>
 
         <Space wrap size={4}>
-          {priceRows === undefined ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              …
-            </Typography.Text>
-          ) : isPriceSetComplete(priceRows) ? (
-            <Tag color="green" bordered={false}>
-              {t('hall.pricesComplete')}
-            </Tag>
-          ) : (
-            <Tooltip title={t('hall.pricesIncompleteTooltip')}>
-              <Tag color="warning" bordered={false}>
-                {t('hall.pricesIncomplete', { count: priceRows.length })}
-              </Tag>
-            </Tooltip>
-          )}
           <Tag color={hall.active ? 'green' : 'default'} bordered={false}>
             {t(hall.active ? 'hall.activeYes' : 'hall.activeNo')}
           </Tag>

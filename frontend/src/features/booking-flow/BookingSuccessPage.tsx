@@ -19,8 +19,7 @@ export const BookingSuccessPage = () => {
   const clear = useBookingFlowStore((s) => s.clear);
   const order = useOrderDetail(bookingId);
 
-  // Run over: wipe the store (local-only, NO server cancel) for a clean next
-  // run. The order renders from the URL bookingId, never the store.
+  // Wipe the store (local-only, no server cancel); the order always renders from the URL bookingId, never the store.
   useEffect(() => {
     clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps

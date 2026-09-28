@@ -16,19 +16,27 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [form] = Form.useForm<LoginRequest>();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (values: LoginRequest) => {
     setSubmitting(true);
     setErrorMessage(null);
-    // Login logic (API call, fresh role read, landing path) is shared with CustomerLoginForm/sheet.
-    const result = await performLogin(values, t('auth.loginFailed'));
+    const result = await performLogin(values, t);
     setSubmitting(false);
     if (result.ok) {
       const from = (location.state as LocationState | null)?.from;
-      // Never hardcode /dashboard: customers can't enter any operator page and would land on 403. landingPath returns somewhere the role can enter.
+      // Never hardcode /dashboard: customers 403 there, resolve the landing path by role.
       navigate(from ?? result.landingPath, { replace: true });
+    } else if (result.fieldErrors) {
+      // A 400/40001 the client rules missed lands on the matching input.
+      form.setFields(
+        Object.entries(result.fieldErrors).map(([name, message]) => ({
+          name: name as keyof LoginRequest,
+          errors: [message],
+        }))
+      );
     } else {
       setErrorMessage(result.message);
     }
@@ -36,7 +44,6 @@ export const LoginPage = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-      {/* Brand tile matching the sider logo so the page reads as one system. */}
       <span
         aria-hidden="true"
         style={{
@@ -67,6 +74,7 @@ export const LoginPage = () => {
         ) : null}
 
         <Form<LoginRequest>
+          form={form}
           layout="vertical"
           onFinish={handleSubmit}
           autoComplete="off"
@@ -99,7 +107,7 @@ export const LoginPage = () => {
           </Button>
         </Form>
 
-        {/* No staff self-recovery flow exists; at least one guidance line so locked-out staff aren't met with silence. */}
+        {/* khong co quen mat khau staff nen giu 1 dong huong dan. */}
         <Typography.Paragraph
           type="secondary"
           style={{ marginTop: 16, marginBottom: 0, textAlign: 'center', fontSize: 13 }}

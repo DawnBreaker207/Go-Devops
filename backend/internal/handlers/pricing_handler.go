@@ -180,13 +180,13 @@ func (h *PricingHandler) AdminDeleteRule(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary		Public global ticket price list
-// @Description	The global base price for each seat type, plus the cheapest configured seat anywhere. No auth. Lives at /pricing/global because /pricing serves the per-hall list.
+// @Summary		Public ticket price list
+// @Description	The global base price for each seat type, plus the cheapest configured seat anywhere. No auth: this is the customer price page. Replaces the old per-hall price list (PLAN_CAMPAIGN.md section 11.4, Phase 3) now that hall_prices is gone - every hall shares the same prices.
 // @Tags			pricing
 // @Produce		json
-// @Success		200	{object}	response.Body{data=dto.GlobalPriceListResponse}
+// @Success		200	{object}	response.Body{data=dto.PublicPriceListResponse}
 // @Failure		500	{object}	response.Body
-// @Router			/pricing/global [get]
+// @Router			/pricing [get]
 func (h *PricingHandler) PublicPrices(c *gin.Context) {
 	prices, err := h.pricingService.PublicPrices(c.Request.Context())
 	if err != nil {

@@ -68,7 +68,6 @@ type SeatMapRow struct {
 	IsGap          bool      `gorm:"column:is_gap"`
 	ColSpan        int       `gorm:"column:col_span"`
 	SeatStatus     string    `gorm:"column:seat_status"`
-	Price          int64     `gorm:"column:price"`
 }
 
 type ShowtimeRepository struct {
@@ -113,9 +112,7 @@ func (r *ShowtimeRepository) Update(tx *gorm.DB, showtime *models.Showtime) erro
 		Updates(showtime).Error
 }
 
-// Delete soft-deletes a showtime, also forcing status to closed so a
-// deleted showtime is never left looking "open" to anything reading the
-// column directly. Must run inside a transaction.
+// Delete soft-deletes and forces status closed; must run inside tx.
 func (r *ShowtimeRepository) Delete(tx *gorm.DB, showtimeID string) error {
 	if err := tx.Model(&models.Showtime{}).Where("id = ?", showtimeID).
 		Update("status", models.ShowtimeClosed).Error; err != nil {
@@ -194,13 +191,12 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 		Select(`showtimes.id, showtimes.movie_id, movies.title AS movie_title,
 			movies.age_rating AS age_rating, showtimes.hall_id,
 			showtimes.start_at, showtimes.end_at, showtimes.status, halls.name AS hall_name,
-			MIN(hall_prices.price) AS from_price`).
+			(SELECT MIN(price) FROM seat_base_prices) AS from_price`).
 		// A coming-soon movie can carry an early preview showtime; the picker must
 		// not hide it just because the movie has not moved to "showing" yet.
 		Joins("JOIN movies ON movies.id = showtimes.movie_id AND movies.deleted_at IS NULL AND movies.status IN ?",
 			[]string{models.MovieStatusShowing, models.MovieStatusComingSoon}).
-		Joins("JOIN halls ON halls.id = showtimes.hall_id AND halls.deleted_at IS NULL").
-		Joins("JOIN hall_prices ON hall_prices.hall_id = showtimes.hall_id")
+		Joins("JOIN halls ON halls.id = showtimes.hall_id AND halls.deleted_at IS NULL")
 	if movieID != "" {
 		q = q.Where("showtimes.movie_id = ?", movieID)
 	}
@@ -209,18 +205,16 @@ func (r *ShowtimeRepository) PickingList(ctx context.Context, movieID string, st
 		Where("showtimes.status = ?", models.ShowtimeOpen).
 		Where("showtimes.start_at >= ? AND showtimes.start_at < ?", start, end).
 		Where("showtimes.start_at >= ?", now).
-		Where(`showtimes.hall_id IN (SELECT hall_id FROM hall_prices
-			GROUP BY hall_id HAVING count(DISTINCT seat_type) = ?)`, len(models.AllSeatTypes)).
+// Prices are global: picker shows showtime only when all seat types priced.
+		Where(`(SELECT count(DISTINCT seat_type) FROM seat_base_prices) = ?`, len(models.AllSeatTypes)).
 		Group("showtimes.id, movies.id, halls.name").
 		Order("showtimes.start_at").
 		Scan(&rows).Error
 	return rows, err
 }
 
-// AdminList is the operator counterpart of PickingList: no movie-status filter, no
-// start_at >= now, no complete-price-set requirement, so closed and past showtimes stay
-// visible. The caller resolves from/to into absolute instants so the server timezone
-// stays a service concern; a zero time means that bound is open.
+// AdminList is operator PickingList: no status/date/price filter; from/to absolute,
+// zero bound means open.
 func (r *ShowtimeRepository) AdminList(ctx context.Context, query dto.ShowtimeAdminListQuery, from, to time.Time) ([]ShowtimeRow, int64, error) {
 	tx := r.db.WithContext(ctx).
 		Model(&models.Showtime{}).
@@ -280,13 +274,11 @@ func (r *ShowtimeRepository) SeatMap(ctx context.Context, showtimeID string) ([]
 			showtime_seats.id AS showtime_seat_id, seats.id AS seat_id,
 			seats.row_label, seats.col_number,
 			seats.seat_type, seats.is_gap, seats.col_span,
-			COALESCE(showtime_seats.status, '') AS seat_status,
-			COALESCE(hall_prices.price, 0) AS price`).
+			COALESCE(showtime_seats.status, '') AS seat_status`).
 		Joins("JOIN halls ON halls.id = showtimes.hall_id").
 		Joins("JOIN movies ON movies.id = showtimes.movie_id").
 		Joins("JOIN seats ON seats.hall_id = showtimes.hall_id").
 		Joins("LEFT JOIN showtime_seats ON showtime_seats.showtime_id = showtimes.id AND showtime_seats.seat_id = seats.id").
-		Joins("LEFT JOIN hall_prices ON hall_prices.hall_id = showtimes.hall_id AND hall_prices.seat_type = seats.seat_type").
 		Where("showtimes.id = ?", showtimeID).
 		Order("seats.row_index, seats.col_number").
 		Scan(&rows).Error

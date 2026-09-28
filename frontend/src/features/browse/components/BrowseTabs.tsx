@@ -8,9 +8,7 @@ export type BrowseTab = Extract<MovieStatus, 'showing' | 'coming_soon'> | 'speci
 interface BrowseTabsProps {
   tab: BrowseTab;
   onChange: (tab: BrowseTab) => void;
-  /** Rendered at the right end of the tab bar, outside the tablist. The home puts its
-   *  "View All ->" link here so it shares the bar the way the QVisionShow frame draws it;
-   *  /films passes nothing and is unchanged. */
+  // The View All link sits after the tab bar, outside the tablist.
   trailing?: ReactNode;
 }
 
@@ -20,16 +18,14 @@ const TABS: Array<{ key: BrowseTab; labelKey: string }> = [
   { key: 'special', labelKey: 'customer.special' },
 ];
 
-/** Now/Coming/Special underline tabs, shared by Home and /films so one change hits both. */
 export const BrowseTabs = ({ tab, onChange, trailing }: BrowseTabsProps) => {
   const { t } = useTranslation();
 
-  // `role="tablist"` moved onto the inner row: `trailing` is a link, not a tab, and a non-tab child
-  // of a tablist is an ARIA violation.
+  // `trailing` is a link, not a tab, so the tablist stays on its own row to avoid ARIA violations.
   return (
     <div className={`mb-5 flex items-center gap-6 border-b ${INK_BORDER_10}`}>
       <div
-        className="flex items-center gap-6 overflow-x-auto"
+        className="flex items-center gap-6 overflow-x-auto overflow-y-hidden"
         role="tablist"
         aria-label={t('customer.browseTabsLabel')}
       >

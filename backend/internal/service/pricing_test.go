@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/dto"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
@@ -351,3 +352,65 @@ func TestHTTP_PricingQuote_UnknownShowtimeIs404(t *testing.T) {
 	}
 }
 
+/* -------------------------------------------------------------------------- */
+/* Phase 2: hold, counter-sell and the seatmap all read the SAME engine       */
+/* (PLAN_CAMPAIGN.md section 11.3) — a rule that fires for the showtime's     */
+/* actual start time must produce the adjusted price everywhere: the seatmap  */
+/* (before any seat is picked), the hold snapshot and the counter-sell        */
+/* snapshot, all via PricingService.Quote/QuotePrices's own rule-matching     */
+/* code, never a second copy of it.                                          */
+/* -------------------------------------------------------------------------- */
+
+func TestHTTP_PricingRule_AppliesAtHoldSeatmapAndCounterSell(t *testing.T) {
+	h := newHTTPEnv(t)
+	admin, _ := h.login(models.RoleAdmin)
+	setBasePrice(t, h, admin, "standard", 100000)
+	setBasePrice(t, h, admin, "vip", 150000)
+
+	sunday := nextWeekday(time.Now().UTC(), time.Sunday, 20, 0)
+	dow := 0
+	createRule(t, h, admin, map[string]any{
+		"name": "Sunday surcharge", "day_of_week": dow,
+		"adjust_kind": "fixed", "adjust_value": 20000,
+	})
+	setShowStart(t, h, sunday)
+
+	// Seatmap: the adjusted price shows up BEFORE any seat is held.
+	m, err := h.showtimes.SeatMap(h.ctx, h.showID)
+	h.must(err)
+	if m.Prices[models.SeatStandard] != 120000 || m.Prices[models.SeatVIP] != 170000 {
+		t.Fatalf("seatmap prices = %+v, want standard=120000 vip=170000", m.Prices)
+	}
+	var seatA2Price int64
+	for _, s := range m.Seats {
+		if s.Label == "A2" {
+			seatA2Price = s.Price
+		}
+	}
+	if seatA2Price != 120000 {
+		t.Fatalf("seatmap A2 (standard) price = %d, want 120000", seatA2Price)
+	}
+
+	// Hold: the same adjusted price is snapshotted into booking_seats.price -
+	// finalizeTx/Payable/refund read only that snapshot from here on.
+	held := h.mustHold(h.users[0], "A2")
+	if held.Seats[0].Price != 120000 {
+		t.Fatalf("hold response price = %d, want 120000", held.Seats[0].Price)
+	}
+	var snapshotPrice int64
+	h.must(h.db.Raw(`SELECT price FROM booking_seats WHERE booking_id = ?`, held.BookingID).Scan(&snapshotPrice).Error)
+	if snapshotPrice != 120000 {
+		t.Fatalf("booking_seats snapshot = %d, want 120000", snapshotPrice)
+	}
+
+	// Counter-sell on the same (rule-matching) showtime: same engine, a
+	// different seat type.
+	res, err := h.svc.CounterSell(h.ctx, dto.CounterSellRequest{
+		ShowID: h.showID, SeatIDs: h.ids("B2"),
+		CustomerName: "Walk-in", CustomerPhone: "0900000000",
+	})
+	h.must(err)
+	if res.TotalAmount != 170000 {
+		t.Fatalf("counter sell total = %d, want 170000 (vip base 150000 + rule 20000)", res.TotalAmount)
+	}
+}

@@ -19,10 +19,8 @@ type DiscountRepository interface {
 	FindByCode(ctx context.Context, code string) (*models.DiscountCode, error)
 	FindByID(ctx context.Context, id string) (*models.DiscountCode, error)
 
-	// ClaimUse increments used_count for one redemption and returns the number of
-	// rows it touched. It is the ONLY guard against exceeding max_uses: the WHERE
-	// carries the limit, so two concurrent applies cannot both win. 0 rows means
-	// the code ran out between validation and this call.
+// ClaimUse increments used_count; ONLY guard vs max_uses: limit in WHERE,
+// so concurrent last-use applies cannot both win; 0 rows means ran out.
 	ClaimUse(ctx context.Context, tx *gorm.DB, id string) (int64, error)
 	// ReleaseUse gives a redemption back when an applied code is removed again.
 	// Floored at 0 so a double-release can never drive the counter negative.
@@ -32,7 +30,8 @@ type DiscountRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, code *models.DiscountCode) error
 	Update(ctx context.Context, tx *gorm.DB, id string, fields map[string]any) error
 	SoftDelete(ctx context.Context, tx *gorm.DB, id string) error
-	// ListByCampaignID: every non-deleted code attached to one campaign.
+
+// ListByCampaignID: every non-deleted code attached to one campaign.
 	ListByCampaignID(ctx context.Context, campaignID string) ([]models.DiscountCode, error)
 }
 

@@ -15,8 +15,7 @@ const (
 	BookingRefunded  = "refunded"
 )
 
-// A booking is sold online (shown in the customer's list) or at the counter for
-// a walk-in without an account (no user_id, no payment, no email).
+// Counter sales are walk-ins: no account, payment or email.
 const (
 	SoldViaOnline  = "online"
 	SoldViaCounter = "counter"
@@ -40,18 +39,13 @@ type Booking struct {
 	ShowtimeID   string  `gorm:"type:uuid;not null" json:"showtime_id"`
 	Status       string  `gorm:"type:varchar(16);not null;default:pending" json:"status"`
 	StatusReason *string `gorm:"type:varchar(64)" json:"status_reason,omitempty"`
-	// TotalAmount is the SEAT SUBTOTAL and stays undiscounted: finalizeTx asserts
-	// that the sold seats' prices add up to it, and a booking that fails that
-	// assertion cannot confirm after the money has already been taken.
+	// TotalAmount is the SEAT SUBTOTAL and stays undiscounted; the charge is Payable().
 	TotalAmount int64 `gorm:"not null;default:0" json:"total_amount"`
-	// DiscountAmount is what a code took off. The amount actually charged is
-	// Payable() below, which is what goes into payments.amount.
+	// Taken off by a code; the charge is Payable(), landing in payments.amount.
 	DiscountAmount int64      `gorm:"not null;default:0" json:"discount_amount"`
 	DiscountCodeID *string    `gorm:"type:uuid" json:"discount_code_id,omitempty"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	IdempotencyKey *string    `gorm:"type:varchar(128)" json:"idempotency_key,omitempty"`
-	// SoldVia: online bookings carry a user and a payment; counter bookings are
-	// walk-in sales with no account, no payment and no ticket email.
 	SoldVia       string `gorm:"type:varchar(16);not null;default:online" json:"sold_via"`
 	CustomerName  string `gorm:"type:varchar(255)" json:"customer_name,omitempty"`
 	CustomerPhone string `gorm:"type:varchar(20)" json:"customer_phone,omitempty"`
@@ -69,11 +63,7 @@ type Booking struct {
 
 func (Booking) TableName() string { return "bookings" }
 
-// Payable is the amount to charge: the seat subtotal minus any discount. This is
-// the ONLY number that should ever reach a payment provider. Everything
-// downstream (amount-mismatch detection, refunds) reads payments.amount, which is
-// set from this, so they follow automatically. Clamped at 0 defensively; the DB
-// constraint ck_bookings_discount_amount already forbids over-discounting.
+// Payable is the amount to charge (subtotal minus discount); the ONLY number reaching a provider.
 func (b *Booking) Payable() int64 {
 	if b.DiscountAmount >= b.TotalAmount {
 		return 0

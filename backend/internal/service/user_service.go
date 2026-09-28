@@ -77,12 +77,8 @@ func (s *userService) UpdateProfile(ctx context.Context, userID string, req dto.
 	return &result, nil
 }
 
-// DeleteMe erases the caller's account under the right to erasure. The
-// current password must be re-entered, since this is irreversible. Confirmed
-// tickets still to come come first, so they block the delete (409); afterwards
-// personal fields are scrubbed, sessions dropped and unpaid holds expired.
-// The route restricts this to the customer role, so the account being erased
-// is never an admin: no "last admin" guard is needed here.
+// DeleteMe erases caller account (password required); upcoming tickets block it,
+// then PII scrubbed, sessions dropped, unpaid holds expired. Sets deleted_at.
 func (s *userService) DeleteMe(ctx context.Context, userID, password string) error {
 	current, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
@@ -132,9 +128,7 @@ func (s *userService) DeleteMe(ctx context.Context, userID, password string) err
 			return err
 		}
 
-		// No PII in the audit trail: the scrubbed row itself (by resource_id)
-		// is enough to cross-reference internally, and the whole point of
-		// erasure is that the original email must not linger anywhere.
+// No PII in audit trail: scrubbed row by resource_id is enough reference.
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = userID
 			return audit.In(ctx, tx, rec)
@@ -280,9 +274,7 @@ func (s *userService) Update(ctx context.Context, actorID, userID string, req dt
 	return &result, nil
 }
 
-// GetNotificationPreferences reads the caller's current opt-in flags,
-// creating the row with the model defaults on first read so a later PUT
-// always has something to update.
+// GetNotificationPreferences reads flags, creating row with defaults on first read.
 func (s *userService) GetNotificationPreferences(ctx context.Context, userID string) (*dto.NotificationPreferenceResponse, error) {
 	pref, err := s.notifPrefs.FindByUserID(ctx, userID)
 	if err != nil {

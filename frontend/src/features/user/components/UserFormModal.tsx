@@ -64,8 +64,7 @@ export const UserFormModal = ({ open, confirmLoading, onCancel, onSubmit }: User
       destroyOnHidden
       width={520}
     >
-      {/* Backend blocks customer accounts here (binding oneof=staff admin):
-          customers self-register via /auth/register. */}
+      {/* Backend blocks customer accounts here; customers self-register via /auth/register. */}
       <Alert
         type="info"
         showIcon

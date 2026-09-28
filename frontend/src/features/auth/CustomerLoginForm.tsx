@@ -4,18 +4,16 @@ import { performLogin } from './loginFlow';
 import FieldInput from '@/components/ui/FieldInput';
 import Button from '@/components/ui/Button';
 import Notice from '@/components/ui/Notice';
+import { isValidEmail } from '@/utils/validators';
 
 export interface CustomerLoginFormProps {
-  /** Called on success with the role-based landing path; caller decides navigate vs close-sheet/continue. */
   onLoggedIn: (landingPath: string) => void;
   autoFocus?: boolean;
-  /** id prefix for label/input pairs; avoids duplicate DOM ids when page and sheet coexist. */
   idPrefix: string;
-  /** Slot between inputs and submit, e.g. the "Forgot password" link (page only, not the sheet). */
   footerSlot?: ReactNode;
 }
 
-/** Plain-CSS email/password form shared by CustomerLoginPage and LoginBottomSheet. Only the shell (full page vs overlay) and post-login action differ. */
+// Shared by page + sheet shells, only the shell differs.
 export const CustomerLoginForm = ({
   onLoggedIn,
   autoFocus,
@@ -27,16 +25,29 @@ export const CustomerLoginForm = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+
+    const nextFieldErrors: { email?: string; password?: string } = {};
+    if (!email.trim()) nextFieldErrors.email = t('auth.emailRequired');
+    else if (!isValidEmail(email.trim())) nextFieldErrors.email = t('auth.emailInvalid');
+    if (!password) nextFieldErrors.password = t('auth.passwordRequired');
+    // Matches the backend min=6 binding, else a generic English error comes back.
+    else if (password.length < 6) nextFieldErrors.password = t('auth.passwordMin');
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) return;
+
     setBusy(true);
-    const result = await performLogin({ email: email.trim(), password }, t('auth.loginFailed'));
+    const result = await performLogin({ email: email.trim(), password }, t);
     setBusy(false);
     if (result.ok) {
       onLoggedIn(result.landingPath);
+    } else if (result.fieldErrors) {
+      setFieldErrors((current) => ({ ...current, ...result.fieldErrors }));
     } else {
       setError(result.message);
     }
@@ -55,9 +66,14 @@ export const CustomerLoginForm = ({
         label={t('user.email')}
         type="email"
         required
+        placeholder="ban@email.com"
         autoFocus={autoFocus}
         value={email}
-        onChange={(event) => setEmail(event.target.value)}
+        onChange={(event) => {
+          setEmail(event.target.value);
+          if (fieldErrors.email) setFieldErrors((current) => ({ ...current, email: undefined }));
+        }}
+        error={fieldErrors.email}
       />
 
       <FieldInput
@@ -65,8 +81,14 @@ export const CustomerLoginForm = ({
         label={t('user.password')}
         type="password"
         required
+        placeholder="••••••"
         value={password}
-        onChange={(event) => setPassword(event.target.value)}
+        onChange={(event) => {
+          setPassword(event.target.value);
+          if (fieldErrors.password)
+            setFieldErrors((current) => ({ ...current, password: undefined }));
+        }}
+        error={fieldErrors.password}
       />
 
       {footerSlot}

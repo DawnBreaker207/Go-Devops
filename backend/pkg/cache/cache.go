@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Cache stores string values with a TTL. nil *Cache is a legal no-op.
+// nil *Cache is a legal no-op.
 type Cache struct {
 	rdb *redis.Client
 }
@@ -53,7 +53,6 @@ func (c *Cache) Ping(ctx context.Context) error {
 	return c.rdb.Ping(ctx).Err()
 }
 
-// Get returns the value and whether it was present; a miss returns "", false.
 func (c *Cache) Get(ctx context.Context, key string) (string, bool, error) {
 	if c == nil {
 		return "", false, nil
@@ -68,7 +67,7 @@ func (c *Cache) Get(ctx context.Context, key string) (string, bool, error) {
 	return v, true, nil
 }
 
-// Set stores a value with a TTL (0 keeps it forever).
+// TTL 0 keeps the value forever.
 func (c *Cache) Set(ctx context.Context, key, value string, ttl time.Duration) error {
 	if c == nil {
 		return nil

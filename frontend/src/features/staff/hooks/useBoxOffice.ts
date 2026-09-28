@@ -3,28 +3,26 @@ import { staffApi } from '@/api/staff.api';
 import { seatMapApi, SEATMAP_QUERY_KEY } from '@/api/seatmap.api';
 import { bookingApi } from '@/api/booking.api';
 import { showtimeApi } from '@/api/showtime.api';
+import { PICKER_PAGE_SIZE } from '@/features/showtime/hooks/useShowtimes';
 import type { CounterSellPayload, RedeemPayload, ShowtimeStatus, StaffTicketStatus } from '@/types';
 
 export const STAFF_QUERY_KEY = 'staff';
 
-/** GET /staff/overview - one-day dashboard + counter sales + pending check-ins. */
 export const useStaffOverview = (date?: string) =>
   useQuery({
     queryKey: [STAFF_QUERY_KEY, 'overview', date],
     queryFn: () => staffApi.overview(date),
-    // Seats/tickets turn over fast during a shift; keep data fresh for a short window.
+    // Seats/tickets turn over fast during a shift, so keep a short TTL.
     staleTime: 15_000,
   });
 
-/** Showtime picker with optional status filter. */
-const SHOWTIME_PICKER_PAGE_SIZE = 100;
 export const useShowtimeOptions = (search?: string, status?: ShowtimeStatus) =>
   useQuery({
     queryKey: [STAFF_QUERY_KEY, 'showtime-options', search, status],
     queryFn: () =>
       showtimeApi.list({
         page: 1,
-        page_size: SHOWTIME_PICKER_PAGE_SIZE,
+        page_size: PICKER_PAGE_SIZE,
         status,
         search,
         sort: 'start_at',
@@ -33,7 +31,6 @@ export const useShowtimeOptions = (search?: string, status?: ShowtimeStatus) =>
     placeholderData: (previous) => previous,
   });
 
-/** GET /shows/:id/seats - seat map of the showtime picked in the counter-sale form. */
 export const useCounterSeatMap = (showtimeId: string | null) =>
   useQuery({
     queryKey: [SEATMAP_QUERY_KEY, showtimeId],
@@ -56,7 +53,6 @@ export const useCounterSell = () => {
 export const useStaffOrderLookup = () =>
   useMutation({ mutationFn: (id: string) => staffApi.orderDetail(id) });
 
-/** GET /staff/showtimes/:id/tickets - ticket list of one showtime, issued/redeemed filter. */
 export const useShowtimeTickets = (showtimeId: string | null, status?: StaffTicketStatus) =>
   useQuery({
     queryKey: [STAFF_QUERY_KEY, 'tickets', showtimeId, status],

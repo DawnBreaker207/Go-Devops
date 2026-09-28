@@ -28,8 +28,7 @@ export const PaymentResultPage = () => {
   const live = useOrderStatus(bookingId, polling);
   const livePaid = live.data?.payment?.status === 'paid' || Boolean(live.data?.paid_at);
 
-  // Gateway says paid -> confirm at once (the old CheckoutStep auto-confirm,
-  // now living here since checkout unloads).
+  // Gateway says paid -> confirm at once (moved here from CheckoutStep since checkout unloads before confirming).
   const confirmedRef = useRef(false);
   useEffect(() => {
     if (!bookingId || snap?.status !== 'pending' || (!paid && !livePaid)) return;

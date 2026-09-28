@@ -54,7 +54,6 @@ type LoginResponse struct {
 	User UserResponse `json:"user"`
 }
 
-// SessionResponse is one signed-in device, as listed by GET /users/me/sessions.
 type SessionResponse struct {
 	ID         string     `json:"id"`
 	UserAgent  string     `json:"user_agent,omitempty"`
@@ -64,8 +63,7 @@ type SessionResponse struct {
 	IsCurrent bool `json:"is_current"`
 }
 
-// SessionListQuery optionally identifies the caller's own device so the response
-// can flag is_current.
+// Identifies the caller's device so the response can flag is_current.
 type SessionListQuery struct {
 	DeviceID string `form:"device_id" binding:"omitempty,max=255"`
 }

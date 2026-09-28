@@ -14,13 +14,8 @@ import (
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
 )
 
-// DiscountService owns discount codes: the operator catalogue, and applying one
-// to a customer's PENDING order.
-//
-// It never touches bookings.total_amount. That column is the seat subtotal and
-// finalizeTx asserts the sold seats add up to it; a discounted total would make
-// every discounted order fail to confirm AFTER the money was taken. The discount
-// lives in its own column and reaches the gateway through Booking.Payable().
+// DiscountService owns codes for PENDING orders. Never touches total_amount
+// (seat subtotal for finalize invariant); discount reaches gateway via Payable().
 type DiscountService interface {
 	Apply(ctx context.Context, userID, bookingID string, req dto.ApplyDiscountRequest) (*dto.DiscountAppliedResponse, error)
 	Remove(ctx context.Context, userID, bookingID string) (*dto.DiscountAppliedResponse, error)
@@ -36,27 +31,21 @@ type discountService struct {
 	db       *gorm.DB
 	codes    repository.DiscountRepository
 	bookings repository.BookingRepository
+	// payments only answers "is checkout open?"; re-pricing a live checkout splits collected vs Payable().
 	payments repository.PaymentRepository
-	// campaigns backs the campaign window check + per-account-once guard.
+	// campaigns backs campaign window check + per-account-once guard for every code.
 	campaigns repository.CampaignRepository
 	// now is injectable so the validity-window tests do not depend on wall clock.
 	now func() time.Time
 }
 
-func NewDiscountService(db *gorm.DB, codes repository.DiscountRepository, bookings repository.BookingRepository, payments repository.PaymentRepository, campaigns repository.CampaignRepository) DiscountService {
+func NewDiscountService(db *gorm.DB, codes repository.DiscountRepository, bookings repository.BookingRepository,
+	payments repository.PaymentRepository, campaigns repository.CampaignRepository) DiscountService {
 	return &discountService{db: db, codes: codes, bookings: bookings, payments: payments, campaigns: campaigns, now: time.Now}
 }
 
-/* -------------------------------------------------------------------------- */
-/* Customer: apply / remove                                                    */
-/* -------------------------------------------------------------------------- */
-
-// Apply attaches a code to a pending order and records what it took off.
-//
-// Every "no" answers a DISTINCT sentence but they all share code 40001, so the
-// client shows the message rather than branching on a code. One deliberate
-// exception: an UNKNOWN code answers the same ErrDiscountInvalid as a disabled
-// one, so this endpoint cannot be used to enumerate which codes exist.
+// Apply attaches a code to a pending order.
+// Unknown and disabled codes share one answer so codes cannot be enumerated.
 func (s *discountService) Apply(ctx context.Context, userID, bookingID string, req dto.ApplyDiscountRequest) (*dto.DiscountAppliedResponse, error) {
 	code := strings.ToUpper(strings.TrimSpace(req.Code))
 	if code == "" {
@@ -68,8 +57,7 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		usedCode string
 	)
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock the order first: the discount, the pay path and the sweep all
-		// contend for this row.
+		// Lock order first: discount, pay and sweep contend for this row.
 		b, err := s.bookings.LockBooking(ctx, tx, bookingID)
 		if err != nil {
 			return err
@@ -78,16 +66,13 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 			return apperrors.ErrBookingNotFound
 		}
 		if b.UserID != userID {
-			// 403 here, matching POST /orders/:id/refresh. (GET /tickets/:id/qr
-			// answers 404 for the same situation; the two differ on purpose —
-			// a ticket id must not be probeable, an order id the caller already
-			// named is not a secret.)
+			// 403 here to match refresh; order id is not a secret.
 			return apperrors.Forbidden("this order belongs to another user")
 		}
 		if b.Status != models.BookingPending || b.PaidAt != nil {
 			return apperrors.ErrDiscountOrderClosed
 		}
-		// Live checkout freezes the charge; re-pricing now is invisible to capture.
+		// Live checkout freezes charge; re-pricing now is invisible to capture.
 		open, err := s.payments.HasOpen(ctx, tx, b.ID)
 		if err != nil {
 			return err
@@ -99,8 +84,7 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 			return apperrors.ErrBookingEmpty
 		}
 		if b.DiscountCodeID != nil {
-			// Refuse rather than silently swapping: the customer must remove the
-			// old code first, so the screen and the order never disagree.
+			// Refuse swap; customer must remove old code first.
 			return apperrors.ErrDiscountAlreadySet
 		}
 
@@ -111,7 +95,7 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		if err := s.validate(found, b.TotalAmount); err != nil {
 			return err
 		}
-		// Campaign-linked codes also need an active campaign inside its window.
+		// Campaign-linked codes also need active campaign inside its window.
 		if found.CampaignID != nil {
 			campaign, err := s.campaigns.FindByID(ctx, *found.CampaignID)
 			if err != nil {
@@ -126,16 +110,12 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		if off <= 0 {
 			return apperrors.ErrDiscountInvalid
 		}
-		// A 100%-off order would hand the gateway an amount of 0, which no
-		// provider here is specified for. Refuse it as a bad code rather than
-		// inventing a free-order path through the money code.
+		// Refuse 100%-off: no provider handles amount 0.
 		if off >= b.TotalAmount {
 			return apperrors.ErrDiscountInvalid
 		}
 
-		// Claim the use BEFORE writing the booking: the limit lives in the
-		// UPDATE's WHERE, so two simultaneous redemptions of the last use cannot
-		// both succeed.
+		// Claim use first: limit lives in UPDATE WHERE, so last-use race cannot double-win.
 		n, err := s.codes.ClaimUse(ctx, tx, found.ID)
 		if err != nil {
 			return err
@@ -143,8 +123,7 @@ func (s *discountService) Apply(ctx context.Context, userID, bookingID string, r
 		if n == 0 {
 			return apperrors.ErrDiscountExhausted
 		}
-		// Per-account-once guard for every code; the UNIQUE (user, code) pair
-		// enforces it under race.
+		// Per-account-once guard for every code; unique (user_id, code_id) enforces it under race.
 		if err := s.campaigns.ClaimRedemption(ctx, tx, userID, found.ID); err != nil {
 			if apperrors.IsUniqueViolation(err) {
 				return apperrors.ErrDiscountAlreadyRedeemed
@@ -194,7 +173,7 @@ func (s *discountService) Remove(ctx context.Context, userID, bookingID string) 
 		if b.Status != models.BookingPending || b.PaidAt != nil {
 			return apperrors.ErrDiscountOrderClosed
 		}
-		// Same live-checkout freeze as Apply.
+		// Live checkout freezes charge; re-pricing now is invisible to capture.
 		open, err := s.payments.HasOpen(ctx, tx, b.ID)
 		if err != nil {
 			return err
@@ -214,12 +193,11 @@ func (s *discountService) Remove(ctx context.Context, userID, bookingID string) 
 		if n == 0 {
 			return apperrors.ErrDiscountOrderClosed
 		}
-		// Give the redemption back only after the booking write succeeded, so a
-		// failure cannot leak a use.
+		// Give redemption back only after booking write, so failure cannot leak a use.
 		if err := s.codes.ReleaseUse(ctx, tx, codeID); err != nil {
 			return err
 		}
-		// Also give back the per-account guard so the same code can be applied again.
+		// Also give back per-account guard so same code can be applied again.
 		if err := s.campaigns.ReleaseRedemption(ctx, tx, userID, codeID); err != nil {
 			return err
 		}
@@ -239,8 +217,7 @@ func (s *discountService) Remove(ctx context.Context, userID, bookingID string) 
 	return &result, nil
 }
 
-// validate answers why a code will not apply. An unknown code and a disabled one
-// give the SAME answer on purpose (see Apply).
+// validate: unknown and disabled codes share one answer.
 func (s *discountService) validate(d *models.DiscountCode, subtotal int64) error {
 	if d == nil || !d.Active {
 		return apperrors.ErrDiscountInvalid
@@ -274,10 +251,6 @@ func (s *discountService) auditDiscount(ctx context.Context, tx *gorm.DB, action
 	return audit.In(ctx, tx, rec)
 }
 
-/* -------------------------------------------------------------------------- */
-/* Operator catalogue                                                          */
-/* -------------------------------------------------------------------------- */
-
 func (s *discountService) AdminList(ctx context.Context, q dto.DiscountListQuery) ([]dto.DiscountCodeResponse, int64, error) {
 	codes, total, err := s.codes.List(ctx, q.Page, q.PageSize, strings.TrimSpace(q.Search), q.Active)
 	if err != nil {
@@ -304,8 +277,7 @@ func (s *discountService) AdminCreate(ctx context.Context, req dto.CreateDiscoun
 		return nil, err
 	}
 
-	// Checked here for a friendly message; the partial unique index is what
-	// actually guarantees it under a race.
+	// Friendly check here; partial unique index guarantees it under race.
 	existing, err := s.codes.FindByCode(ctx, code)
 	if err != nil {
 		return nil, err
@@ -327,8 +299,7 @@ func (s *discountService) AdminCreate(ctx context.Context, req dto.CreateDiscoun
 		Active:      req.Active == nil || *req.Active,
 	}
 	if created.Kind == models.DiscountAmount {
-		// max_discount only caps a percentage; keeping it on a flat code would
-		// read as a second, silent limit.
+		// max_discount caps percentage only; drop it on flat codes.
 		created.MaxDiscount = nil
 	}
 
@@ -397,8 +368,7 @@ func (s *discountService) AdminUpdate(ctx context.Context, id string, req dto.Up
 		fields["active"] = current.Active
 	}
 
-	// Re-validate the RESULT, not the request: a percentage that was legal before
-	// can be made illegal by changing only `value`.
+	// Re-validate result: changing only value can break a legal window.
 	if err := validateDiscountShape(current.Kind, current.Value, current.MaxDiscount, current.StartsAt, current.EndsAt); err != nil {
 		return nil, err
 	}
@@ -417,8 +387,7 @@ func (s *discountService) AdminUpdate(ctx context.Context, id string, req dto.Up
 	return &result, nil
 }
 
-// AdminDelete soft-deletes: bookings.discount_code_id still points here, and the
-// partial unique index frees the string for reuse afterwards.
+// AdminDelete soft-deletes; code string becomes reusable.
 func (s *discountService) AdminDelete(ctx context.Context, id string) error {
 	current, err := s.codes.FindByID(ctx, id)
 	if err != nil {
@@ -436,8 +405,7 @@ func (s *discountService) AdminDelete(ctx context.Context, id string) error {
 	})
 }
 
-// validateDiscountShape holds the rules the `binding` tags cannot express,
-// because they are relationships between fields rather than field ranges.
+// validateDiscountShape: cross-field rules that binding tags cannot express.
 func validateDiscountShape(kind string, value int64, maxDiscount *int64, startsAt, endsAt *time.Time) error {
 	if kind == models.DiscountPercent && (value < 1 || value > 100) {
 		return apperrors.Validation("a percentage discount must be between 1 and 100")

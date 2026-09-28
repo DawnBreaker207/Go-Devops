@@ -6,9 +6,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 )
 
-// DiscountCodeResponse is one code in the operator catalogue. It is NOT returned
-// to a customer: applying a code answers with DiscountAppliedResponse instead, so
-// the rules behind a code (minimum, remaining uses, window) never leak.
+// Operator-only; customers get DiscountAppliedResponse instead.
 type DiscountCodeResponse struct {
 	ID          string     `json:"id"`
 	Code        string     `json:"code"`
@@ -22,7 +20,8 @@ type DiscountCodeResponse struct {
 	MaxUses     *int       `json:"max_uses,omitempty"`
 	UsedCount   int        `json:"used_count"`
 	Active      bool       `json:"active"`
-	CreatedAt   time.Time  `json:"created_at"`
+	CampaignID *string   `json:"campaign_id,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 func NewDiscountCodeResponse(d *models.DiscountCode) DiscountCodeResponse {
@@ -39,6 +38,7 @@ func NewDiscountCodeResponse(d *models.DiscountCode) DiscountCodeResponse {
 		MaxUses:     d.MaxUses,
 		UsedCount:   d.UsedCount,
 		Active:      d.Active,
+		CampaignID:  d.CampaignID,
 		CreatedAt:   d.CreatedAt,
 	}
 }
@@ -51,17 +51,11 @@ func NewDiscountCodeResponses(codes []models.DiscountCode) []DiscountCodeRespons
 	return out
 }
 
-// ApplyDiscountRequest is the customer-facing body of POST /orders/:id/discount.
 type ApplyDiscountRequest struct {
 	Code string `json:"code" binding:"required,min=1,max=32" example:"WELCOME10"`
 }
 
-// DiscountAppliedResponse is what the customer gets back: the three numbers the
-// checkout screen needs and the code itself, nothing about the code's rules.
-//
-// `subtotal` is bookings.total_amount (the seat prices), `payable` is what the
-// gateway will actually charge. A client that renders total_amount as the amount
-// due after a discount is showing the wrong number.
+// Subtotal is bookings.total_amount; payable is what the gateway charges.
 type DiscountAppliedResponse struct {
 	BookingID string `json:"booking_id"`
 	Code      string `json:"code,omitempty"`
@@ -80,16 +74,12 @@ func NewDiscountAppliedResponse(b *models.Booking, code string) DiscountAppliedR
 	}
 }
 
-/* --- Operator catalogue --- */
-
 type DiscountListQuery struct {
 	PageQuery
-	// Go pointer: absent means no filter, distinct from false.
 	Active *bool `form:"active"`
 }
 
-// CreateDiscountRequest adds a code. `kind` decides how `value` is read:
-// percent (1..100, optionally capped by max_discount) or a flat amount in VND.
+// kind decides how value is read: percent (1..100) or flat VND.
 type CreateDiscountRequest struct {
 	Code        string     `json:"code" binding:"required,min=3,max=32" example:"WELCOME10"`
 	Description string     `json:"description" binding:"omitempty,max=2000"`
@@ -104,9 +94,7 @@ type CreateDiscountRequest struct {
 	Active *bool `json:"active"`
 }
 
-// UpdateDiscountRequest is a PARTIAL update; an omitted field is left alone.
-// `code` and `kind` are absent on purpose: changing either would silently rewrite
-// what a code meant for orders that already used it.
+// code and kind are immutable.
 type UpdateDiscountRequest struct {
 	Description *string    `json:"description" binding:"omitempty,max=2000"`
 	Value       *int64     `json:"value" binding:"omitempty,min=1"`
@@ -118,8 +106,7 @@ type UpdateDiscountRequest struct {
 	Active      *bool      `json:"active"`
 }
 
-// IsEmpty reports a body that would change nothing, which the service rejects
-// rather than issuing a no-op UPDATE.
+// The service rejects a no-op UPDATE.
 func (r UpdateDiscountRequest) IsEmpty() bool {
 	return r.Description == nil && r.Value == nil && r.MaxDiscount == nil &&
 		r.MinOrder == nil && r.StartsAt == nil && r.EndsAt == nil &&

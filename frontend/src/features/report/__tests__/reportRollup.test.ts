@@ -77,7 +77,7 @@ describe('rollupByMovie', () => {
 
 describe('occupancyPercent', () => {
   it('tra ve PHAN TRAM, cung don vi voi occupancy_rate cua backend', () => {
-    // Backend lam ROUND(100.0 * seats_sold / capacity), vi du 4/120 -> 3.33.
+    // Backend does ROUND(100.0 * seats_sold / capacity), e.g. 4/120 -> 3.33.
     expect(occupancyPercent(4, 120)).toBe(3.33);
     expect(occupancyPercent(1, 2)).toBe(50);
   });
@@ -87,8 +87,7 @@ describe('occupancyPercent', () => {
   });
 
   it('sums before dividing, never averages per-show rates', () => {
-    // One 1/10 show plus one 100/200: naive mean is 30%, but the truth is
-    // 101/210 = 48.1%. Big shows must weigh more.
+    // Naive mean of 1/10 and 100/200 is 30%, but the true weighted rate is 101/210 = 48.1%.
     expect(occupancyPercent(101, 210)).toBe(48.1);
   });
 });

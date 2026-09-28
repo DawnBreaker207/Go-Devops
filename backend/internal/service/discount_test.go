@@ -319,3 +319,105 @@ func TestHTTP_DiscountCatalogueIsAdminOnly(t *testing.T) {
 		})
 	}
 }
+
+// A discount must not be re-priced while a gateway checkout is already open.
+//
+// The charge is frozen into the payment attempt at Pay time (Amount = Payable())
+// and the mock gateway opens in its own tab, so the old checkout page stays live
+// and payable next to a checkout screen that still offers the discount box. Move
+// the discount after that and the two amounts part company for good: capture only
+// compares the gateway's amount to the ATTEMPT's, never to the booking's current
+// Payable(), so the mismatch/refund machinery is blind to it and the order
+// confirms either overcharged or undercharged.
+//
+// Init, Refresh and the hold-replace path all close this window with
+// ErrPaymentInProgress; Apply and Remove were the only re-pricing paths that did not.
+func TestHTTP_DiscountRefusedWhileCheckoutIsOpen(t *testing.T) {
+	h := newHTTPEnv(t)
+	admin, _ := h.login(models.RoleAdmin)
+	customer, _ := h.login(models.RoleCustomer)
+
+	createCode(t, h, admin, map[string]any{"code": "OPENTAB", "kind": "percent", "value": 10})
+
+	// --- apply AFTER paying is refused -------------------------------------
+	bookingID := holdSeats(t, h, customer, "A1", "A2")
+
+	status, _, body := h.call(http.MethodGet, "/api/v1/orders/"+bookingID, customer, nil)
+	if status != http.StatusOK {
+		t.Fatalf("read order: HTTP %d %v", status, body["message"])
+	}
+	subtotal := num(t, dataMap(body), "total_amount")
+
+	status, _, body = h.call(http.MethodPost, "/api/v1/orders/"+bookingID+"/pay", customer,
+		map[string]any{"provider": "mock"})
+	if status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("pay: HTTP %d %v", status, body["message"])
+	}
+
+	status, _, body = h.call(http.MethodPost, "/api/v1/orders/"+bookingID+"/discount", customer,
+		map[string]any{"code": "OPENTAB"})
+	if status != http.StatusConflict {
+		t.Fatalf("apply with a live checkout: HTTP %d %v, want 409 - the gateway page is already priced at %d",
+			status, body["message"], subtotal)
+	}
+
+	// The charge and the order must both be exactly where they were.
+	var charged int64
+	h.must(h.db.Raw(`SELECT amount FROM payments WHERE booking_id = ? ORDER BY created_at DESC LIMIT 1`,
+		bookingID).Scan(&charged).Error)
+	if charged != subtotal {
+		t.Fatalf("payments.amount = %d, want it untouched at %d", charged, subtotal)
+	}
+	status, _, body = h.call(http.MethodGet, "/api/v1/orders/"+bookingID, customer, nil)
+	if status != http.StatusOK {
+		t.Fatalf("re-read: HTTP %d %v", status, body["message"])
+	}
+	if got := num(t, dataMap(body), "payable_amount"); got != subtotal {
+		t.Fatalf("payable_amount = %d, want %d - the refused apply must not have re-priced the order", got, subtotal)
+	}
+}
+
+// The mirror case, and the one that costs the cinema money: apply a code, pay, then
+// remove it. The gateway collects the discounted amount while the order would confirm
+// as a full-price sale with no discount recorded against it.
+func TestHTTP_DiscountRemoveRefusedWhileCheckoutIsOpen(t *testing.T) {
+	h := newHTTPEnv(t)
+	admin, _ := h.login(models.RoleAdmin)
+	customer, _ := h.login(models.RoleCustomer)
+
+	createCode(t, h, admin, map[string]any{"code": "OPENTAB", "kind": "percent", "value": 10})
+
+	bookingID := holdSeats(t, h, customer, "A3", "A4")
+
+	status, _, body := h.call(http.MethodPost, "/api/v1/orders/"+bookingID+"/discount", customer,
+		map[string]any{"code": "OPENTAB"})
+	if status != http.StatusOK {
+		t.Fatalf("apply before paying: HTTP %d %v", status, body["message"])
+	}
+	discounted := num(t, dataMap(body), "payable")
+
+	status, _, body = h.call(http.MethodPost, "/api/v1/orders/"+bookingID+"/pay", customer,
+		map[string]any{"provider": "mock"})
+	if status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("pay: HTTP %d %v", status, body["message"])
+	}
+
+	status, _, body = h.call(http.MethodDelete, "/api/v1/orders/"+bookingID+"/discount", customer, nil)
+	if status != http.StatusConflict {
+		t.Fatalf("remove with a live checkout: HTTP %d %v, want 409", status, body["message"])
+	}
+
+	var charged int64
+	h.must(h.db.Raw(`SELECT amount FROM payments WHERE booking_id = ? ORDER BY created_at DESC LIMIT 1`,
+		bookingID).Scan(&charged).Error)
+	if charged != discounted {
+		t.Fatalf("payments.amount = %d, want the discounted %d", charged, discounted)
+	}
+	status, _, body = h.call(http.MethodGet, "/api/v1/orders/"+bookingID, customer, nil)
+	if status != http.StatusOK {
+		t.Fatalf("re-read: HTTP %d %v", status, body["message"])
+	}
+	if got := num(t, dataMap(body), "payable_amount"); got != discounted {
+		t.Fatalf("payable_amount = %d, want the discount still in place at %d", got, discounted)
+	}
+}

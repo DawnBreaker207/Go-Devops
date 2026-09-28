@@ -19,19 +19,15 @@ type HallService interface {
 	List(ctx context.Context, query dto.PageQuery) ([]dto.HallResponse, int64, error)
 	GetByID(ctx context.Context, id string) (*dto.HallResponse, error)
 	SeatsByHall(ctx context.Context, hallID string) ([]models.Seat, error)
-	PricesByHall(ctx context.Context, hallID string) ([]models.HallPrice, error)
-	// PublicPrices is the customer-facing price list: only bookable halls, one
-	// payload, no auth. Unlike PricesByHall it returns a DTO, not models.
-	PublicPrices(ctx context.Context) (*dto.PublicPriceListResponse, error)
 	Create(ctx context.Context, req dto.HallRequest) (*dto.HallResponse, error)
 	UpdateSeat(ctx context.Context, hallID, seatID string, req dto.SeatUpdateRequest) (*dto.SeatResponse, error)
 	BulkUpdateSeats(ctx context.Context, hallID string, req dto.BulkSeatUpdateRequest) ([]dto.SeatResponse, error)
-	SetPrices(ctx context.Context, hallID string, req dto.PriceRequest) ([]dto.HallPriceResponse, error)
 	Clone(ctx context.Context, hallID string, req dto.CloneHallRequest) (*dto.HallResponse, error)
 	UpdateHall(ctx context.Context, hallID string, req dto.UpdateHallRequest) (*dto.HallResponse, error)
 	RegenerateLayout(ctx context.Context, hallID string, req dto.HallRequest) (*dto.HallResponse, error)
 	AddRow(ctx context.Context, hallID string) ([]dto.SeatResponse, error)
 	DeleteRow(ctx context.Context, hallID, rowLabel string) ([]dto.SeatResponse, error)
+	AddColumn(ctx context.Context, hallID string) ([]dto.SeatResponse, error)
 	MergeSeats(ctx context.Context, hallID string, req dto.MergeSeatsRequest) (*dto.SeatResponse, error)
 	SplitSeat(ctx context.Context, hallID string, req dto.SplitSeatRequest) ([]dto.SeatResponse, error)
 	DeleteHall(ctx context.Context, hallID string) error
@@ -74,40 +70,6 @@ func (s *hallService) SeatsByHall(ctx context.Context, hallID string) ([]models.
 		return nil, err
 	}
 	return s.hallRepo.SeatsByHall(ctx, hallID)
-}
-
-func (s *hallService) PublicPrices(ctx context.Context) (*dto.PublicPriceListResponse, error) {
-	rows, err := s.hallRepo.PublicPriceList(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Group in insertion order: the query is ORDER BY hall name, so the payload
-	// keeps that order without a second sort.
-	result := dto.PublicPriceListResponse{Halls: make([]dto.PublicHallPrices, 0, 4)}
-	index := make(map[string]int, 4)
-	for _, row := range rows {
-		at, ok := index[row.HallID]
-		if !ok {
-			index[row.HallID] = len(result.Halls)
-			at = len(result.Halls)
-			result.Halls = append(result.Halls, dto.PublicHallPrices{
-				HallID: row.HallID, HallName: row.HallName, Prices: map[string]int64{},
-			})
-		}
-		result.Halls[at].Prices[row.SeatType] = row.Price
-		if result.FromPrice == 0 || row.Price < result.FromPrice {
-			result.FromPrice = row.Price
-		}
-	}
-	return &result, nil
-}
-
-func (s *hallService) PricesByHall(ctx context.Context, hallID string) ([]models.HallPrice, error) {
-	if _, err := s.GetByID(ctx, hallID); err != nil {
-		return nil, err
-	}
-	return s.hallRepo.PricesByHall(ctx, hallID)
 }
 
 // hallTemplate: built-in starting layout picked instead of typing rows/types/gaps by hand.
@@ -221,17 +183,17 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 	if err != nil {
 		return nil, err
 	}
-	if err := validatePrices(req.Prices); err != nil {
-		return nil, err
+	active := true
+	if req.Active != nil {
+		active = *req.Active
 	}
-
 	hall := &models.Hall{
 		Name:           strings.TrimSpace(req.Name),
 		Rows:           req.Rows,
 		SeatsPerRow:    req.SeatsPerRow,
 		ScreenPosition: req.ScreenPosition,
 		AisleAfterCols: req.AisleAfterCols,
-		Active:         true,
+		Active:         active,
 	}
 	normalizeHallJSON(hall)
 
@@ -246,9 +208,6 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 			seats[i].HallID = hall.ID
 		}
 		if err := s.hallRepo.CreateSeats(tx, seats); err != nil {
-			return err
-		}
-		if err := s.hallRepo.UpsertPrices(tx, hall.ID, req.Prices); err != nil {
 			return err
 		}
 		if rec, ok := audit.FromContext(ctx); ok {
@@ -285,12 +244,6 @@ func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHal
 	if err != nil {
 		return nil, err
 	}
-	var prices []models.HallPrice
-	if req.CopyPrices {
-		if prices, err = s.hallRepo.PricesByHall(ctx, hallID); err != nil {
-			return nil, err
-		}
-	}
 
 	clone := &models.Hall{
 		Name:           strings.TrimSpace(req.Name),
@@ -319,18 +272,9 @@ func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHal
 		if err := s.hallRepo.CreateSeats(tx, seats); err != nil {
 			return err
 		}
-		if len(prices) > 0 {
-			priceMap := make(map[string]int64, len(prices))
-			for _, p := range prices {
-				priceMap[p.SeatType] = p.Price
-			}
-			if err := s.hallRepo.UpsertPrices(tx, clone.ID, priceMap); err != nil {
-				return err
-			}
-		}
 		if rec, ok := audit.FromContext(ctx); ok {
 			rec.ResourceID = clone.ID
-			rec.After = map[string]any{"name": clone.Name, "cloned_from": hallID, "copy_prices": req.CopyPrices}
+			rec.After = map[string]any{"name": clone.Name, "cloned_from": hallID}
 			return audit.In(ctx, tx, rec)
 		}
 		return nil
@@ -345,7 +289,7 @@ func (s *hallService) Clone(ctx context.Context, hallID string, req dto.CloneHal
 func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req dto.SeatUpdateRequest) (*dto.SeatResponse, error) {
 	var seat *models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock first, check after: in-flight holds commit first and see the check; later holds see the layout.
+		// Lock first, check after: in-flight hold commits first.
 		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
 			return err
 		}
@@ -390,8 +334,7 @@ func (s *hallService) UpdateSeat(ctx context.Context, hallID, seatID string, req
 	return &result, nil
 }
 
-// BulkUpdateSeats applies every change in one transaction (one bad change rolls all back).
-// Never creates/removes a span (col_span untouched) — only RegenerateLayout does that.
+// BulkUpdateSeats applies every change in one tx; never touches col_span.
 func (s *hallService) BulkUpdateSeats(ctx context.Context, hallID string, req dto.BulkSeatUpdateRequest) ([]dto.SeatResponse, error) {
 	var updated []models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -458,7 +401,7 @@ func (s *hallService) BulkUpdateSeats(ctx context.Context, hallID string, req dt
 	return dto.NewSeatResponses(updated), nil
 }
 
-// selectSeats resolves one selector (exactly one of labels/rows/cols/range) to indexes.
+// selectSeats resolves one selector to indexes.
 func selectSeats(seats []models.Seat, sel dto.SeatSelector) ([]int, error) {
 	set := 0
 	if len(sel.Labels) > 0 {
@@ -562,40 +505,7 @@ func splitLabel(label string) (string, int, error) {
 	return strings.ToUpper(label[:i]), col, nil
 }
 
-func (s *hallService) SetPrices(ctx context.Context, hallID string, req dto.PriceRequest) ([]dto.HallPriceResponse, error) {
-	if _, err := s.GetByID(ctx, hallID); err != nil {
-		return nil, err
-	}
-	if err := validatePrices(req.Prices); err != nil {
-		return nil, err
-	}
-
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.hallRepo.UpsertPrices(tx, hallID, req.Prices); err != nil {
-			return err
-		}
-		if rec, ok := audit.FromContext(ctx); ok {
-			rec.ResourceID = hallID
-			rec.After = map[string]any{"prices": req.Prices}
-			return audit.In(ctx, tx, rec)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	// Showtime listings show hall_prices' MIN as from_price.
-	bumpCatalog(ctx, s.cache)
-
-	response := make([]dto.HallPriceResponse, 0, len(req.Prices))
-	for _, seatType := range models.AllSeatTypes {
-		response = append(response, dto.HallPriceResponse{SeatType: seatType, Price: req.Prices[seatType]})
-	}
-	return response, nil
-}
-
-// UpdateHall changes name/screen/aisle/active. Deactivating is refused (409) while an open
-// showtime is still to come; inactive halls refuse new showtimes (H6 guard in showtime_service).
+// UpdateHall changes name/screen/aisle/active. Deactivating is refused while open showtime to come.
 func (s *hallService) UpdateHall(ctx context.Context, hallID string, req dto.UpdateHallRequest) (*dto.HallResponse, error) {
 	var hall *models.Hall
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -655,8 +565,7 @@ func (s *hallService) UpdateHall(ctx context.Context, hallID string, req dto.Upd
 	return &result, nil
 }
 
-// RegenerateLayout replaces the whole grid. Only if the hall never had any booking (any status,
-// even deleted showtimes): seats are FK-referenced via showtime_seats, so deletion would violate it.
+// RegenerateLayout replaces whole grid; only if hall never had any booking (FK).
 func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req dto.HallRequest) (*dto.HallResponse, error) {
 	req, err := resolveLayout(req)
 	if err != nil {
@@ -728,12 +637,11 @@ func (s *hallService) RegenerateLayout(ctx context.Context, hallID string, req d
 	return &result, nil
 }
 
-// maxHallRows mirrors HallRequest.Rows' `max=50`: AddRow never goes through that DTO's
-// validation, so nothing else would catch the cap.
+// maxHallRows/cap mirror DTO max=50; AddRow/AddColumn bypass DTO validation.
 const maxHallRows = 50
+const maxHallSeatsPerRow = 50
 
-// AddRow appends one row of standard seats without touching existing ones. Unlike RegenerateLayout
-// it never deletes, so the ordinary HallHasBookings gate (same as UpdateSeat/BulkUpdateSeats) suffices.
+// AddRow appends one standard row; never deletes so bookings gate suffices.
 func (s *hallService) AddRow(ctx context.Context, hallID string) ([]dto.SeatResponse, error) {
 	var newSeats []models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -758,8 +666,7 @@ func (s *hallService) AddRow(ctx context.Context, hallID string) ([]dto.SeatResp
 			return apperrors.ErrHallHasBookings
 		}
 
-		// generateSeats(1, ...) builds row 1 ("A"); remap it onto the real next row instead of
-		// duplicating generation logic.
+		// Remap generated row 1 onto next row.
 		row, err := generateSeats(1, hall.SeatsPerRow, nil, nil, nil)
 		if err != nil {
 			return err
@@ -782,7 +689,7 @@ func (s *hallService) AddRow(ctx context.Context, hallID string) ([]dto.SeatResp
 		for i, seat := range row {
 			seatIDs[i] = seat.ID
 		}
-		// So the new row is bookable on already-open showtimes too, not just later ones.
+		// New row is bookable on open showtimes too.
 		if err := s.hallRepo.CreateShowtimeSeatsForSeats(tx, hallID, seatIDs); err != nil {
 			return err
 		}
@@ -806,10 +713,80 @@ func (s *hallService) AddRow(ctx context.Context, hallID string) ([]dto.SeatResp
 	return dto.NewSeatResponses(newSeats), nil
 }
 
-// DeleteRow drops ANY one row, then shifts later rows down so rows stay 1..N (AddRow/RowLabel assume
-// that). Safe: bookings reference seats by id, never row_label, so only deleted seats need the
-// SeatEverHadBooking gate. The shift runs ascending from the deleted row, so each destination is
-// guaranteed free (just vacated) and never collides with uq_seat_hall_row_col.
+// AddColumn widens hall by one GAP column per row; admin fills needed rows.
+func (s *hallService) AddColumn(ctx context.Context, hallID string) ([]dto.SeatResponse, error) {
+	var newSeats []models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		hall, err := s.hallRepo.FindByID(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		if hall == nil {
+			return apperrors.ErrHallNotFound
+		}
+		if hall.SeatsPerRow >= maxHallSeatsPerRow {
+			return apperrors.ErrHallColumnLimitReached
+		}
+		hasBookings, err := s.hallRepo.HallHasBookings(tx, hallID)
+		if err != nil {
+			return err
+		}
+		if hasBookings {
+			return apperrors.ErrHallHasBookings
+		}
+
+		nextCol := hall.SeatsPerRow + 1
+		column := make([]models.Seat, 0, hall.Rows)
+		for r := 1; r <= hall.Rows; r++ {
+			column = append(column, models.Seat{
+				HallID:    hallID,
+				RowIndex:  r,
+				RowLabel:  dto.RowLabel(r),
+				ColNumber: nextCol,
+				SeatType:  models.SeatStandard,
+				IsGap:     true,
+				ColSpan:   1,
+			})
+		}
+		if err := s.hallRepo.CreateSeats(tx, column); err != nil {
+			if apperrors.IsUniqueViolation(err) {
+				return apperrors.ErrHallColumnLimitReached
+			}
+			return err
+		}
+
+		seatIDs := make([]string, len(column))
+		for i, seat := range column {
+			seatIDs[i] = seat.ID
+		}
+		// So the new column is bookable on already-open showtimes too, not just later ones.
+		if err := s.hallRepo.CreateShowtimeSeatsForSeats(tx, hallID, seatIDs); err != nil {
+			return err
+		}
+
+		hall.SeatsPerRow = nextCol
+		if err := s.hallRepo.UpdateHallLayout(tx, hall); err != nil {
+			return err
+		}
+
+		newSeats = column
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = hallID
+			rec.After = map[string]any{"col_number": nextCol, "seats_added": len(column)}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dto.NewSeatResponses(newSeats), nil
+}
+
+// DeleteRow drops one row then shifts later rows down (ids unchanged, FK-safe).
 func (s *hallService) DeleteRow(ctx context.Context, hallID, rowLabel string) ([]dto.SeatResponse, error) {
 	var removed []models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -826,6 +803,10 @@ func (s *hallService) DeleteRow(ctx context.Context, hallID, rowLabel string) ([
 		rowIndex := dto.RowNumber(rowLabel)
 		if rowIndex < 1 || rowIndex > hall.Rows {
 			return apperrors.ErrSeatNotFound
+		}
+		// halls.rows has a DB CHECK (rows > 0); refuse cleanly instead of hitting it.
+		if hall.Rows <= 1 {
+			return apperrors.ErrHallLastRow
 		}
 
 		seats, err := s.hallRepo.SeatsByHall(ctx, hallID)
@@ -882,7 +863,7 @@ func (s *hallService) DeleteRow(ctx context.Context, hallID, rowLabel string) ([
 	return dto.NewSeatResponses(removed), nil
 }
 
-// findSeatByLabel: linear scan is fine (halls are small, <= 2500 cells); avoids a new repo lookup.
+// findSeatByLabel: linear scan (halls <= 2500 cells).
 func findSeatByLabel(seats []models.Seat, rowLabel string, col int) *models.Seat {
 	for i := range seats {
 		if seats[i].RowLabel == rowLabel && seats[i].ColNumber == col {
@@ -892,8 +873,7 @@ func findSeatByLabel(seats []models.Seat, rowLabel string, col int) *models.Seat
 	return nil
 }
 
-// MergeSeats turns two adjacent standards into one couple (col_span=2) at the left; the right row is
-// deleted (generateSeats emits no row for swallowed columns). Gated per-seat (SeatEverHadBooking), not per-hall.
+// MergeSeats turns two adjacent standards into one couple; gated per-seat.
 func (s *hallService) MergeSeats(ctx context.Context, hallID string, req dto.MergeSeatsRequest) (*dto.SeatResponse, error) {
 	var left models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -969,8 +949,7 @@ func (s *hallService) MergeSeats(ctx context.Context, hallID string, req dto.Mer
 	return &result, nil
 }
 
-// SplitSeat turns one couple back into two standards (original keeps col_span=1, new seat at next
-// column). Gated by SeatEverHadBooking on the couple seat.
+// SplitSeat turns one couple back into two standards.
 func (s *hallService) SplitSeat(ctx context.Context, hallID string, req dto.SplitSeatRequest) ([]dto.SeatResponse, error) {
 	var result []models.Seat
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -1052,7 +1031,7 @@ func (s *hallService) SplitSeat(ctx context.Context, hallID string, req dto.Spli
 	return dto.NewSeatResponses(result), nil
 }
 
-// DeleteHall soft-deletes a hall; refused (409) while a showtime hasn't ended yet.
+// DeleteHall soft-deletes; refused while showtime not yet ended.
 func (s *hallService) DeleteHall(ctx context.Context, hallID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
@@ -1137,7 +1116,7 @@ func generateSeats(rows, seatsPerRow int, seatTypes map[string][]string, gaps, s
 	return seats, nil
 }
 
-// A span anchor D3 covers D3-D4; the swallowed column must exist and not be a gap/anchor.
+// A span anchor covers two columns; swallowed column must be free.
 func spanSet(spans []string, rows, seatsPerRow int, gapSet map[string]bool) (span, consumed map[string]bool, err error) {
 	span = make(map[string]bool, len(spans))
 	consumed = make(map[string]bool, len(spans))
@@ -1157,8 +1136,7 @@ func spanSet(spans []string, rows, seatsPerRow int, gapSet map[string]bool) (spa
 		if gapSet[label] {
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "gap cannot span"})
 		}
-		// The consumed column must be free too (not an anchor/consumed): checking only the new label
-		// misses overlaps like spans ["A3","A2"], which would silently drop seat A4.
+		// Check consumed column too; else overlapping spans silently drop a seat.
 		if span[neighbor] || consumed[neighbor] {
 			return nil, nil, apperrors.ErrSeatValidation.WithDetails(map[string]string{"span": s, "reason": "overlapping span"})
 		}
@@ -1202,17 +1180,4 @@ func parseGapLabel(label string, rows, seatsPerRow int) (string, int, error) {
 		return "", 0, apperrors.ErrSeatValidation.WithDetails(map[string]string{"gap": label})
 	}
 	return strings.ToUpper(label[:i]), col, nil
-}
-
-func validatePrices(prices map[string]int64) error {
-	if len(prices) != len(models.AllSeatTypes) {
-		return apperrors.ErrSeatValidation
-	}
-	for _, seatType := range models.AllSeatTypes {
-		price, ok := prices[seatType]
-		if !ok || price <= 0 {
-			return apperrors.ErrSeatValidation.WithDetails(map[string]string{"seat_type": seatType})
-		}
-	}
-	return nil
 }

@@ -92,6 +92,8 @@ type BookingOptions struct {
 	PublicBaseURL string
 	HoldTTL       time.Duration
 	MaxSeats      int
+	// Pricing resolves base+rules into final price; hold/counter snapshot it into booking_seats.price.
+	Pricing PricingService
 	// RefreshMaxLifetime caps expiry at created_at + it; zero means HoldTTL (no refresh).
 	RefreshMaxLifetime time.Duration
 	// Publisher may be nil: the sendTicketEmails cron picks unsent emails up.
@@ -114,6 +116,7 @@ type bookingService struct {
 	repo               repository.BookingRepository
 	payments           repository.PaymentRepository
 	providers          *payment.Registry
+	pricing            PricingService
 	publicBaseURL      string
 	holdTTL            time.Duration
 	maxSeats           int
@@ -145,6 +148,7 @@ func NewBookingService(opts BookingOptions) BookingService {
 		repo:               opts.Repo,
 		payments:           opts.Payments,
 		providers:          opts.Providers,
+		pricing:            opts.Pricing,
 		publicBaseURL:      strings.TrimRight(opts.PublicBaseURL, "/"),
 		holdTTL:            opts.HoldTTL,
 		maxSeats:           opts.MaxSeats,
@@ -159,7 +163,7 @@ func NewBookingService(opts BookingOptions) BookingService {
 	}
 }
 
-// inTx re-runs fn when the transaction lost a race; fn must reset what it captures on every attempt.
+// inTx retries tx on race; fn must reset captures each attempt.
 func (s *bookingService) inTx(ctx context.Context, fn func(tx *gorm.DB) error) error {
 	var err error
 	for attempt := 0; attempt < maxTxAttempts; attempt++ {
@@ -171,8 +175,7 @@ func (s *bookingService) inTx(ctx context.Context, fn func(tx *gorm.DB) error) e
 	return err
 }
 
-// Hold locks seat rows in id order and takes expiry from the DB clock. A previous unpaid
-// hold of the same user and show is replaced without extending its expiry.
+// Hold locks seats in id order; DB clock sets expiry. Replace keeps old expiry.
 func (s *bookingService) Hold(ctx context.Context, userID string, req dto.HoldRequest) (*dto.HoldResponse, error) {
 	seatIDs := uniqueStrings(req.SeatIDs)
 	if len(seatIDs) == 0 {
@@ -310,7 +313,7 @@ func (s *bookingService) Init(ctx context.Context, userID string, req dto.InitRe
 	return result, nil
 }
 
-// New expiry never passes created_at + RefreshMaxLifetime; seat-change holds never extend (E-HO11).
+// New expiry never passes created_at + RefreshMaxLifetime.
 func (s *bookingService) Refresh(ctx context.Context, userID, bookingID string) (*dto.RefreshResponse, error) {
 	var result *dto.RefreshResponse
 	err := s.inTx(ctx, func(tx *gorm.DB) error {
@@ -367,8 +370,7 @@ func (s *bookingService) Refresh(ctx context.Context, userID, bookingID string) 
 			return apperrors.ErrShowtimeClosed
 		}
 
-		// Seats must still be held by this booking; a lost seat stops the
-		// heartbeat so the client can react instead of paying for thin air.
+		// Seats must still be held by this booking; lost seat stops heartbeat.
 		bseats, err := s.repo.BookingSeats(ctx, tx, b.ID)
 		if err != nil {
 			return err
@@ -462,7 +464,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	if showtime.Status != models.ShowtimeOpen || !showtime.StartAt.After(now) {
 		return nil, nil, apperrors.ErrShowtimeClosed
 	}
-	// A movie taken off the schedule sells nothing, whatever its showtimes say.
+	// A movie off schedule sells nothing.
 	showing, err := s.repo.MovieShowing(ctx, tx, showtime.MovieID)
 	if err != nil {
 		return nil, nil, err
@@ -471,7 +473,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 		return nil, nil, apperrors.ErrShowtimeClosed
 	}
 
-	// Same-key retry returns the booking it created; reused by another user/show/seats, or ended, it's refused.
+	// Same-key retry returns booking it created; reused/ended key is refused.
 	if key != "" {
 		existing, err := s.repo.LockLatestByKey(ctx, tx, key)
 		if err != nil {
@@ -500,14 +502,14 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	ownVersions := map[string]int64{}
 	replacedID := ""
 
-	// One PENDING per user per show; the new hold replaces the old, keeping its expiry (tabs can't extend forever).
+	// One PENDING per user/show; new hold replaces old, keeping expiry.
 	old, err := s.repo.LockPendingByUserShow(ctx, tx, userID, showID)
 	if err != nil {
 		return nil, nil, err
 	}
 	if old != nil {
 		stillValid := old.ExpiresAt != nil && old.ExpiresAt.After(now)
-		// Money may be on its way: replacing a paid booking would silently drop it.
+		// Money may be on way: replacing paid booking would drop it.
 		if old.PaidAt != nil {
 			return nil, nil, apperrors.ErrPaymentInProgress
 		}
@@ -574,12 +576,13 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	if err != nil {
 		return nil, nil, err
 	}
-	prices, err := s.repo.PricesByHall(ctx, tx, showtime.HallID)
+	// Resolve every held seat type in one QuotePrices call.
+	seatTypes := seatTypesOf(seatIDs, byID, phys)
+	prices, err := s.pricing.QuotePrices(ctx, showtime, seatTypes)
 	if err != nil {
 		return nil, nil, err
 	}
-	// Couple seats count 2 toward the cap; the len(seatIDs) check in Hold is only a coarse upper
-	// bound — this is the authoritative check.
+	// Couple counts 2 toward cap; this is authoritative check.
 	if weight := seatWeight(seatIDs, byID, phys); weight > s.maxSeats {
 		return nil, nil, apperrors.ErrSeatLimitExceeded.WithDetails(map[string]string{"max": strconv.Itoa(s.maxSeats)})
 	}
@@ -623,10 +626,11 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	labels := make([]string, 0, len(seatIDs))
 	for _, id := range seatIDs {
 		meta := phys[byID[id].SeatID]
-		price, ok := prices[meta.SeatType]
-		if !ok || price <= 0 {
+		quoted, ok := prices[meta.SeatType]
+		if !ok || !quoted.Configured {
 			return nil, nil, apperrors.ErrMissingHallPrice.WithDetails(map[string]string{"seat_type": meta.SeatType})
 		}
+		price := quoted.Final
 		version, err := s.repo.HoldSeat(ctx, tx, id, userID, heldUntil)
 		if err != nil {
 			return nil, nil, err
@@ -660,7 +664,7 @@ func (s *bookingService) holdTx(ctx context.Context, tx *gorm.DB, userID, showID
 	if key != "" {
 		booking.IdempotencyKey = &key
 	}
-	// A unique violation (second tab/key race) re-runs the tx, which then finds/replaces the winner.
+	// Key race: unique violation re-runs tx, which finds/replaces winner.
 	if err := s.repo.Create(ctx, tx, booking); err != nil {
 		return nil, nil, err
 	}
@@ -773,7 +777,7 @@ func (s *bookingService) Order(ctx context.Context, userID, bookingID string) (*
 	return s.orderDetail(ctx, b)
 }
 
-// AdminOrder is Order without the ownership check, for support lookup of any booking.
+// AdminOrder without ownership check, for support lookup.
 func (s *bookingService) AdminOrder(ctx context.Context, bookingID string) (*dto.OrderDetailResponse, error) {
 	b, err := s.repo.FindByID(ctx, bookingID)
 	if err != nil {
@@ -792,7 +796,7 @@ func (s *bookingService) AdminOrder(ctx context.Context, bookingID string) (*dto
 	return s.orderDetail(ctx, b)
 }
 
-// ownedBooking reconciles before returning; another user's booking is 403, not 404.
+// ownedBooking reconciles first; other user's booking is 403, not 404.
 func (s *bookingService) ownedBooking(ctx context.Context, userID, bookingID string) (*models.Booking, error) {
 	b, err := s.repo.FindByID(ctx, bookingID)
 	if err != nil {
@@ -866,8 +870,7 @@ func transactionItem(row *repository.TransactionRow) dto.TransactionResponse {
 	}
 }
 
-// AdminList reports DB state without provider reconcile (one page would fire one call per row);
-// the sweep and GET /staff/orders/{id} keep single orders honest.
+// AdminList reports DB state without provider reconcile.
 func (s *bookingService) AdminList(ctx context.Context, query dto.AdminOrderListQuery) ([]dto.AdminOrderListItem, int64, error) {
 	from, to, err := s.orderListBounds(query)
 	if err != nil {
@@ -884,8 +887,7 @@ func (s *bookingService) AdminList(ctx context.Context, query dto.AdminOrderList
 	return items, total, nil
 }
 
-// orderListBounds turns date/from/to into absolute instants (date wins; half-open start <= x < end).
-// Same convention as showtimeService.listBounds.
+// orderListBounds: date wins; half-open start <= x < end.
 func (s *bookingService) orderListBounds(query dto.AdminOrderListQuery) (time.Time, time.Time, error) {
 	loc := s.location
 	if loc == nil {
@@ -920,7 +922,7 @@ func (s *bookingService) orderListBounds(query dto.AdminOrderListQuery) (time.Ti
 		if err != nil {
 			return time.Time{}, time.Time{}, err
 		}
-		// Inclusive upper bound for the caller, half-open for the query.
+		// Inclusive upper bound for caller, half-open for query.
 		to = parsed.AddDate(0, 0, 1)
 	}
 	if !from.IsZero() && !to.IsZero() && !to.After(from) {
@@ -929,7 +931,7 @@ func (s *bookingService) orderListBounds(query dto.AdminOrderListQuery) (time.Ti
 	return from, to, nil
 }
 
-// adminOrderItem: joined-row twin of orderStatus, which only takes *models.Booking.
+// adminOrderItem: joined-row twin of orderStatus.
 func adminOrderItem(row *repository.AdminOrderRow) dto.AdminOrderListItem {
 	now := time.Now()
 	item := dto.AdminOrderListItem{
@@ -938,7 +940,7 @@ func adminOrderItem(row *repository.AdminOrderRow) dto.AdminOrderListItem {
 			ShowtimeID:   row.ShowtimeID,
 			Status:       row.Status,
 			StatusReason: row.StatusReason,
-			// Same rule as orderStatus: total is the subtotal, payable is the charge.
+			// Total is subtotal, payable is charge. See Booking.Payable.
 			TotalAmount:    row.TotalAmount,
 			DiscountAmount: row.DiscountAmount,
 			PayableAmount:  row.TotalAmount - row.DiscountAmount,
@@ -960,7 +962,7 @@ func adminOrderItem(row *repository.AdminOrderRow) dto.AdminOrderListItem {
 		SoldVia: row.SoldVia,
 		Seats:   row.Seats,
 	}
-	// Empty until the booking carries an attempt's money (bookings.payment_id).
+	// Empty until booking carries attempt money.
 	if row.PaymentID != "" {
 		item.Payment = &dto.PaymentSummary{
 			ID:           row.PaymentID,
@@ -983,7 +985,7 @@ func adminOrderItem(row *repository.AdminOrderRow) dto.AdminOrderListItem {
 			Phone:    row.Phone,
 		}
 	case row.CustomerName != "" || row.CustomerPhone != "":
-		// Counter sale: no account, only what the till wrote down.
+		// Counter sale: no account, only till note.
 		item.Customer = &dto.OrderCustomer{FullName: row.CustomerName, Phone: row.CustomerPhone}
 	}
 	return item
@@ -1000,7 +1002,7 @@ func (s *bookingService) showtimeOf(ctx context.Context, showtimeID string) (*re
 	return nil, nil
 }
 
-// Cancel leaves an open provider checkout alone: late money for an expired booking is refunded.
+// Cancel leaves open checkout alone; late money for expired booking is refunded.
 func (s *bookingService) Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error) {
 	var (
 		released []string
@@ -1078,8 +1080,7 @@ const (
 	defaultCheckinCloseAfter = 20 * time.Minute
 )
 
-// Redeem: only an ISSUED ticket of this showtime inside its check-in window flips to REDEEMED,
-// exactly once (closed showtimes still let tickets in). Other verdicts change nothing, audited as failure.
+// Redeem: only ISSUED ticket of this show inside window flips to REDEEMED, once.
 func (s *bookingService) Redeem(ctx context.Context, ticketRef, showtimeID string) (*dto.RedeemResponse, error) {
 	row, err := s.repo.TicketForGate(ctx, ticketRef)
 	if err != nil {
@@ -1169,7 +1170,7 @@ func (s *bookingService) TicketQR(ctx context.Context, userID, role, ticketID st
 	}, nil
 }
 
-// auditScan never logs the scanned code: the ticket id, when known, stands for it.
+	// Ticket id stands for scanned code; code never enters logs.
 func (s *bookingService) auditScan(ctx context.Context, ticketID, bookingID, showtimeID, verdict string) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
@@ -1215,8 +1216,7 @@ func (s *bookingService) broadcast(showtimeID, status string, ids []string) {
 	s.hub.Broadcast(showtimeID, sse.SeatEvent{ShowtimeID: showtimeID, Seats: updates})
 }
 
-// audit writes a success row; bookingID is the correlation key (see internal/audit) — pass it even
-// for resourceType "payment"/"ticket".
+// audit writes success row; bookingID is correlation key.
 func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourceType, resourceID, bookingID string, after map[string]any) error {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
@@ -1233,7 +1233,7 @@ func (s *bookingService) audit(ctx context.Context, tx *gorm.DB, action, resourc
 	return audit.In(ctx, tx, rec)
 }
 
-// auditRejected runs outside any transaction so forged callbacks still leave a trace.
+// auditRejected runs outside tx so forged callbacks still leave trace.
 func (s *bookingService) auditRejected(ctx context.Context, provider, txnRef, message string) {
 	rec, ok := audit.FromContext(ctx)
 	if !ok {
@@ -1281,8 +1281,7 @@ func (s *bookingService) orderDetail(ctx context.Context, b *models.Booking) (*d
 	return res, nil
 }
 
-// CounterSell: till sale, cash collected, confirmed immediately, no ticket email. Seats sell straight
-// from 'available' under row locks, so online holds/finalizes can't race past.
+// CounterSell: cash till sale, confirmed at once; sells from available under row locks.
 func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellRequest) (*dto.OrderDetailResponse, error) {
 	seatIDs := uniqueStrings(req.SeatIDs)
 	if len(seatIDs) <= 0 || len(req.SeatIDs) != len(seatIDs) {
@@ -1334,7 +1333,8 @@ func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellReq
 		if err != nil {
 			return err
 		}
-		prices, err := s.repo.PricesByHall(ctx, tx, showtime.HallID)
+		// Same pricing engine as holdTx.
+		prices, err := s.pricing.QuotePrices(ctx, showtime, seatTypesOf(seatIDs, byID, phys))
 		if err != nil {
 			return err
 		}
@@ -1369,10 +1369,11 @@ func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellReq
 		labels := make([]string, 0, len(seatIDs))
 		for _, id := range seatIDs {
 			seatType := phys[byID[id].SeatID].SeatType
-			price, ok := prices[seatType]
-			if !ok || price <= 0 {
+			quoted, ok := prices[seatType]
+			if !ok || !quoted.Configured {
 				return apperrors.ErrMissingHallPrice.WithDetails(map[string]string{"seat_type": seatType})
 			}
+			price := quoted.Final
 			total += price
 			labels = append(labels, dto.SeatLabel(phys[byID[id].SeatID].RowLabel, phys[byID[id].SeatID].ColNumber))
 			bseats = append(bseats, models.BookingSeat{
@@ -1453,8 +1454,7 @@ func orderStatus(b *models.Booking, pay *models.Payment, show *repository.Showti
 		ShowtimeID:   b.ShowtimeID,
 		Status:       b.Status,
 		StatusReason: derefString(b.StatusReason),
-		// TotalAmount is the undiscounted seat subtotal; PayableAmount is what
-		// the gateway charges. See models.Booking.Payable.
+	// TotalAmount is undiscounted subtotal; PayableAmount is gateway charge.
 		TotalAmount:    b.TotalAmount,
 		DiscountAmount: b.DiscountAmount,
 		PayableAmount:  b.Payable(),
@@ -1499,7 +1499,22 @@ func derefString(p *string) string {
 	return *p
 }
 
-// seatWeight sums col_span (couple=2) toward the cap; missing span defaults to 1.
+// seatTypesOf: distinct seat types for one QuotePrices call.
+func seatTypesOf(seatIDs []string, byID map[string]models.ShowtimeSeat, phys map[string]models.Seat) []string {
+	seen := make(map[string]struct{}, len(models.AllSeatTypes))
+	out := make([]string, 0, len(models.AllSeatTypes))
+	for _, id := range seatIDs {
+		seatType := phys[byID[id].SeatID].SeatType
+		if _, ok := seen[seatType]; ok {
+			continue
+		}
+		seen[seatType] = struct{}{}
+		out = append(out, seatType)
+	}
+	return out
+}
+
+// seatWeight sums col_span toward cap; missing span is 1.
 func seatWeight(seatIDs []string, byID map[string]models.ShowtimeSeat, phys map[string]models.Seat) int {
 	total := 0
 	for _, id := range seatIDs {

@@ -22,8 +22,7 @@ export const MovieCard = ({ movie, onBook, onTrailer }: MovieCardProps) => {
   const { t } = useTranslation();
   const { token } = antdTheme.useToken();
 
-  // Card variables come from the antd token so dark mode recolors; every motion
-  // value comes from var(--motion-*) in MovieCard.css.
+  // Values come from the antd token so dark mode recolors; motion values live in MovieCard.css.
   const cssVars = {
     '--movie-card-bg': token.colorBgContainer,
     '--movie-card-radius': `${token.borderRadiusLG}px`,

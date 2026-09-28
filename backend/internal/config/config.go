@@ -119,7 +119,6 @@ type LoginGuardConfig struct {
 	Lockout     time.Duration `mapstructure:"lockout"`
 }
 
-// RateLimitRule configures one token bucket.
 type RateLimitRule struct {
 	Capacity        int     `mapstructure:"capacity"`
 	RefillPerSecond float64 `mapstructure:"refill_per_second"`
@@ -477,7 +476,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("payment.providers.mock.secret", "")
 	v.SetDefault("payment.providers.mock.allow_in_production", false)
 	// VNPay ships disabled and credential-less on purpose: an adapter that cannot
-	// authenticate must never come up by accident.
+	// authenticate must refuse to start rather than come up collecting nothing.
 	v.SetDefault("payment.providers.vnpay.enabled", false)
 	v.SetDefault("payment.providers.vnpay.display_name", "VNPay")
 	v.SetDefault("payment.providers.vnpay.tmn_code", "")

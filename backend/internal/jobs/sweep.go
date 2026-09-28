@@ -14,8 +14,7 @@ type holdSweeper interface {
 	SweepExpired(ctx context.Context, limit int) (service.SweepResult, error)
 }
 
-// NewSweepExpiredHolds also expires unpaid bookings, settles stuck paid bookings and
-// retries failed refunds, looping until caught up.
+// Also expires unpaid bookings, settles stuck paid ones, retries failed refunds.
 func NewSweepExpiredHolds(sweeper holdSweeper) *batch.Job {
 	return &batch.Job{
 		Name:     "sweepExpiredHolds",

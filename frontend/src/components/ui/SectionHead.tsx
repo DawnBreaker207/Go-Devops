@@ -7,7 +7,6 @@ export interface SectionHeadProps {
   subtitle?: ReactNode;
 }
 
-/** Centered content header: optional eyebrow + title + short subtitle. */
 export const SectionHead = ({ eyebrow, title, subtitle }: SectionHeadProps) => (
   <div className="px-0 py-5 pb-8 text-center">
     {eyebrow ? (

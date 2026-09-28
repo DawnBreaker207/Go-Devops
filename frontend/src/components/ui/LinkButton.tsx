@@ -7,7 +7,6 @@ export interface LinkButtonProps extends LinkProps {
   pill?: boolean;
 }
 
-/** Navigation-styled <Link>; shares Button styling via buttonClassName. */
 export const LinkButton = ({
   variant = 'primary',
   block,

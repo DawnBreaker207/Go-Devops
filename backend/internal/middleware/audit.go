@@ -1,4 +1,3 @@
-// Package middleware provides the Gin middleware.
 package middleware
 
 import (

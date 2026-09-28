@@ -24,7 +24,7 @@ var (
 	ErrUnknownTxn       = errors.New("unknown transaction")
 )
 
-// CreateRequest amounts are integer VND; adapters convert to their gateway's unit (VNPay expects x100).
+// Amounts are integer VND; adapters convert to gateway units.
 type CreateRequest struct {
 	TxnRef      string // unique per provider
 	BookingID   string
@@ -66,7 +66,7 @@ type RefundRequest struct {
 	Reason string
 }
 
-// AckStatus is the verdict on a notification; each adapter maps it to the response its gateway expects.
+// Each adapter maps it to its gateway's expected response.
 type AckStatus int
 
 const (
@@ -109,7 +109,7 @@ type Provider interface {
 	Refund(ctx context.Context, txn Transaction, req RefundRequest) error
 }
 
-// Simulator providers ship a fake gateway; the router mounts SimulatorHandler under SimulatorPath.
+// The router mounts SimulatorHandler under SimulatorPath.
 type Simulator interface {
 	SimulatorPath() string
 	SimulatorHandler() http.Handler

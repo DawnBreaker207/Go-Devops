@@ -21,7 +21,6 @@ type bucket struct {
 	last   time.Time
 }
 
-// New builds a Limiter with a burst capacity and a refill rate (tokens/sec).
 func New(capacity int, refillPerSecond float64) *Limiter {
 	return &Limiter{
 		capacity: float64(capacity),

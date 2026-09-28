@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { INK_BG_035, INK_BORDER_14 } from '@/theme/customerTw';
 
-/** Bordered rounded card grouping content off the page background. */
 export const Panel = ({ children, className }: { children: ReactNode; className?: string }) => (
   <div
     className={[

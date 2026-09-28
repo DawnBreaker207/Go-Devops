@@ -1,6 +1,5 @@
 import type { BookingStatus, PaymentStatus } from '@/types';
 
-/** antd tag color per order status. */
 export const BOOKING_STATUS_COLOR: Record<BookingStatus, string> = {
   pending: 'gold',
   confirmed: 'green',

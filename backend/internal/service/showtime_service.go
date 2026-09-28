@@ -156,6 +156,7 @@ type showtimeService struct {
 	showtime *repository.ShowtimeRepository
 	hall     *repository.HallRepository
 	movie    repository.MovieRepository
+	pricing  PricingService
 	cleanup  time.Duration
 	location *time.Location
 	cache    *cache.Cache
@@ -164,12 +165,13 @@ type showtimeService struct {
 
 // NewShowtimeService optionally caches public showtime listings; a nil cache disables it.
 func NewShowtimeService(db *gorm.DB, showtime *repository.ShowtimeRepository, hall *repository.HallRepository, movie repository.MovieRepository,
-	cleanupMinutes int, location *time.Location, c *cache.Cache, cacheTTL time.Duration) ShowtimeService {
+	pricing PricingService, cleanupMinutes int, location *time.Location, c *cache.Cache, cacheTTL time.Duration) ShowtimeService {
 	return &showtimeService{
 		db:       db,
 		showtime: showtime,
 		hall:     hall,
 		movie:    movie,
+		pricing:  pricing,
 		cleanup:  time.Duration(cleanupMinutes) * time.Minute,
 		location: location,
 		cache:    c,
@@ -477,9 +479,7 @@ func (s *showtimeService) ListByMovie(ctx context.Context, movieID, date string)
 	if err != nil {
 		return nil, err
 	}
-	// A coming-soon movie normally has no showtimes yet, but an early preview
-	// showtime can be scheduled ahead of its main release; the picker must still
-	// surface it instead of always answering empty for a not-yet-showing movie.
+// Coming-soon movie may carry early preview showtime; picker still surfaces it.
 	if movie.Status != models.MovieStatusShowing && movie.Status != models.MovieStatusComingSoon {
 		return []dto.ShowtimeListItem{}, nil
 	}
@@ -557,6 +557,20 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 		return nil, err
 	}
 
+// Prices from pricing engine keyed off this showtime start; one QuotePrices call per seat type.
+	seatTypes := make([]string, 0, len(models.AllSeatTypes))
+	seen := make(map[string]bool, len(models.AllSeatTypes))
+	for _, seat := range seats {
+		if !seen[seat.SeatType] {
+			seen[seat.SeatType] = true
+			seatTypes = append(seatTypes, seat.SeatType)
+		}
+	}
+	priced, err := s.pricing.QuotePrices(ctx, &row.Showtime, seatTypes)
+	if err != nil {
+		return nil, err
+	}
+
 	response := &dto.SeatMapResponse{
 		ShowtimeID:     showtimeID,
 		MovieID:        row.MovieID,
@@ -577,7 +591,9 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 		if status == "" {
 			status = models.SeatStatusAvailable
 		}
-		response.Prices[seat.SeatType] = seat.Price
+// Unpriced seat type reads as price 0 (not configured).
+		price := priced[seat.SeatType].Final
+		response.Prices[seat.SeatType] = price
 		response.Seats = append(response.Seats, dto.SeatMapSeat{
 			ID:             seat.SeatID,
 			ShowtimeSeatID: seat.SeatShowtimeID,
@@ -588,7 +604,7 @@ func (s *showtimeService) SeatMap(ctx context.Context, showtimeID string) (*dto.
 			IsGap:          seat.IsGap,
 			ColSpan:        seat.ColSpan,
 			Status:         status,
-			Price:          seat.Price,
+			Price:          price,
 		})
 	}
 	return response, nil

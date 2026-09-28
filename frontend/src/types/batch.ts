@@ -1,11 +1,10 @@
 import type { PageQuery } from './api';
 
-/** Mirror of models.BatchJob and the job registrations in cmd/server/main.go. Both endpoints are admin-only. */
+// Mirrors Go DTO models.BatchJob.
 
 export type BatchJobStatus = 'running' | 'success' | 'failed' | 'skipped' | 'stopped';
 export type BatchTriggeredBy = 'cron' | 'manual' | 'confirm';
 
-/** Registered job names; drives the "Run now" button. */
 export const BATCH_JOB_NAMES = [
   'closeDay',
   'sweepExpiredHolds',
@@ -14,7 +13,6 @@ export const BATCH_JOB_NAMES = [
 ] as const;
 export type BatchJobName = (typeof BATCH_JOB_NAMES)[number];
 
-/** One job-run history row. */
 export interface BatchJob {
   id: string;
   job_name: string;
@@ -28,10 +26,8 @@ export interface BatchJob {
   created_at: string;
 }
 
-/** PageQuery.search filters by job_name. */
 export type BatchJobListQuery = PageQuery;
 
-/** POST .../:name/run result (202 Accepted). */
 export interface BatchRunResult {
   job: string;
   run_id: string;

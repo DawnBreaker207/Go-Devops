@@ -1,4 +1,4 @@
-/* TAILWIND: theme + utilities only, NO preflight (resets defaults on top of antd, breaks admin screens). antd reset must sit layered BELOW utilities (unlayered JS import beats layered utilities on form elements); layer order = first-appearance order. */
+/* TAILWIND: theme+utilities only, no preflight (breaks admin over antd). antd reset stays below utilities: unlayered JS beats layered CSS; layer order = first-appearance. */
 @import 'antd/dist/reset.css' layer(antd-reset);
 
 @layer theme, base, components, utilities;
@@ -8,7 +8,6 @@
 
 /* DESIGN TOKENS mirror of src/theme/tokens.ts (parity test fails on drift). No hardcoded colors: var(--cp-*) in CSS, TS imports from '@/theme'. */
 :root {
-  /* Brand pink-red. */
   --cp-brand: #d33b56;
   --cp-brand-hover: #dc6278;
   --cp-brand-active: #b33249;
@@ -26,7 +25,6 @@
   --cp-warning: #d97706;
   --cp-info: #2563eb;
 
-  /* Seat states: available=gray, selected=blue, held=amber, sold=red. */
   --cp-seat-available: #d1d5db;
   --cp-seat-available-text: #1f2937;
   --cp-seat-selected: #2563eb;
@@ -52,7 +50,7 @@
   --cp-seat-type-recliner: #dde7fe;
   --cp-seat-type-recliner-text: #1e3a8a;
 
-  /* Age badges ascending restriction green (P) -> dark red (T18). Never --cp-brand: brand is identity, ratings must not read as branding. */
+  /* Age badges: ascending restriction green(P)->red(T18); never --cp-brand - ratings must not read as branding. */
   --cp-rating-p: #2e7d32;
   --cp-rating-p-text: #ffffff;
   --cp-rating-k: #1d4ed8;
@@ -65,7 +63,7 @@
   --cp-rating-t18-text: #ffffff;
 }
 
-/* CUSTOMER LIGHT/DARK, independent from antd dark mode (admin zone). Default DARK; `.cp-customer--light` is opt-in (not on force-dark screens: white seats only read on dark). `--cp-ink-rgb` holds THREE rgb numbers so `rgba(var(--cp-ink-rgb), X)` keeps per-element opacity while swapping hue. */
+/* Customer light/dark, independent of antd dark mode. Default dark; `.cp-customer--light` opt-in (not on force-dark screens). `--cp-ink-rgb` holds 3 rgb numbers so opacity can vary while hue swaps. */
 :root {
   --cp-ink-rgb: 255, 255, 255;
   --cp-canvas: var(--cp-backdrop-base);
@@ -82,15 +80,12 @@
   --cp-chrome-border: rgba(20, 20, 20, 0.1);
   background-color: var(--cp-canvas);
   background-image: none;
-  /* White seats only read on dark; light mode substitutes dark gray.
-     Selected blue, held amber, sold red read on both, unchanged. */
+  /* Light mode: white seats swap to dark gray (only readable on dark); selected/held/sold unchanged. */
   --cp-seat-available: #4b5563;
   --cp-seat-available-hover: #16a34a;
-  /* The fill above flips dark, so the number on it must flip light. Reuses an existing token rather
-     than inventing a second near-white. */
+  /* Fill flips dark here, so text flips light; reuses selected-text token instead of a new near-white. */
   --cp-seat-available-text: var(--cp-seat-selected-text);
-  /* The screen bar is `seat.screen` = #ffffff, which vanishes on the light canvas (#f7f6f4).
-     The booking flow is force-dark so this is a fallback, not the normal path. */
+  /* seat.screen (#fff) vanishes on the light canvas; fallback only - booking flow is force-dark. */
   --cp-seat-screen: #4b5563;
 }
 
@@ -101,7 +96,7 @@
   --color-brand-active: var(--cp-brand-active);
   --color-brand-soft: var(--cp-brand-soft);
   --color-brand-softer: var(--cp-brand-softer);
-  /* Bridge name must be `--color-on-brand`: Tailwind derives `text-{name}` from `--color-{name}`; a wrong name leaves `text-on-brand` ungenerated. Source `--cp-text-on-brand` stays as-is. */
+  /* Must be named `--color-on-brand`: Tailwind derives `text-{name}` from `--color-{name}`, else `text-on-brand` never generates. */
   --color-on-brand: var(--cp-text-on-brand);
   --color-danger: var(--cp-danger);
   --color-warning: var(--cp-warning);
@@ -114,14 +109,11 @@
   --radius-btn: 8px;
 }
 
-/* "Two-Family Rule": body text uses the default font (Inter on admin);
- * MACHINE-PRINTED values (prices, ticket codes, countdowns) use a separate
- * mono font, never body text. System stack (no webfont cost). Declared outside
- * @layer so it beats Tailwind's default `--font-mono` (layered theme loses to
- * unlayered regardless of order). */
+/* Two-Family Rule: body uses default font; machine-printed values (prices/codes/countdowns) use mono,
+ * never body. Declared outside @layer to beat Tailwind's layered default. */
 :root {
   --font-mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
-  /* Body text (not figures): `display` for headings, `body` for content. Google Fonts <link> in index.html. Customer zone ONLY; admin keeps Inter. */
+  /* `display` for headings, `body` for content; Google Fonts <link> in index.html. Customer zone only, admin keeps Inter. */
   --font-display: 'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -142,7 +134,7 @@
   font-family: var(--font-display);
 }
 
-/* antd injects CSS-in-JS at runtime AFTER static Tailwind: at equal specificity later wins, so MainLayout `h-20`/`px-6` can lose to antd Header defaults with no error. Reset to neutral and let Tailwind/inline decide. `background` is EXCLUDED: dark colors come from darkAlgorithm tokens with no .dark class to key on; resetting it would erase both modes. Unlayered to beat later-injected antd rules without per-call !important. */
+/* antd injects CSS-in-JS after Tailwind, so equal-specificity antd wins (e.g. MainLayout h-20 silently loses); reset to neutral here. `background` excluded - no .dark class to key dark-mode colors on. Unlayered to beat antd without !important. */
 .ant-layout,
 .ant-layout-header,
 .ant-layout-sider,
@@ -152,7 +144,7 @@
   padding: 0 !important;
 }
 
-/* antd never hides group titles when `inlineCollapsed`: keep grouped items in both states and hide titles via CSS (restructuring would remount and flicker). */
+/* antd never hides group titles when collapsed; hide via CSS instead of restructuring (avoids remount flicker). */
 .ant-menu-inline-collapsed .ant-menu-item-group-title {
   display: none;
 }
@@ -206,8 +198,7 @@
   --ease-in: var(--motion-ease-in);
 }
 
-/* Reduced motion: drop travel, zoom, parallax, autoplay; fades only (<= fast).
- * Motion (JS) is handled separately via MotionConfig reducedMotion="user" in App. */
+/* Reduced motion: drop travel/zoom/parallax/autoplay, fades only (<=fast). JS motion handled via MotionConfig reducedMotion="user" in App. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-duration-instant: 1ms;
@@ -273,8 +264,7 @@ body {
 
 /* CUSTOM TAILWIND VARIANTS. Last in file: the motion test reads the :root...@media span by naive string slicing, so @media placed earlier breaks its parse. */
 
-/* `hover-fine:`: hover only on true pointer devices, never sticky on touch.
- * Plain `hover:` lacks this; define once, reuse. */
+/* `hover-fine:`: hover only on true pointer devices (not sticky on touch); plain `hover:` lacks this. */
 @custom-variant hover-fine {
   @media (hover: hover) and (pointer: fine) {
     &:hover {

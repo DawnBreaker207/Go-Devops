@@ -8,12 +8,11 @@ import { FOCUS_RING, HOME_SECTION } from '@/theme/customerTw';
 
 interface BannerCarouselProps {
   movies: Movie[];
-  /** Opens BookingModal for the active movie; same action as the card "Book" (see HomePage), no separate route. */
+  // Opens BookingModal for the visible film; no dedicated route.
   onBook: (movie: Movie) => void;
 }
 
 const AUTO_ADVANCE_MS = 5000;
-/** Max 5 slides. */
 const MAX_SLIDES = 5;
 
 const CalendarIcon = () => (
@@ -67,28 +66,12 @@ const ChevronIcon = ({ direction }: { direction: 'left' | 'right' }) => (
   </svg>
 );
 
-/** Home hero, rebuilt to QVisionShow frame 1-101: a FULL-BLEED backdrop with the title, a
- *  `genre | genre` line, a year/duration meta row, three lines of synopsis and one pill call to
- *  action. The route carries `handle.fullBleed` so this can reach the viewport edges; every section
- *  below therefore supplies its own `HOME_SECTION` container.
- *
- *  No banner endpoint exists, so the first 5 `showing` movies stand in; hidden entirely when empty,
- *  never an empty frame. Always-dark (fixed `bg-black`/white text), never `--cp-ink-rgb`, because a
- *  photographic backdrop is dark in both of the customer zone's themes.
- *
- *  The image is `backdrop_url` with `poster_url` as the fallback — before migration 000011 there was
- *  no landscape field at all and this hero stretched a 2:3 portrait across the full width.
- *
- *  Kept from the previous version and NOT in the frame: the arrows, the dots, and the autoplay
- *  pause/play toggle. The toggle is the viewer's only control over an animation that moves by
- *  itself, so it stays regardless of what the design shows. The old "Watch trailer" button is gone:
- *  it was a stub toast, and there is now a real Trailers section further down the page. */
+// Hero is always dark; with no banner endpoint, take 5 showing films, backdrop falling back to poster.
 export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const [autoPlay, setAutoPlay] = useState(true);
-  // motion.md: "no autoplay" under reduced motion. The toggle still works, so someone who wants the
-  // carousel moving can still ask for it - this only decides what happens without being asked.
+  // Reduced motion disables autoplay by default; the toggle can still re-enable it.
   const reducedMotion = usePrefersReducedMotion();
   const autoAdvancing = autoPlay && !reducedMotion;
   const slides = movies.slice(0, MAX_SLIDES);
@@ -96,8 +79,7 @@ export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
   useEffect(() => {
     if (!autoAdvancing || slides.length < 2) return;
     const timer = window.setInterval(() => {
-      // Clamp before advancing: a raw stale index (left over from a longer list) would skip a slide
-      // on the first tick, landing somewhere other than the one after the visible slide.
+      // Clamp the old index before advancing so a shortened list never jumps to a wrong slide.
       setIndex((i) => ((i < slides.length ? i : 0) + 1) % slides.length);
     }, AUTO_ADVANCE_MS);
     return () => window.clearInterval(timer);
@@ -105,22 +87,18 @@ export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
 
   if (slides.length === 0) return null;
 
-  // Clamp stale index after list changes; avoids an empty frame.
+  // Clamp the old index when the list changes to avoid an empty frame.
   const activeIndex = index < slides.length ? index : 0;
 
   const goPrev = () => setIndex((activeIndex - 1 + slides.length) % slides.length);
   const goNext = () => setIndex((activeIndex + 1) % slides.length);
 
   return (
-    // `z-0` is load-bearing: it gives the hero its own stacking context, so the slide layers and the
-    // dots (z-10/z-20 INSIDE it) can never paint over the sticky header, which is also z-20 but comes
-    // earlier in the DOM and would otherwise lose the tie.
     <div className="relative z-0 h-140 w-full overflow-hidden bg-black sm:h-160 md:h-180 lg:h-195">
       {slides.map((movie, i) => {
         const isActive = i === activeIndex;
         const image = movieBackdrop(movie);
         const year = movieYear(movie);
-        // Genre is one free-text field ("Action, Adventure"); the frame separates them with pipes.
         const genres = movie.genre
           .split(',')
           .map((part) => part.trim())
@@ -131,8 +109,6 @@ export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
           <div
             key={movie.id}
             aria-hidden={!isActive}
-            // duration-moderate, not a raw 700ms: motion.md forbids hardcoded numbers, and 700
-            // also escaped the reduced-motion clamp, which only rewrites the tokens.
             className={`absolute inset-0 transition-opacity duration-moderate ease-out ${
               isActive ? 'z-10 opacity-100' : 'pointer-events-none z-0 opacity-0'
             }`}
@@ -145,8 +121,6 @@ export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
                 loading={i === 0 ? 'eager' : 'lazy'}
               />
             ) : null}
-            {/* Two scrims, as the frame has: one up from the bottom for the page seam, one in from
-                the left so the copy stays legible over a bright backdrop. */}
             <div
               className="pointer-events-none absolute inset-0 bg-linear-to-t from-black via-black/55 to-black/10"
               aria-hidden="true"
@@ -188,9 +162,7 @@ export const BannerCarousel = ({ movies, onBook }: BannerCarouselProps) => {
                     </p>
                   ) : null}
 
-                  {/* tabIndex -1 while hidden: the slide is aria-hidden, and a focusable element
-                      inside an aria-hidden container is an accessibility violation - the keyboard
-                      lands on a button no screen reader can announce. */}
+                  {/* an trinh doc man hinh bat nut an: tabIndex -1 khi slide an. */}
                   <button
                     type="button"
                     onClick={() => onBook(movie)}

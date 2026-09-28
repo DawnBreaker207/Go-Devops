@@ -7,15 +7,20 @@ import {
   Popconfirm,
   Select,
   Space,
-  Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  CheckCircleOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  StopOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import PageHeader from '@/components/PageHeader';
 import TableCard from '@/components/TableCard';
 import DiscountFormModal from './components/DiscountFormModal';
 import {
@@ -29,14 +34,10 @@ import { useListQuery } from '@/hooks/useListQuery';
 import { errorMessage } from '@/utils/error';
 import { formatDateTime, formatVND } from '@/utils/format';
 
-/** Backend takes a Go pointer, so "no filter" must OMIT the field, not send false. */
+// The backend takes a Go pointer, so "no filter" must OMIT the field, not send false.
 type ActiveFilter = 'all' | 'active' | 'inactive';
 
-/** Discount codes a customer applies at checkout.
- *
- *  ADMIN-ONLY, unlike the concession catalogue next door: a code moves revenue,
- *  so it is a pricing decision rather than counter work. The router enforces it
- *  with ROLES_ADMIN; this comment is why. */
+// Customer-facing codes at checkout; admin-only since they move revenue.
 export const DiscountsPage = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -56,7 +57,7 @@ export const DiscountsPage = () => {
   const updateDiscount = useUpdateDiscount();
   const deleteDiscount = useDeleteDiscount();
 
-  // Don't catch here: the modal needs the raw error to bind it to the inputs.
+  // Don't catch: the modal binds errors onto inputs.
   const handleSubmit = async (payload: CreateDiscountPayload | UpdateDiscountPayload) => {
     if (editing) {
       await updateDiscount.mutateAsync({ id: editing.id, payload });
@@ -122,8 +123,7 @@ export const DiscountsPage = () => {
               ? t('discount.rulePercent', { value: record.value })
               : t('discount.ruleAmount', { value: formatVND(record.value) })}
           </span>
-          {/* The cap and the minimum are the two rules that most often explain a
-              "why did this code not apply" question, so they are on the row. */}
+          {/* Hien cap + min vi day la ly do pho bien khien ma khong ap duoc. */}
           {record.kind === 'percent' && record.max_discount ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {t('discount.capUpTo', { value: formatVND(record.max_discount) })}
@@ -177,53 +177,64 @@ export const DiscountsPage = () => {
       title: t('discount.status'),
       dataIndex: 'active',
       key: 'active',
-      width: 150,
-      render: (value: boolean, record) => (
-        <Space size={8}>
-          <Switch
-            size="small"
-            checked={value}
-            disabled={pendingId === record.id}
-            aria-label={`active-${record.id}`}
-            onChange={(next) => void toggleActive(record, next)}
-          />
-          <Typography.Text type={value ? undefined : 'secondary'}>
-            {t(value ? 'discount.enabled' : 'discount.disabled')}
-          </Typography.Text>
-        </Space>
+      width: 120,
+      render: (value: boolean) => (
+        <Tag color={value ? 'green' : 'default'} bordered={false}>
+          {t(value ? 'discount.enabled' : 'discount.disabled')}
+        </Tag>
       ),
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 130,
+      width: 170,
       render: (_, record) => (
         <Space size={4}>
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            aria-label={`edit-${record.id}`}
-            onClick={() => {
-              setEditing(record);
-              setFormOpen(true);
-            }}
-          />
-          <Popconfirm
-            title={t('discount.deleteConfirm')}
-            description={t('discount.deleteHint')}
-            okText={t('common.delete')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true }}
-            onConfirm={() => void handleDelete(record)}
-          >
+          <Tooltip title={record.active ? t('discount.markOff') : t('discount.markOn')}>
+            <Popconfirm
+              title={record.active ? t('discount.offConfirm') : t('discount.onConfirm')}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => void toggleActive(record, !record.active)}
+            >
+              <Button
+                type="text"
+                icon={record.active ? <StopOutlined /> : <CheckCircleOutlined />}
+                aria-label={`toggle-active-${record.id}`}
+                disabled={pendingId === record.id}
+                loading={pendingId === record.id}
+              />
+            </Popconfirm>
+          </Tooltip>
+          <Tooltip title={t('common.edit')}>
             <Button
-              danger
               type="text"
-              icon={<DeleteOutlined />}
-              aria-label={`delete-${record.id}`}
-              disabled={pendingId === record.id}
+              icon={<EditOutlined />}
+              aria-label={`edit-${record.id}`}
+              onClick={() => {
+                setEditing(record);
+                setFormOpen(true);
+              }}
             />
-          </Popconfirm>
+          </Tooltip>
+          <Tooltip title={t('common.delete')}>
+            <Popconfirm
+              title={t('discount.deleteConfirm')}
+              description={t('discount.deleteHint')}
+              okText={t('common.delete')}
+              cancelText={t('common.cancel')}
+              okButtonProps={{ danger: true }}
+              onConfirm={() => void handleDelete(record)}
+            >
+              <Button
+                danger
+                type="text"
+                icon={<DeleteOutlined />}
+                aria-label={`delete-${record.id}`}
+                disabled={pendingId === record.id}
+              />
+            </Popconfirm>
+          </Tooltip>
         </Space>
       ),
     },
@@ -231,32 +242,24 @@ export const DiscountsPage = () => {
 
   return (
     <>
-      <PageHeader
-        title={t('discount.title')}
-        extra={
-          <Space>
-            <Input.Search
-              allowClear
-              defaultValue={search}
-              placeholder={t('discount.searchPlaceholder')}
-              style={{ width: 280 }}
-              onSearch={setSearch}
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditing(null);
-                setFormOpen(true);
-              }}
-            >
-              {t('common.create')}
-            </Button>
-          </Space>
-        }
-      />
-
       <Space wrap style={{ marginBottom: 16 }}>
+        <Input.Search
+          allowClear
+          defaultValue={search}
+          placeholder={t('discount.searchPlaceholder')}
+          style={{ width: 280 }}
+          onSearch={setSearch}
+        />
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setEditing(null);
+            setFormOpen(true);
+          }}
+        >
+          {t('common.create')}
+        </Button>
         <Select<ActiveFilter>
           style={{ width: 200 }}
           value={activeFilter}
@@ -272,7 +275,6 @@ export const DiscountsPage = () => {
         />
       </Space>
 
-      {/* The one thing an operator must understand: this really takes money off. */}
       <Alert
         type="warning"
         showIcon

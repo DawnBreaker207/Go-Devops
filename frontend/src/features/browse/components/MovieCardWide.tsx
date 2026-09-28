@@ -24,15 +24,9 @@ interface MovieCardWideProps {
   eager?: boolean;
 }
 
-/** The home grid card from QVisionShow frame 1-101: a 3:2 landscape image, the title over two lines,
- *  a "year · genre · duration" meta line, then a brand pill and the age-rating badge.
- *
- *  Two deliberate departures from the frame:
- *  - The frame puts a `★ 4.5` beside the button. The backend has NO rating field, so that number
- *    would be invented. The age rating goes there instead — real data, and it already owns a tested
- *    colour ramp in `--cp-rating-*`.
- *  - This is a NEW component rather than an edit of `PosterCard`, which is shared with `/films` and
- *    stays portrait 2:3. Editing that one would have redesigned a page nobody asked about. */
+/** Home grid card from QVisionShow frame 1-101. Two departures from the frame: age-rating badge
+ *  replaces the frame's invented `★ 4.5` (backend has no rating field); and this is a NEW component
+ *  rather than an edit of `PosterCard`, which stays portrait 2:3 for `/films`. */
 export const MovieCardWide = ({ movie, onBook, eager }: MovieCardWideProps) => {
   const { t } = useTranslation();
   const image = movieBackdrop(movie);

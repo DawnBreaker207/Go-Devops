@@ -2,9 +2,7 @@ package models
 
 import "time"
 
-// ID is the JWT jti. Tokens rotated from one login share a FamilyID, so a replay can revoke all of them.
-// DeviceID/UserAgent identify the device/browser a session belongs to and are carried forward across
-// rotations within the same family, so /users/me/sessions can list one row per signed-in device.
+// One FamilyID per login: a replay revokes every rotated token.
 type RefreshToken struct {
 	ID         string     `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID     string     `gorm:"type:uuid;not null" json:"user_id"`

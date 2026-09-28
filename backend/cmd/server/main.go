@@ -1,4 +1,3 @@
-// Package main is the entry point of BackEnd-CP.
 package main
 
 import (
@@ -114,7 +113,11 @@ func run() error {
 	}
 	movieService := service.NewMovieService(db, movieRepo, catalogCache, cfg.Redis.TTL)
 	hallService := service.NewHallService(db, hallRepo, catalogCache)
-	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, cfg.App.RoomCleanupMinutes, location, catalogCache, cfg.Redis.ShowtimesTTL)
+	// Built before ShowtimeService/BookingService: Phase 2 of the pricing
+	// redesign (PLAN_CAMPAIGN.md section 11.3) wires this into both — the
+	// seatmap price read and the hold/counter-sell price snapshot.
+	pricingService := service.NewPricingService(db, repository.NewPricingRepository(db), showtimeRepo, location, catalogCache)
+	showtimeService := service.NewShowtimeService(db, showtimeRepo, hallRepo, movieRepo, pricingService, cfg.App.RoomCleanupMinutes, location, catalogCache, cfg.Redis.ShowtimesTTL)
 
 	providers, err := buildPaymentProviders(cfg)
 	if err != nil {
@@ -141,6 +144,7 @@ func run() error {
 		PublicBaseURL:      cfg.Payment.PublicBaseURL,
 		HoldTTL:            time.Duration(cfg.Booking.HoldTTLMinutes) * time.Minute,
 		MaxSeats:           cfg.Booking.MaxSeatsPerBooking,
+		Pricing:            pricingService,
 		RefreshMaxLifetime: time.Duration(cfg.Booking.HoldMaxLifetimeMinutes) * time.Minute,
 		Hub:                hub,
 
@@ -162,12 +166,12 @@ func run() error {
 		paymentRepo, batchRepo, bookingRepo, location)
 
 	comboService := service.NewComboService(db, repository.NewComboRepository(db), repository.NewComboOrderRepository(db), bookingRepo)
-	comboRepo := repository.NewComboRepository(db)
+	campaignRepo := repository.NewCampaignRepository(db)
 	discountRepo := repository.NewDiscountRepository(db)
-	discountService := service.NewDiscountService(db, discountRepo, bookingRepo, paymentRepo, repository.NewCampaignRepository(db))
-	articleService := service.NewArticleService(db, repository.NewArticleRepository(db))
-	pricingService := service.NewPricingService(db, repository.NewPricingRepository(db), showtimeRepo, location, catalogCache)
-	campaignService := service.NewCampaignService(db, repository.NewCampaignRepository(db), discountRepo, comboRepo, repository.NewArticleRepository(db))
+	discountService := service.NewDiscountService(db, discountRepo, bookingRepo, paymentRepo, campaignRepo)
+	articleRepo := repository.NewArticleRepository(db)
+	articleService := service.NewArticleService(db, articleRepo)
+	campaignService := service.NewCampaignService(db, campaignRepo, discountRepo, repository.NewComboRepository(db), articleRepo)
 
 	imageStore, mediaDir := buildImageStore(cfg)
 	maxUpload := int64(cfg.Storage.MaxUploadMB) << 20
@@ -301,14 +305,18 @@ func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 		if err := registry.Register(provider); err != nil {
 			return nil, err
 		}
-		// VNPay calls the IPN from its own servers, so a loopback public_base_url
-		// means notifications can never arrive. Config gap, said at boot.
+		// VNPay calls the IPN from its own servers and sends the browser to the return
+		// URL, so both are built from public_base_url. Left at its localhost default that
+		// is unreachable from outside this machine: the customer pays, VNPay cannot
+		// deliver the notification, and the order sits pending until the sweep gives up.
+		// It is a config gap rather than a code bug, so it is said at boot.
 		if isLoopback(cfg.Payment.PublicBaseURL) {
 			logger.Warn("vnpay is enabled but payment.public_base_url still points at localhost: "+
 				"VNPay cannot reach the IPN from outside this machine (set PAYMENT_PUBLIC_BASE_URL)",
 				logger.String("public_base_url", cfg.Payment.PublicBaseURL))
 		}
 	}
+
 	if err := registry.SetDefault(cfg.Payment.DefaultProvider); err != nil {
 		return nil, err
 	}
@@ -335,19 +343,6 @@ func buildPaymentProviders(cfg *config.Config) (*payment.Registry, error) {
 	return registry, nil
 }
 
-func isLoopback(raw string) bool {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	if host == "localhost" || host == "::1" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
 func buildImageStore(cfg *config.Config) (storage.Store, string) {
 	if cfg.Storage.Driver == "cloudinary" {
 		c := cfg.Storage.Cloudinary
@@ -365,4 +360,19 @@ func configPath() string {
 		return path
 	}
 	return "."
+}
+
+// isLoopback reports whether a base URL points back at the machine running the server.
+// Used to warn when a provider that calls in from the internet is pointed at localhost.
+func isLoopback(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "::1" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

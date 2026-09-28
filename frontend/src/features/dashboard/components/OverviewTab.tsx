@@ -36,7 +36,7 @@ import { formatNumber, formatVND } from '@/utils/format';
 import { brand } from '@/theme';
 import { safeMessage } from '@/utils/error';
 
-// Mau dau tien lay tu token brand, khong viet lai hex (gate mau khong nhin thay hex trong component).
+// First color comes from the brand token; never hardcode hex (the color gate rejects hex in components).
 const PROVIDER_COLORS = [brand.base, '#2563EB', '#D97706', '#2E7D32', '#7A4405', '#1D4ED8'];
 
 const TrendBadge = ({
@@ -61,7 +61,6 @@ const TrendBadge = ({
   );
 };
 
-/** Overview tab: filter, 4 KPI cards with trend, revenue area, payment donut, now-showing grid (only here). */
 export const OverviewTab = () => {
   const { t } = useTranslation();
   const { token } = antdTheme.useToken();
@@ -84,8 +83,7 @@ export const OverviewTab = () => {
       />
     );
   }
-  // Skeleton only before the FIRST payload; later refetches (filter change)
-  // keep old data on screen via placeholderData (no flash).
+  // Skeleton only before the first payload; later refetches keep old data to avoid flashing.
   if (cur.isLoading || !cur.data || prev.isLoading || !prev.data) {
     return <Skeleton active paragraph={{ rows: 6 }} />;
   }

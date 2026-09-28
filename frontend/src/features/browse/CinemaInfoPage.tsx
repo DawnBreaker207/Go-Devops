@@ -13,6 +13,12 @@ export const CinemaInfoPage = () => {
         title={t('customer.cinemaInfoTitle')}
       />
       <StaticPageBody>{t('customer.cinemaInfoBody')}</StaticPageBody>
+      <p style={{ fontSize: 12, opacity: 0.6 }}>
+        {t('movie.tmdbAttribution')}{' '}
+        <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer">
+          TMDB
+        </a>
+      </p>
     </StaticPage>
   );
 };

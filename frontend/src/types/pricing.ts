@@ -59,7 +59,7 @@ export interface UpdatePricingRulePayload {
   active?: boolean;
 }
 
-export interface GlobalPriceList {
+export interface PublicPriceList {
   from_price: number;
   prices: Record<SeatType, number>;
 }

@@ -45,8 +45,7 @@ describe('HomePage', () => {
     renderWithProviders(<HomePage />);
 
     const card = await screen.findByRole('article');
-    // Queried through the DOM, not by role: the card image is `alt=""` on purpose (the title link
-    // beside it already names the card), so it is correctly absent from the accessibility tree.
+    // Queried through the DOM, not by role: image is `alt=""` on purpose, absent from a11y tree.
     expect(card.querySelector('img')).toHaveAttribute('src', 'https://cdn.test/a-backdrop.jpg');
   });
 

@@ -1,7 +1,6 @@
 import type { DailyAggregate, DailyBreakdownShowtime } from '@/types';
 
-/** Roll up daily figures by movie and showtime. */
-
+/** Rolls daily figures up by movie and showtime. */
 export interface MovieRollupRow {
   movie: string;
   showtimes: number;
@@ -11,11 +10,11 @@ export interface MovieRollupRow {
   revenue: number;
 }
 
-/** Flattens every showtime of every day, skipping days without a breakdown. */
+/** Flattens one showtime per day, dropping days without a breakdown. */
 export const flattenShowtimes = (days: DailyAggregate[]): DailyBreakdownShowtime[] =>
   days.flatMap((day) => day.breakdown?.showtimes ?? []);
 
-/** Group figures by movie name snapshot. */
+/** Groups by movie title (a snapshot, no movie_id). */
 export const rollupByMovie = (days: DailyAggregate[]): MovieRollupRow[] => {
   const byMovie = new Map<string, MovieRollupRow>();
   flattenShowtimes(days).forEach((show) => {
@@ -34,21 +33,19 @@ export const rollupByMovie = (days: DailyAggregate[]): MovieRollupRow[] => {
     row.revenue += show.revenue;
     byMovie.set(show.movie, row);
   });
-  // Revenue descending: a report reader's first question is "which movie earned
-  // the most", not alphabetical order.
+  // Revenue descending; the first question is always which movie earned most.
   return [...byMovie.values()].sort((a, b) => b.revenue - a.revenue);
 };
 
-/** Occupancy from totals, returned as percent. */
+/** Fills the day from the total, as a percent. */
 export const occupancyPercent = (seatsSold: number, capacity: number): number =>
   capacity === 0 ? 0 : Math.round((10000 * seatsSold) / capacity) / 100;
 
-/** Dates with no returned row, meaning figures are missing. */
+/** A day with no rows is missing data, not a zero. */
 export const missingDays = (from: string, to: string, days: DailyAggregate[]): string[] => {
   const have = new Set(days.map((d) => d.report_date));
   const out: string[] = [];
-  // Walk in UTC so the viewer's machine timezone can't shift a day:
-  // `from`/`to` are YYYY-MM-DD strings in cinema time, not instants.
+  // Iterate in UTC so the viewer's machine timezone never shifts the day.
   const cursor = new Date(`${from}T00:00:00Z`);
   const end = new Date(`${to}T00:00:00Z`);
   if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return out;

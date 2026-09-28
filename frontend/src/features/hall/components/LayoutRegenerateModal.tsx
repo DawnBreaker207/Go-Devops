@@ -1,14 +1,7 @@
 import { App, Alert, Form, Input, InputNumber, Modal, Select, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
-import type {
-  Hall,
-  HallPayload,
-  HallPrice,
-  HallTemplateName,
-  ScreenPosition,
-  SeatType,
-} from '@/types';
-import { SCREEN_POSITIONS, SEAT_TYPES } from '@/types';
+import type { Hall, HallPayload, HallTemplateName, ScreenPosition } from '@/types';
+import { SCREEN_POSITIONS } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { applyApiFieldErrors } from '@/utils/form';
 import { useHallTemplates, useRegenerateLayout } from '../hooks/useHalls';
@@ -25,8 +18,6 @@ interface FormValues {
 interface LayoutRegenerateModalProps {
   open: boolean;
   hall: Hall;
-  /** Current prices, echoed back into the body - see the note in handleOk. */
-  prices: HallPrice[];
   onCancel: () => void;
   onDone: () => void;
 }
@@ -34,7 +25,6 @@ interface LayoutRegenerateModalProps {
 const isFormValidationError = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'errorFields' in error;
 
-/** "4, 10" -> [4, 10]. Drops anything that isn't a positive number. */
 const parseAisles = (raw: string): number[] =>
   raw
     .split(',')
@@ -44,7 +34,6 @@ const parseAisles = (raw: string): number[] =>
 export const LayoutRegenerateModal = ({
   open,
   hall,
-  prices,
   onCancel,
   onDone,
 }: LayoutRegenerateModalProps) => {
@@ -57,9 +46,7 @@ export const LayoutRegenerateModal = ({
   const template = Form.useWatch('template', form);
   const usingTemplate = Boolean(template);
 
-  // Seed via initialValues, never setFieldsValue in an effect (StrictMode +
-  // preserve={false} wipes values). screen_position and aisle_after_cols MUST
-  // be pre-filled: empty resets to 'front' and clears all aisles silently.
+  // Seed via initialValues: StrictMode + preserve=false wipes setFieldsValue-in-effect.
   const initialValues: FormValues = {
     template: '',
     rows: hall.rows,
@@ -72,26 +59,14 @@ export const LayoutRegenerateModal = ({
     try {
       const values = await form.validateFields();
 
-      /** Resend name and full prices alongside the layout change. */
-      const priceMap = SEAT_TYPES.reduce<Record<SeatType, number>>(
-        (acc, type) => {
-          acc[type] = prices.find((p) => p.seat_type === type)?.price ?? 1;
-          return acc;
-        },
-        {} as Record<SeatType, number>
-      );
-
-      /** With a template, omit layout fields so template values apply. */
+      // With a template, drop the layout fields and take the template values.
       const payload: HallPayload = values.template
-        ? { name: hall.name, prices: priceMap, template: values.template }
+        ? { name: hall.name, template: values.template }
         : {
             name: hall.name,
-            prices: priceMap,
             rows: values.rows,
             seats_per_row: values.seats_per_row,
-            // Without a template both fields MUST be sent: RegenerateLayout
-            // assigns `current.ScreenPosition = req.ScreenPosition` directly; omitting
-            // them resets to 'front' and clears all aisles.
+            // Both fields are required: omitting one resets to front and clears aisles.
             screen_position: values.screen_position,
             aisle_after_cols: parseAisles(values.aisle_after_cols),
           };
@@ -119,7 +94,6 @@ export const LayoutRegenerateModal = ({
       destroyOnHidden
       width={560}
     >
-      {/* Warn upfront instead of after a failed save. */}
       <Alert
         type="warning"
         showIcon
@@ -150,7 +124,6 @@ export const LayoutRegenerateModal = ({
           />
         </Form.Item>
 
-        {/* With a template, rows and seats come from the template. */}
         {usingTemplate ? (
           <Alert
             type="info"
@@ -177,8 +150,6 @@ export const LayoutRegenerateModal = ({
           </>
         )}
 
-        {/* Hidden once a template is picked: these fields are no longer sent, so showing
-            them with stale values would mislead the user. */}
         {usingTemplate ? null : (
           <>
             <Form.Item name="screen_position" label={t('hall.screenPosition')}>

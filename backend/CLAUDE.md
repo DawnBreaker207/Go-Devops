@@ -1,7 +1,8 @@
 # BackEnd-CP — Claude context
 
 Auto-loaded when a session opens here, and lazily when a session at `CinemaProject/` reads a file in this repo.
-Keep <200 lines. Deep dives: `.claude/context/contract.md` (envelope, error codes, enums) and
+Keep <215 lines (raised from 200 on 2026-09-26: a second, real payment provider had to be described).
+Deep dives: `.claude/context/contract.md` (envelope, error codes, enums) and
 `.claude/skills/be-endpoint/` (every route + copyable templates).
 This file cites symbol + file, not line numbers — line numbers drift, grep the symbol.
 
@@ -10,7 +11,7 @@ This file cites symbol + file, not line numbers — line numbers drift, grep the
 Cinema booking API: catalog (movies/halls/showtimes), seat holds and booking, payments through a provider
 registry, tickets with QR + check-in, staff box office, admin dashboards, audit log and cron batch jobs.
 
-Added 2026-09-22 (10 migrations now, up from 5): **multi-device sessions** (`000006`, `/users/me/sessions`),
+Added 2026-09-22 (**11** migrations now, up from 5): **multi-device sessions** (`000006`, `/users/me/sessions`),
 **a `coming_soon` catalog lifecycle with preview showtimes** (`000007` — `movie.status` is no longer just
 draft/showing/ended), **a concession/combo catalogue and combo orders** (`000008`, `concession_items` +
 `combo_orders`), **notification preferences** (`000009`), plus `POST /orders/init` and
@@ -25,7 +26,10 @@ to it, so the charge is `Booking.Payable()` (`total_amount - discount_amount`) a
 `payments.amount`.
 Plus `GET /pricing` (public): the only anonymous read of `hall_prices`, added because the customer price page
 had been hardcoding four tiers that matched no row in the table.
-Module `github.com/Cinema-Project-Juann/BackEnd-CP`. Working branch `develop`. **162** Go files outside `docs/`.
+Added 2026-09-25: **`movies.backdrop_url`** (`000011`), a landscape image for the rebuilt customer home. It rides
+the same `POST /admin/uploads/poster` endpoint. `PUT /movies/:id` is a FULL REPLACE, so a payload that omits it
+WIPES it — `TestMovies_BackdropSurvivesFullReplaceUpdate` pins both halves of that deliberately.
+Module `github.com/Cinema-Project-Juann/BackEnd-CP`. Working branch `develop`. **166** Go files outside `docs/`.
 `internal/router/router.go` registers **108 `/api/v1` operations** as of 2026-09-22 (`v1.Match` on the payment IPN
 counts twice; `engine.Static` counts once as `GET|HEAD /media/*filepath`).
 `docs/swagger.json` covers 102 of them. The reproducible count lives in
@@ -62,9 +66,24 @@ go-qrcode + gozxing (tickets), bcrypt. No mocking library — tests use a real t
   `internal/jobs/<name>.go` plus one `batchManager.Register(...)` line in `cmd/server/main.go` — there is no
   registry file. `Job.Schedule` is a **6-field** cron spec (seconds first), optionally `CRON_TZ=<zone>` prefixed;
   an empty schedule means manual-trigger only. `internal/sse/` — realtime seat hub.
-- `internal/payment/` — provider registry + `mock` provider with a simulated gateway. `internal/storage/` —
+- `internal/payment/` — registry, `mock` (simulated gateway) and `vnpay` (real, **disabled and credential-less
+  by default**; enabling it without `tmn_code`/`hash_secret` refuses to boot on purpose). VNPay has TWO signing
+  schemes and mixing them only yields a checksum error: checkout/callbacks sign a **sorted URL-encoded query
+  string**, `querydr`/`refund` sign a **pipe-joined field list in a fixed per-command order**. Amounts ×100. The
+  IPN answer is always HTTP 200 with `{RspCode, Message}`; only `00`/`02` stop the retries (10×, 5 min apart).
+  A real provider must NOT implement `payment.Simulator` — that mounts an unauthenticated gateway route.
+  `internal/storage/` —
   local disk or Cloudinary. `internal/audit/` — audit record stashing.
-- `migrations/schema/` — the **only** source of schema truth. `migrations/seed/` — idempotent psql seeds.
+- `migrations/schema/` — the **only** source of schema truth. `migrations/seed/` — 5 psql seeds applied in order
+  by `make migrate-seed`, which is **mandatory on a fresh database**: skip it and every customer screen renders
+  its no-data state. `010005_seed_showtimes.sql` is the deliberate exception to "seeds are idempotent" — it
+  computes start times from the cinema-local clock and REFRESHES on a re-run, so `make migrate-seed` is also the
+  one-command repair when `GET /showtimes` starts answering `[]`. `.claude/rules/migrations.md` states the three
+  conditions a seed must meet. It also creates its showtimes' `showtime_seats` and ASSERTS none is missing:
+  without them the seat map still draws a full available hall (LEFT JOIN + COALESCE) while every hold answers
+  "seat does not belong to this showtime" — perfect-looking data nobody can book. Seeds use a BARE `ON CONFLICT
+  DO NOTHING`: `users` has its own unique index on email and SeedAdmin creates the admin with a different id,
+  so an id-targeted guard aborts the whole multi-row INSERT and loses the staff and customer rows with it.
 
 ## The first admin account
 
@@ -141,6 +160,9 @@ them through `middleware.GetRequestID` / `CurrentUserID` / `CurrentUserRole`, ne
   that bypasses the business code, the `details` map, the `Retry-After` header and the audit error message.
   `response.Abort` is for middleware; `response.Error` is for handlers.
 - Never return a `models.*` type from a new service method — add a `dto.NewXResponse` mapper first.
+- Never add an `Err*` sentinel without `.WithReason("lower_snake_case")` — `pkg/errors/reason_test.go` parses
+  this file's source and fails otherwise. The reason is the frontend's translation key; its `Message` stays
+  English on purpose, so rewording a sentence is safe and renaming a reason is not.
 - Never log or audit an email, password, hash, refresh token, or a query string containing `token`/`sig`/`signature`.
 - Never hand-edit `docs/docs.go`, `docs/swagger.json` or `docs/swagger.yaml`.
 - Never edit an already-applied file in `migrations/schema/` — add a new pair via `make migrate-create`.

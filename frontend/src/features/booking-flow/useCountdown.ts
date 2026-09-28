@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 
 const remaining = (deadline: string | undefined): number => {
   if (!deadline) return 0;
-  // Never slice or compare strings: one instant arrives with two offsets
-  // (+07:00 here, Z there). Date.parse handles both.
+  // Never slice/compare strings: one instant arrives with two offsets (+07:00 vs Z); Date.parse handles both.
   const ms = Date.parse(deadline) - Date.now();
   return ms > 0 ? Math.floor(ms / 1000) : 0;
 };

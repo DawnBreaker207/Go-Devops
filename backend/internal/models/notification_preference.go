@@ -7,8 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// NotificationPreference is one opt-in row per user; a missing row reads as defaults.
-// First GET creates the row so a later PUT has something to update; both flags may be off.
+// Missing row reads as defaults; first GET creates it.
 type NotificationPreference struct {
 	ID               string    `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID           string    `gorm:"type:uuid;not null;uniqueIndex" json:"user_id"`

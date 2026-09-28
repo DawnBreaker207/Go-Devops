@@ -10,7 +10,6 @@ type ShowtimeRequest struct {
 	MovieID string    `json:"movie_id" binding:"required,uuid" example:"10000000-0000-0000-0000-000000000001"`
 	HallID  string    `json:"hall_id" binding:"required,uuid"`
 	StartAt time.Time `json:"start_at" binding:"required" example:"2026-09-15T19:00:00+07:00"`
-	// Status is optional; omitted keeps the current value on update.
 	Status string `json:"status" binding:"omitempty,oneof=open closed"`
 }
 
@@ -28,14 +27,14 @@ type ShowtimeResponse struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// ShowtimeAdminListQuery: operator list hides nothing (closed/past/draft visible for fixing).
+// Hides nothing; closed/past/draft visible for fixing.
 // Search matches movie title or hall name.
 type ShowtimeAdminListQuery struct {
 	PageQuery
 	MovieID string `form:"movie_id" binding:"omitempty,uuid"`
 	HallID  string `form:"hall_id" binding:"omitempty,uuid"`
 	Status  string `form:"status" binding:"omitempty,oneof=open closed"`
-	// Date narrows to a single calendar day in the server timezone and wins over From/To.
+	// Narrows to one calendar day, wins over From/To.
 	Date  string `form:"date" binding:"omitempty,datetime=2006-01-02"`
 	From  string `form:"from" binding:"omitempty,datetime=2006-01-02"`
 	To    string `form:"to" binding:"omitempty,datetime=2006-01-02"`
@@ -69,7 +68,6 @@ func NewShowtimeListItem(s models.Showtime, hallName string, fromPrice int64) Sh
 	}
 }
 
-// ShowtimeCancelResponse: bookings refunded through the normal refund pipeline.
 type ShowtimeCancelResponse struct {
 	ShowtimeID       string `json:"showtime_id"`
 	Status           string `json:"status"`

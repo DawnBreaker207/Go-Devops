@@ -25,7 +25,7 @@ const (
 	// How long a stored attempt may wait for its checkout URL before a new pay request takes it over.
 	orphanCheckoutAfter = 30 * time.Second
 	providerCallTimeout = 20 * time.Second
-	// refundLease outlives refundTimeout so two workers never call the provider at once.
+	// refundLease outlives refundTimeout so two workers never call provider at once.
 	refundLease   = 2 * time.Minute
 	refundTimeout = 30 * time.Second
 	// Failed tries after which a refund or paid booking raises an alert; retries go on.
@@ -118,10 +118,7 @@ func (s *bookingService) Pay(ctx context.Context, userID, bookingID string, req 
 			BookingID: b.ID,
 			Provider:  name,
 			TxnRef:    newTxnRef(),
-			// Payable(), NOT TotalAmount: a discount must reach the gateway, and
-			// total_amount deliberately stays the undiscounted seat subtotal so
-			// finalizeTx's seat-price assertion still holds. Amount-mismatch
-			// detection and refunds both read this column, so they follow.
+		// Payable, not TotalAmount: total stays undiscounted subtotal for finalize invariant.
 			Amount:    b.Payable(),
 			Status:    models.PaymentPending,
 			ExpiresAt: b.ExpiresAt,
@@ -428,9 +425,8 @@ func (s *bookingService) finalize(ctx context.Context, bookingID, source string)
 	return s.repo.FindByID(context.WithoutCancel(ctx), bookingID)
 }
 
-// finalizeTx: the only place a paid booking leaves PENDING. Sells held seats (fenced by hold
-// version/TTL/showtime) or refunds in one transaction; provider refund after commit. The locked
-// row makes concurrent IPN/reconcile/confirm converge; non-empty reason forces the refund.
+// finalizeTx: only place paid booking leaves PENDING. Sells held seats (fenced
+// by hold version/TTL/showtime) or refunds in one tx; locked row converges races.
 func (s *bookingService) finalizeTx(ctx context.Context, tx *gorm.DB, b *models.Booking, reason, source string, out *finalizeOutcome) error {
 	switch b.Status {
 	case models.BookingConfirmed, models.BookingRefunded:
@@ -738,9 +734,8 @@ func (s *bookingService) reconcilePayment(ctx context.Context, attempt *models.P
 	return reconcileNothing, nil
 }
 
-// CancelShowtime: same MarkRefundPending-in-tx + post-commit settleRefund pipeline as every other
-// refund (see finalizeTx/refundTx). CONFIRMED flips straight to REFUNDED with tickets voided
-// (RefundBooking can't undo a sale); PENDING is released/expired, refunded too if already paid.
+// CancelShowtime: same MarkRefundPending-in-tx + post-commit settleRefund pipeline;
+// CONFIRMED flips to REFUNDED with tickets voided, PENDING released/expired.
 func (s *bookingService) CancelShowtime(ctx context.Context, showtimeID string) (*dto.ShowtimeCancelResponse, error) {
 	var (
 		refundPaymentIDs []string

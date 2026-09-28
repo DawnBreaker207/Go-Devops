@@ -8,7 +8,7 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/service"
 )
 
-// NewCloseDay closes yesterday and today (upsert, one row per day); rerun-safe.
+// Closes yesterday and today (upsert); rerun-safe.
 func NewCloseDay(reports service.ReportService, location *time.Location) *batch.Job {
 	return &batch.Job{
 		Name:     "closeDay",

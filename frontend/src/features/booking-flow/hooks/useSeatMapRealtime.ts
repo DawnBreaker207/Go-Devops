@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiClient, unwrap, API_BASE_URL } from '@/api/client';
 import type { ApiResponse, SeatStatus } from '@/types';
 
-/** One seat's status change, as the backend emits in "seats" events. */
 export interface SeatStatusUpdate {
-  /** showtime_seats.id - matches SeatMapSeat.showtime_seat_id here. */
   id: string;
   status: SeatStatus;
 }
@@ -21,18 +19,16 @@ interface RealtimeTokenResponse {
   stream_url: string;
 }
 
-/** Reconnects always mint via /events/token (30s token, stream self-closes at maxAge). Short delay suffices - the server already sends "retry: 3000" and debounces per seat batch. */
+// Reconnects always mint fresh via /events/token: EventSource sends no auth.
 const RECONNECT_DELAY_MS = 5000;
 
-/** Live seat states over SSE: mint a short token first (EventSource sends no auth), stream debounced `seats` events, re-mint on `onerror`; returns `sseDown` for fallback. */
+// Live seats over SSE; on realtime loss report sseDown for the poll fallback.
 export function useSeatMapRealtime(
   showtimeId: string | undefined,
   enabled: boolean,
   onSeats: (seats: SeatStatusUpdate[]) => void
 ): { sseDown: boolean } {
   const [sseDown, setSseDown] = useState(false);
-  // Ref always holds the latest callback (EventSource closures go stale).
-  // Assigned in an effect (post-render), never during render.
   const onSeatsRef = useRef(onSeats);
   useEffect(() => {
     onSeatsRef.current = onSeats;
@@ -77,7 +73,7 @@ export function useSeatMapRealtime(
             setSseDown(false);
             onSeatsRef.current(payload.seats);
           } catch {
-            // Malformed frame: skip, the next debounced batch resends.
+            // A broken frame is skipped: the next batch resends.
           }
         });
         es.onopen = () => setSseDown(false);
@@ -86,7 +82,7 @@ export function useSeatMapRealtime(
           scheduleReconnect();
         };
       } catch {
-        // Token mint failed (offline, 401, closed showtime...): retry later.
+        // A failed token mint just schedules the reconnect.
         scheduleReconnect();
       }
     };
@@ -100,6 +96,6 @@ export function useSeatMapRealtime(
     };
   }, [showtimeId, enabled]);
 
-  // Realtime off (no showtimeId or enabled=false) always reports "not down", never stale state from a previous run.
+  // While realtime is off, always report up: avoids stale state from a previous run.
   return { sseDown: enabled && showtimeId ? sseDown : false };
 }

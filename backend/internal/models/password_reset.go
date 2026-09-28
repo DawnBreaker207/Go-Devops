@@ -7,8 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// PasswordResetToken stores only the SHA-256 of an emailed reset token: the hex
-// itself is never persisted, so a DB leak can not redeem it.
+// Only the SHA-256 is stored; a DB leak can't redeem it.
 type PasswordResetToken struct {
 	ID        string     `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID    string     `gorm:"type:uuid;not null" json:"user_id"`

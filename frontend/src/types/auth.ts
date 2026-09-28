@@ -1,4 +1,4 @@
-/** dto.UserResponse, shared by GET /users/me, POST /auth/login, GET /admin/users. Only `phone` is omitempty. */
+// Mirrors Go DTO dto.UserResponse.
 export interface User {
   id: string;
   email: string;
@@ -14,7 +14,6 @@ export interface User {
 export interface LoginRequest {
   email: string;
   password: string;
-  /** Backend omitempty (max=255). Auto-attached in authApi.login; never pass by hand. */
   device_id?: string;
 }
 

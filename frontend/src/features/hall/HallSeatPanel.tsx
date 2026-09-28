@@ -1,16 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  App,
-  Button,
-  Descriptions,
-  Dropdown,
-  Flex,
-  Space,
-  Spin,
-  Tag,
-  Typography,
-} from 'antd';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, App, Button, Dropdown, Flex, Input, Space, Spin, Tag, Typography } from 'antd';
 import {
   EditOutlined,
   EyeOutlined,
@@ -23,47 +12,79 @@ import SeatGrid from './components/SeatGrid';
 import SelectionPill from './components/SelectionPill';
 import LayoutRegenerateModal from './components/LayoutRegenerateModal';
 import { hallApi } from '@/api/hall.api';
-import { useHall, useHallPrices, useHallSeats } from './hooks/useHalls';
-import { MAX_ROWS, SEAT_TYPE_STYLE } from './constants';
+import { useHall, useHallSeats, useUpdateHall } from './hooks/useHalls';
+import { MAX_ROWS, MAX_SEATS_PER_ROW, SEAT_TYPE_STYLE } from './constants';
 import {
   areAdjacentSeats,
+  buildPendingColumn,
   buildPendingRow,
   buildSeatChangeBatches,
+  countSeatsByType,
+  declaredGridMismatch,
   diffChangedSeats,
+  diffMergeSplitOps,
+  groupSeatsByRow,
+  isPendingColSeatId,
   isPendingSeatId,
+  isUnsavedSeatId,
+  makeSplitSeatId,
+  parseAisles,
+  pendingColIndexOf,
   pendingRowIndexOf,
   rowLabelFromIndex,
   summarizeGrid,
+  widestColumn,
 } from './seatGrid';
-import type { Seat } from '@/types';
+import type { Seat, SeatType } from '@/types';
 import { SEAT_TYPES } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { formatNumber } from '@/utils/format';
 
+/** Click-cycle order; couple excluded since that's a merge, not a type change. */
+const SEAT_TYPE_CYCLE: SeatType[] = SEAT_TYPES.filter((type) => type !== 'couple');
+
+/** Undo window for cycle-on-double-click: browsers always fire click before dblclick. */
+const SEAT_CLICK_CYCLE_DELAY_MS = 250;
+
 interface HallSeatPanelProps {
   hallId: string;
-  /** Let HallsPage know the panel is dirty, to confirm before switching halls. */
   onDirtyChange: (dirty: boolean) => void;
 }
 
-/** One hall's seat grid, expanded inline below the cards in HallsPage. Mounted with `key={hallId}`, so switching halls remounts and draft/editing reset by themselves. */
+/** One seat grid per hall, mounted with key={hallId} so switching halls remounts and resets the draft. */
 export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => {
   const { t } = useTranslation();
   const { message, modal } = App.useApp();
 
   const hall = useHall(hallId);
   const seatsQuery = useHallSeats(hallId);
-  const prices = useHallPrices(hallId);
+  /** Hall metadata saves immediately, separate from the seat draft session. */
+  const updateHall = useUpdateHall();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [regenerateOpen, setRegenerateOpen] = useState(false);
+  /** Custom editor instead of antd editable, for a live preview right on the grid. */
+  const [aislesEditing, setAislesEditing] = useState(false);
+  const [aislesDraft, setAislesDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
-  /** Single click no longer selects (`selected` is now row-pick for bulk via SelectionPill). Two transient states instead: `activeSeatId` (open quick-type popover) and `pendingMergeSeatId` (double-clicked, awaiting an adjacent second click). */
-  const [activeSeatId, setActiveSeatId] = useState<string | null>(null);
   const [pendingMergeSeatId, setPendingMergeSeatId] = useState<string | null>(null);
 
-  /** Edit mode is one session: every op touches only the local `draft`; `savedSnapshot` is the last server-confirmed copy for dirty-check and revert. */
+  /** Pre-cycle type per seat for double-click undo; other seats never clear it. */
+  const cycleRevertRef = useRef<{
+    seatId: string;
+    originalType: SeatType;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const clearCycleRevert = () => {
+    if (cycleRevertRef.current) {
+      clearTimeout(cycleRevertRef.current.timer);
+      cycleRevertRef.current = null;
+    }
+  };
+  useEffect(() => clearCycleRevert, []);
+
+  /** One edit session: every op touches the draft only; savedSnapshot diffs dirty and reverts. */
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Seat[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<Seat[]>([]);
@@ -84,24 +105,34 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       new Set(draft.filter((s) => isPendingSeatId(s.id)).map((s) => pendingRowIndexOf(s.id))).size,
     [draft]
   );
-  const dirty = pendingRowCount > 0 || changedGroups.length > 0;
+  const pendingColCount = useMemo(
+    () =>
+      new Set(draft.filter((s) => isPendingColSeatId(s.id)).map((s) => pendingColIndexOf(s.id)))
+        .size,
+    [draft]
+  );
+  const dirty = pendingRowCount > 0 || pendingColCount > 0 || changedGroups.length > 0;
 
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
 
-  // View mode has no selection/popover/pending-merge: clear on every path into it (state-during-render on `editing`, same as HallsPage first-hall preselect).
+  // View mode keeps no selection; reset on every view entry via state-during-render.
   const [editingAtLastSelectionClear, setEditingAtLastSelectionClear] = useState(editing);
   if (editingAtLastSelectionClear !== editing) {
     setEditingAtLastSelectionClear(editing);
     if (!editing) {
       setSelected(new Set());
-      setActiveSeatId(null);
       setPendingMergeSeatId(null);
     }
   }
 
-  // Leaving with unsaved changes asks via beforeunload (reload/close tab); in-app hall switches confirm separately in HallsPage via onDirtyChange.
+  // Never clear refs during render (unsafe); dedicated effect instead.
+  useEffect(() => {
+    if (!editing) clearCycleRevert();
+  }, [editing]);
+
+  // Keep beforeunload for F5/closing tabs; in-app hall switches ask via HallsPage instead.
   useEffect(() => {
     if (!dirty) return;
     const handler = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -109,11 +140,16 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
 
-  // Escape closes the type popover and cancels pending merge.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setActiveSeatId(null);
+      if (cycleRevertRef.current) {
+        const { seatId, originalType } = cycleRevertRef.current;
+        clearCycleRevert();
+        setDraft((current) =>
+          current.map((s) => (s.id === seatId ? { ...s, seat_type: originalType } : s))
+        );
+      }
       setPendingMergeSeatId(null);
     };
     window.addEventListener('keydown', handler);
@@ -122,8 +158,11 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
 
   const seatById = useMemo(() => new Map(draft.map((s) => [s.id, s])), [draft]);
   const summary = hall.data ? summarizeGrid(hall.data, draft) : null;
+  /** Compared against savedSnapshot: pending rows intentionally overshoot rows. */
+  const mismatch = hall.data ? declaredGridMismatch(hall.data, savedSnapshot) : null;
+  const typeCounts = useMemo(() => countSeatsByType(draft), [draft]);
 
-  // Gated on `editing`, not just a cleared `selected`: View never has a selection even if stale state survives (HMR, races).
+  // Selection exists only while editing, so no stale state survives HMR or races.
   const selectedSeats: Seat[] = useMemo(
     () =>
       editing
@@ -131,8 +170,6 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
         : [],
     [editing, selected, seatById]
   );
-  const activeSeat = editing && activeSeatId ? (seatById.get(activeSeatId) ?? null) : null;
-
   const toggleRow = (rowLabel: string) =>
     setSelected((current) => {
       const rowSeats = draft.filter((s) => s.row_label === rowLabel);
@@ -142,7 +179,9 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       return next;
     });
 
-  /** Apply one patch to the whole selection, draft only. */
+  const handleToggleSelectAll = (selectAll: boolean) =>
+    setSelected(selectAll ? new Set(draft.map((s) => s.id)) : new Set());
+
   const applyPatchToSelection = (patch: Partial<Pick<Seat, 'seat_type' | 'is_gap'>>) => {
     if (selectedSeats.length === 0) return;
     const ids = new Set(selectedSeats.map((s) => s.id));
@@ -150,62 +189,93 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     setSelected(new Set());
   };
 
-  /** Gap seat: one click fills it as standard immediately, no pre-select. */
   const fillGap = (seat: Seat) => {
     setDraft((current) =>
       current.map((s) => (s.id === seat.id ? { ...s, is_gap: false, seat_type: 'standard' } : s))
     );
   };
 
-  /** Click completes a pending merge (double-clicked seat): adjacent merges, non-adjacent (incl. re-click) cancels with a hint. Otherwise opens the quick-type popover for this one seat; re-click toggles it shut. */
+  /** Merge/split mutate the draft, so no clean grid is needed first - same as AddRow. */
   const handleSeatClick = (seat: Seat) => {
     if (pendingMergeSeatId) {
       const pending = seatById.get(pendingMergeSeatId);
       setPendingMergeSeatId(null);
-      if (
-        pending &&
-        pending.id !== seat.id &&
-        !isPendingSeatId(seat.id) &&
-        areAdjacentSeats(pending, seat)
-      ) {
+      if (pending && pending.id !== seat.id && areAdjacentSeats(pending, seat)) {
         handleMergeCouple(pending, seat);
         return;
       }
       message.info(t('hall.mergeCoupleNotAdjacent'));
       return;
     }
-    setActiveSeatId((current) => (current === seat.id ? null : seat.id));
-  };
-
-  /** Double-click enters pending-merge. Couples can't re-merge; unsaved "ghost" rows or other dirty edits must save first because merge/split OVERWRITES the draft from fresh server data (see runSeatAction). */
-  const handleSeatDoubleClick = (seat: Seat) => {
-    if (seat.col_span === 2) return;
-    if (dirty || isPendingSeatId(seat.id)) {
-      message.info(t('hall.saveBeforeMergeSplit'));
+    if (seat.col_span === 2) {
+      handleSplitCouple(seat);
       return;
     }
-    setActiveSeatId(null);
+    // Reuse the saved originalType: this seat already cycled once.
+    const originalType =
+      cycleRevertRef.current?.seatId === seat.id
+        ? cycleRevertRef.current.originalType
+        : seat.seat_type;
+    clearCycleRevert();
+    const currentIndex = SEAT_TYPE_CYCLE.indexOf(seat.seat_type);
+    const nextType = SEAT_TYPE_CYCLE[(currentIndex + 1) % SEAT_TYPE_CYCLE.length];
+    setDraft((current) =>
+      current.map((s) => (s.id === seat.id ? { ...s, seat_type: nextType } : s))
+    );
+    cycleRevertRef.current = {
+      seatId: seat.id,
+      originalType,
+      timer: setTimeout(clearCycleRevert, SEAT_CLICK_CYCLE_DELAY_MS),
+    };
+  };
+
+  /** Undo the cycle that two click events caused before pending-merge; never marks dirty. */
+  const handleSeatDoubleClick = (seat: Seat) => {
+    if (cycleRevertRef.current?.seatId === seat.id) {
+      const { originalType } = cycleRevertRef.current;
+      clearCycleRevert();
+      setDraft((current) =>
+        current.map((s) => (s.id === seat.id ? { ...s, seat_type: originalType } : s))
+      );
+    }
+    if (seat.col_span === 2) return;
     setPendingMergeSeatId(seat.id);
   };
 
-  /** Corner "x": marks a gap on the draft immediately, no confirm. */
   const handleQuickGap = (seat: Seat) => {
+    clearCycleRevert();
     setDraft((current) => current.map((s) => (s.id === seat.id ? { ...s, is_gap: true } : s)));
-    setActiveSeatId((current) => (current === seat.id ? null : current));
     setPendingMergeSeatId((current) => (current === seat.id ? null : current));
   };
 
   const handleAddRow = () => {
     if (!hall.data) return;
     const rowLabel = rowLabelFromIndex(hall.data.rows + pendingRowCount + 1);
-    const newRow = buildPendingRow(pendingRowCount, hall.data.seats_per_row, rowLabel, hallId);
+    // Draw gaps for pending columns already in the draft instead of leaving holes.
+    const totalWidth = Math.max(widestColumn(draft), hall.data.seats_per_row);
+    const newRow = buildPendingRow(
+      pendingRowCount,
+      hall.data.seats_per_row,
+      rowLabel,
+      hallId,
+      totalWidth
+    );
     setDraft((current) => [...current, ...newRow]);
   };
 
+  /** Adding a column stays draft until Save, like AddRow but along the other axis. */
+  const handleAddColumn = () => {
+    if (!hall.data) return;
+    const rowLabels = groupSeatsByRow(draft).map((row) => row.rowLabel);
+    const nextCol = Math.max(widestColumn(draft), hall.data.seats_per_row) + 1;
+    const newCol = buildPendingColumn(pendingColCount, rowLabels, nextCol, hallId);
+    setDraft((current) => [...current, ...newCol]);
+  };
+
   const discardDraft = () => {
+    clearCycleRevert();
     setDraft(savedSnapshot);
     setSelected(new Set());
-    setActiveSeatId(null);
     setPendingMergeSeatId(null);
   };
 
@@ -234,43 +304,109 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
 
   const handleDiscardClick = () => confirmDiscard(discardDraft);
 
-  /** Save the whole session in one go: pending rows first, in added order (one AddRow call each; backend only appends "next row"). Draft is updated after each row so a mid-save failure never double-creates on retry. Type/gap edits on real seats (incl. just-created) are then batched into a single final PATCH. */
+  /** Save in fixed order: rows, then columns, then merge/split, finally type/gap patches. */
   const handleSave = async () => {
     if (!hall.data) return;
+    clearCycleRevert();
     setSaving(true);
     try {
       let working = draft;
-      const pendingIndexes = [
+      // Creation sources disagree on defaults, so each seat needs its own baseline.
+      let newSeatDefaults: Seat[] = [];
+
+      const pendingRowIndexes = [
         ...new Set(
           working.filter((s) => isPendingSeatId(s.id)).map((s) => pendingRowIndexOf(s.id))
         ),
       ].sort((a, b) => a - b);
 
-      for (const rowIndex of pendingIndexes) {
-        const localRow = working
-          .filter((s) => isPendingSeatId(s.id) && pendingRowIndexOf(s.id) === rowIndex)
-          .sort((a, b) => a.col_number - b.col_number);
+      for (const rowIndex of pendingRowIndexes) {
+        const localRow = working.filter(
+          (s) => isPendingSeatId(s.id) && pendingRowIndexOf(s.id) === rowIndex
+        );
         const created = await hallApi.addRow(hallId);
-        const merged = created.map((real, i) => ({
-          ...real,
-          seat_type: localRow[i]?.seat_type ?? real.seat_type,
-          is_gap: localRow[i]?.is_gap ?? real.is_gap,
-        }));
+        // Match by col_number: a local merge can drop a column.
+        const localByCol = new Map(localRow.map((s) => [s.col_number, s]));
+        const merged = created.map((real) => {
+          const local = localByCol.get(real.col_number);
+          return {
+            ...real,
+            seat_type: local?.seat_type ?? real.seat_type,
+            is_gap: local?.is_gap ?? real.is_gap,
+            col_span: local?.col_span ?? real.col_span,
+          };
+        });
         working = [
           ...working.filter(
             (s) => !(isPendingSeatId(s.id) && pendingRowIndexOf(s.id) === rowIndex)
           ),
           ...merged,
         ];
+        newSeatDefaults = [...newSeatDefaults, ...created];
         setDraft(working);
       }
 
-      // New-row seats aren't in savedSnapshot, so diffing would silently skip their overrides; seed a (standard, non-gap) default per new seat first.
-      const savedIds = new Set(savedSnapshot.map((s) => s.id));
-      const newSeatDefaults: Seat[] = working
-        .filter((s) => !savedIds.has(s.id))
-        .map((s) => ({ ...s, seat_type: 'standard', is_gap: false }));
-      const patchGroups = diffChangedSeats([...savedSnapshot, ...newSeatDefaults], working);
+      const pendingColIndexes = [
+        ...new Set(
+          working.filter((s) => isPendingColSeatId(s.id)).map((s) => pendingColIndexOf(s.id))
+        ),
+      ].sort((a, b) => a - b);
+
+      for (const colIndex of pendingColIndexes) {
+        const localCol = working.filter(
+          (s) => isPendingColSeatId(s.id) && pendingColIndexOf(s.id) === colIndex
+        );
+        const byRow = new Map(localCol.map((s) => [s.row_label, s]));
+        const created = await hallApi.addColumn(hallId);
+        const merged = created.map((real) => {
+          const local = byRow.get(real.row_label);
+          return {
+            ...real,
+            seat_type: local?.seat_type ?? real.seat_type,
+            is_gap: local?.is_gap ?? real.is_gap,
+            col_span: local?.col_span ?? real.col_span,
+          };
+        });
+        working = [
+          ...working.filter(
+            (s) => !(isPendingColSeatId(s.id) && pendingColIndexOf(s.id) === colIndex)
+          ),
+          ...merged,
+        ];
+        newSeatDefaults = [...newSeatDefaults, ...created];
+        setDraft(working);
+      }
+
+      // Session merges/splits are draft-only, so reconcile against the server by label here.
+      const { merges, splits } = diffMergeSplitOps([...savedSnapshot, ...newSeatDefaults], working);
+      // Drop finished merges/splits from the shared patch to avoid resending couple types.
+      const mergeSplitSeatIds = new Set<string>();
+
+      for (const mergeOp of merges) {
+        const updatedLeft = await hallApi.mergeSeats(hallId, {
+          left_label: mergeOp.leftLabel,
+          right_label: mergeOp.rightLabel,
+        });
+        mergeSplitSeatIds.add(updatedLeft.id);
+        working = [
+          ...working.filter((s) => s.label !== mergeOp.leftLabel && s.label !== mergeOp.rightLabel),
+          updatedLeft,
+        ];
+        setDraft(working);
+      }
+
+      for (const splitOp of splits) {
+        const updated = await hallApi.splitSeat(hallId, { label: splitOp.label });
+        updated.forEach((s) => mergeSplitSeatIds.add(s.id));
+        const updatedLabels = new Set(updated.map((s) => s.label));
+        working = [...working.filter((s) => !updatedLabels.has(s.label)), ...updated];
+        setDraft(working);
+      }
+
+      const patchGroups = diffChangedSeats(
+        [...savedSnapshot, ...newSeatDefaults],
+        working.filter((s) => !mergeSplitSeatIds.has(s.id))
+      );
       const batches = buildSeatChangeBatches(patchGroups);
       for (const changes of batches) {
         await hallApi.bulkUpdateSeats(hallId, { changes });
@@ -281,11 +417,10 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       setDraft(fresh);
       setSavedSnapshot(fresh);
       setSelected(new Set());
-      setActiveSeatId(null);
       setPendingMergeSeatId(null);
       message.success(t('hall.saveSuccess'));
     } catch (error) {
-      // 409 "hall layout can not be changed when it has bookings" is the common case here. Keep the draft for retry; rows already created were merged above, so re-save won't duplicate.
+      // The common failure is 409 on halls with bookings; keep the draft to retry without re-adding rows.
       message.error(errorMessage(error, t('common.somethingWrong')));
       void hall.refetch();
     } finally {
@@ -293,7 +428,25 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     }
   };
 
-  /** Delete-row/merge/split act immediately on real seats, outside the draft session: confirm -> API -> refetch -> reload draft/snapshot from fresh server data, one flow for all three. */
+  /** Row delete hits the server immediately, outside the draft session unlike local merge/split. */
+  const performSeatAction = async (action: () => Promise<unknown>, successMessage: string) => {
+    try {
+      clearCycleRevert();
+      await action();
+      const [seatsResult] = await Promise.all([seatsQuery.refetch(), hall.refetch()]);
+      if (seatsResult.data) {
+        setDraft(seatsResult.data);
+        setSavedSnapshot(seatsResult.data);
+      }
+      setSelected(new Set());
+      setPendingMergeSeatId(null);
+      message.success(successMessage);
+    } catch (error) {
+      message.error(errorMessage(error, t('common.somethingWrong')));
+    }
+  };
+
+  /** Row delete is hard to revert, so keep the confirm; local merge/split never takes this path. */
   const runSeatAction = (
     confirm: { title: string; body: string },
     action: () => Promise<unknown>,
@@ -305,33 +458,17 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       okText: t('common.confirm'),
       okButtonProps: { danger: true },
       cancelText: t('common.cancel'),
-      onOk: async () => {
-        try {
-          await action();
-          const [seatsResult] = await Promise.all([seatsQuery.refetch(), hall.refetch()]);
-          if (seatsResult.data) {
-            setDraft(seatsResult.data);
-            setSavedSnapshot(seatsResult.data);
-          }
-          setSelected(new Set());
-          setActiveSeatId(null);
-          setPendingMergeSeatId(null);
-          message.success(successMessage);
-        } catch (error) {
-          message.error(errorMessage(error, t('common.somethingWrong')));
-        }
-      },
+      onOk: () => performSeatAction(action, successMessage),
     });
   };
 
-  /** Deletes ANY row (backend renumbers followers). Pending (unsaved) rows drop from the draft with no API/confirm; saved rows are immediate + destructive, with confirm. */
+  /** The backend renumbers rows after a delete; unsaved rows just drop from the draft. */
   const handleDeleteRow = (rowLabel: string) => {
     const rowSeats = draft.filter((s) => s.row_label === rowLabel);
     if (rowSeats.length === 0) return;
-    const isPending = rowSeats.every((s) => isPendingSeatId(s.id));
+    const isPending = rowSeats.every((s) => isUnsavedSeatId(s.id));
 
     if (isPending) {
-      // Nothing persisted yet; drop silently, no confirm.
       setDraft((current) => current.filter((s) => s.row_label !== rowLabel));
       return;
     }
@@ -342,22 +479,80 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     );
   };
 
+  /** Merge needs no confirm: double-click plus an adjacent click is deliberate enough; defer to Save. */
   const handleMergeCouple = (a: Seat, b: Seat) => {
     const [left, right] = a.col_number < b.col_number ? [a, b] : [b, a];
-    runSeatAction(
-      { title: t('hall.mergeCoupleConfirmTitle'), body: t('hall.mergeCoupleConfirmBody') },
-      () => hallApi.mergeSeats(hallId, { left_label: left.label, right_label: right.label }),
-      t('hall.mergeCoupleSuccess')
+    setDraft((current) =>
+      current
+        .filter((s) => s.id !== right.id)
+        .map((s) =>
+          s.id === left.id ? { ...s, col_span: 2 as const, seat_type: 'couple' as SeatType } : s
+        )
+    );
+    message.success(t('hall.mergeCoupleSuccess'));
+  };
+
+  /** Split is easy to fat-finger, so keep a light confirm; still draft until Save hits the server. */
+  const handleSplitCouple = (seat: Seat) => {
+    modal.confirm({
+      title: t('hall.splitCoupleConfirmTitle'),
+      content: t('hall.splitCoupleConfirmBody'),
+      okText: t('common.confirm'),
+      okButtonProps: { danger: true },
+      cancelText: t('common.cancel'),
+      mask: false,
+      width: 360,
+      onOk: () => {
+        const rightSeat: Seat = {
+          id: makeSplitSeatId(seat.id),
+          hall_id: hallId,
+          label: `${seat.row_label}${seat.col_number + 1}`,
+          row_label: seat.row_label,
+          col_number: seat.col_number + 1,
+          seat_type: 'standard',
+          is_gap: false,
+          col_span: 1,
+        };
+        setDraft((current) => [
+          ...current.map((s) =>
+            s.id === seat.id ? { ...s, col_span: 1 as const, seat_type: 'standard' as SeatType } : s
+          ),
+          rightSeat,
+        ]);
+        message.success(t('hall.splitCoupleSuccess'));
+      },
+    });
+  };
+
+  /** Hall metadata saves straight through PUT, independent of the seat draft session. */
+  const handleRename = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === hall.data?.name) return;
+    updateHall.mutate(
+      { id: hallId, payload: { name: trimmed } },
+      { onError: (error) => message.error(errorMessage(error, t('common.somethingWrong'))) }
     );
   };
 
-  const handleSplitCouple = () => {
-    if (!activeSeat) return;
-    setActiveSeatId(null);
-    runSeatAction(
-      { title: t('hall.splitCoupleConfirmTitle'), body: t('hall.splitCoupleConfirmBody') },
-      () => hallApi.splitSeat(hallId, { label: activeSeat.label }),
-      t('hall.splitCoupleSuccess')
+  const startEditingAisles = () => {
+    setAislesDraft(hall.data ? hall.data.aisle_after_cols.join(', ') : '');
+    setAislesEditing(true);
+  };
+
+  const cancelEditingAisles = () => setAislesEditing(false);
+
+  const confirmAisles = () => {
+    const current = hall.data;
+    setAislesEditing(false);
+    if (!current) return;
+    const cols = parseAisles(aislesDraft);
+    const unchanged =
+      cols.length === current.aisle_after_cols.length &&
+      cols.every((c, i) => c === current.aisle_after_cols[i]);
+    if (unchanged) return;
+    updateHall.mutate(
+      { id: hallId, payload: { aisle_after_cols: cols } },
+      { onError: (error) => message.error(errorMessage(error, t('common.somethingWrong'))) }
     );
   };
 
@@ -384,9 +579,16 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
   return (
     <>
       <Flex justify="space-between" align="center" wrap style={{ marginBottom: 16 }} gap={8}>
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          {t('hall.seatsTitle', { name: hall.data.name })}
-        </Typography.Title>
+        <Space size={6} align="baseline" style={{ minWidth: 0 }}>
+          <Typography.Text type="secondary">{t('hall.seatsTitlePrefix')}</Typography.Text>
+          <Typography.Title
+            level={5}
+            style={{ margin: 0 }}
+            editable={{ onChange: handleRename, tooltip: t('common.edit') }}
+          >
+            {hall.data.name}
+          </Typography.Title>
+        </Space>
         <Space wrap>
           {editing && dirty ? (
             <>
@@ -415,6 +617,12 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
             menu={{
               items: [
                 {
+                  key: 'aisles',
+                  icon: <EditOutlined />,
+                  label: t('hall.aisles'),
+                  onClick: startEditingAisles,
+                },
+                {
                   key: 'regenerate',
                   danger: true,
                   icon: <ReloadOutlined />,
@@ -430,27 +638,33 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
         </Space>
       </Flex>
 
-      <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 4 }} style={{ marginBottom: 8 }}>
-        <Descriptions.Item label={t('hall.grid')}>
-          {hall.data.rows} × {hall.data.seats_per_row}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('hall.screenPosition')}>
-          {t(`hall.screen_${hall.data.screen_position}`)}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('hall.aisles')}>
-          {hall.data.aisle_after_cols.length > 0
-            ? hall.data.aisle_after_cols.join(', ')
-            : t('hall.noAisles')}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('hall.active')}>
-          <Tag color={hall.data.active ? 'green' : 'default'} bordered={false}>
-            {t(hall.data.active ? 'hall.activeYes' : 'hall.activeNo')}
-          </Tag>
-        </Descriptions.Item>
-      </Descriptions>
+      {/* Active toggle nam tren HallCard nen o day chi hien trang thai. */}
+      <Flex align="center" style={{ marginBottom: 8 }}>
+        <Tag color={hall.data.active ? 'green' : 'default'} bordered={false}>
+          {t(hall.data.active ? 'hall.activeYes' : 'hall.activeNo')}
+        </Tag>
+      </Flex>
 
-      {summary?.declaredMismatch ? (
-        // Invariant, not input error: DB doesn't force halls.rows to match seats. Grid already renders from real seats, but the operator must be told, not left silent.
+      {aislesEditing ? (
+        <Flex align="center" gap={8} style={{ marginBottom: 8 }}>
+          <Typography.Text type="secondary">{t('hall.aisles')}</Typography.Text>
+          <Input
+            size="small"
+            autoFocus
+            value={aislesDraft}
+            placeholder="4, 10"
+            style={{ width: 140 }}
+            onChange={(e) => setAislesDraft(e.target.value)}
+            onPressEnter={confirmAisles}
+            onBlur={confirmAisles}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') cancelEditingAisles();
+            }}
+          />
+        </Flex>
+      ) : null}
+
+      {mismatch ? (
         <Alert
           type="warning"
           showIcon
@@ -458,14 +672,13 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
           message={t('hall.gridMismatch', {
             declaredRows: hall.data.rows,
             declaredCols: hall.data.seats_per_row,
-            actualRows: summary.actualRows,
-            actualCols: summary.actualSeatsPerRow,
+            actualRows: mismatch.actualRows,
+            actualCols: mismatch.actualSeatsPerRow,
           })}
         />
       ) : null}
 
       {summary ? (
-        // Cells vs seats legitimately differ: couples swallow a column, and sellable further excludes gaps.
         <Typography.Text
           type="secondary"
           style={{ fontSize: 12, display: 'block', marginBottom: 12 }}
@@ -480,34 +693,20 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
         </Typography.Text>
       ) : null}
 
-      <Flex wrap align="center" justify="space-between" gap={8} style={{ marginBottom: 8 }}>
-        {editing ? (
-          <Button
-            size="small"
-            type="link"
-            style={{ paddingInline: 0 }}
-            onClick={() => setSelected(new Set(draft.map((s) => s.id)))}
+      <Flex wrap align="center" gap={8} style={{ marginBottom: 8 }}>
+        {SEAT_TYPES.map((type) => (
+          <Tag
+            key={type}
+            bordered={false}
+            style={{
+              background: SEAT_TYPE_STYLE[type].bg,
+              color: SEAT_TYPE_STYLE[type].fg,
+              marginInlineEnd: 0,
+            }}
           >
-            {t('hall.selectAll')}
-          </Button>
-        ) : (
-          <span />
-        )}
-        <Flex wrap align="center" gap={8}>
-          {SEAT_TYPES.map((type) => (
-            <Tag
-              key={type}
-              bordered={false}
-              style={{
-                background: SEAT_TYPE_STYLE[type].bg,
-                color: SEAT_TYPE_STYLE[type].fg,
-                marginInlineEnd: 0,
-              }}
-            >
-              {t(`hall.seatType_${type}`)}
-            </Tag>
-          ))}
-        </Flex>
+            {t(`hall.seatType_${type}`)} · {typeCounts[type]}
+          </Tag>
+        ))}
       </Flex>
 
       <Spin spinning={saving}>
@@ -516,55 +715,27 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
           seats={draft}
           selected={selected}
           onToggleRow={toggleRow}
+          onToggleSelectAll={handleToggleSelectAll}
           readOnly={!editing}
           onSeatClick={handleSeatClick}
           onSeatDoubleClick={handleSeatDoubleClick}
-          activeSeatId={activeSeat?.id ?? null}
           pendingMergeSeatId={pendingMergeSeatId}
-          seatPopoverContent={
-            activeSeat ? (
-              activeSeat.col_span === 2 ? (
-                <Button
-                  size="small"
-                  block
-                  disabled={dirty || isPendingSeatId(activeSeat.id)}
-                  onClick={handleSplitCouple}
-                >
-                  {t('hall.splitCouple')}
-                </Button>
-              ) : (
-                <Space wrap size={4}>
-                  {SEAT_TYPES.map((type) => (
-                    <Button
-                      key={type}
-                      size="small"
-                      type={activeSeat.seat_type === type ? 'primary' : 'default'}
-                      onClick={() => {
-                        setDraft((current) =>
-                          current.map((s) =>
-                            s.id === activeSeat.id ? { ...s, seat_type: type } : s
-                          )
-                        );
-                        setActiveSeatId(null);
-                      }}
-                    >
-                      {t(`hall.seatType_${type}`)}
-                    </Button>
-                  ))}
-                </Space>
-              )
-            ) : undefined
-          }
           onQuickGap={handleQuickGap}
           onFillGap={fillGap}
           onAddRow={
             editing && hall.data.rows + pendingRowCount < MAX_ROWS ? handleAddRow : undefined
           }
           onDeleteRow={editing && draft.length > 0 ? handleDeleteRow : undefined}
+          onAddColumn={
+            editing && Math.max(widestColumn(draft), hall.data.seats_per_row) < MAX_SEATS_PER_ROW
+              ? handleAddColumn
+              : undefined
+          }
+          aisleAfterColsOverride={aislesEditing ? parseAisles(aislesDraft) : undefined}
         />
       </Spin>
 
-      {/* Fixed bottom pill replaces the static top toolbar; see SelectionPill. Spacer below keeps it off the last seat row. Edit-only; per-seat popover is independent of row `selected`, so no display clash. */}
+      {/* Giu khoang trong de pill duoi khong che hang ghe cuoi. */}
       <div style={{ height: editing && selectedSeats.length > 0 ? 76 : 0 }} />
       <SelectionPill
         count={editing ? selectedSeats.length : 0}
@@ -578,14 +749,11 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       <LayoutRegenerateModal
         open={regenerateOpen}
         hall={hall.data}
-        prices={prices.data ?? []}
         onCancel={() => setRegenerateOpen(false)}
         onDone={() => {
           setRegenerateOpen(false);
           setSelected(new Set());
-          setActiveSeatId(null);
           setPendingMergeSeatId(null);
-          // Regenerate wipes and rebuilds the grid server-side; local draft/snapshot must reload from scratch, not follow queries.
           void seatsQuery.refetch().then((result) => {
             if (result.data) {
               setDraft(result.data);
