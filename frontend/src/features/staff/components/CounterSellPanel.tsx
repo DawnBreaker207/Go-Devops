@@ -17,6 +17,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import SeatPickerGrid from './SeatPickerGrid';
 import OrderDetailView from './OrderDetailView';
+import PrintTicketsButton from './PrintTicketsButton';
 import { useCounterSeatMap, useCounterSell, useShowtimeOptions } from '../hooks/useBoxOffice';
 import type { OrderDetail, SeatMapSeat } from '@/types';
 import { errorMessage } from '@/utils/error';
@@ -107,9 +108,12 @@ export const CounterSellPanel = () => {
         />
         <OrderDetailView order={sold} />
         <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <Button type="primary" onClick={startOver}>
-            {t('boxOffice.sellAnother')}
-          </Button>
+          <Space>
+            <PrintTicketsButton order={sold} />
+            <Button type="primary" onClick={startOver}>
+              {t('boxOffice.sellAnother')}
+            </Button>
+          </Space>
         </div>
       </Card>
     );

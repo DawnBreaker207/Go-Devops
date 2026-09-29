@@ -4,10 +4,13 @@ import type {
   ApiResponse,
   Combo,
   ComboOrder,
+  ComboPickup,
+  CounterComboOrderPayload,
   CreateComboOrderPayload,
   CreateComboPayload,
   PagedData,
   PageQuery,
+  PickupQuery,
   UpdateComboPayload,
 } from '@/types';
 
@@ -16,6 +19,17 @@ export const comboApi = {
 
   createOrder: (payload: CreateComboOrderPayload) =>
     apiClient.post<ApiResponse<ComboOrder>>('/combo-orders', payload).then(unwrap),
+
+  counterSell: (payload: CounterComboOrderPayload) =>
+    apiClient.post<ApiResponse<ComboOrder>>('/staff/combo-orders', payload).then(unwrap),
+
+  pendingPickups: (query: PickupQuery) =>
+    apiClient
+      .get<ApiResponse<ComboPickup[]>>('/staff/combo-orders/pending', { params: query })
+      .then(unwrap),
+
+  collect: (id: string) =>
+    apiClient.post<ApiResponse<ComboOrder>>(`/staff/combo-orders/${id}/collect`).then(unwrap),
 
   myOrders: (query: PageQuery) =>
     apiClient

@@ -17,6 +17,7 @@ type ReportService interface {
 	StaffBoard(ctx context.Context, date string) (*dto.StaffBoardResponse, error)
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]dto.StaffTicketResponse, error)
 	BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error)
+	CounterMovies(ctx context.Context, date string) ([]dto.CounterMovieResponse, error)
 	AdminOverview(ctx context.Context) (*dto.AdminOverviewResponse, error)
 	StaffOverview(ctx context.Context, date string) (*dto.StaffOverviewResponse, error)
 	AdminStats(ctx context.Context) (*dto.AdminStatsResponse, error)
@@ -218,7 +219,7 @@ func (s *reportService) ShowtimeTickets(ctx context.Context, showtimeID, status 
 	return out, nil
 }
 
-// BoxOfficeDay: walk-in sales the register took.
+// BoxOfficeDay: till sales, tickets plus counter concession.
 func (s *reportService) BoxOfficeDay(ctx context.Context, date string) (*dto.BoxOfficeDayResponse, error) {
 	day := time.Now()
 	if date != "" {
@@ -233,7 +234,38 @@ func (s *reportService) BoxOfficeDay(ctx context.Context, date string) (*dto.Box
 	if err != nil {
 		return nil, err
 	}
-	return &dto.BoxOfficeDayResponse{Date: label, Count: count, Total: total}, nil
+	comboCount, comboTotal, err := s.repo.CounterComboDay(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.BoxOfficeDayResponse{
+		Date: label, Count: count, Total: total,
+		ComboCount: comboCount, ComboTotal: comboTotal,
+	}, nil
+}
+
+// CounterMovies: counter ticket sales by movie for one day.
+func (s *reportService) CounterMovies(ctx context.Context, date string) ([]dto.CounterMovieResponse, error) {
+	day := time.Now()
+	if date != "" {
+		parsed, err := time.ParseInLocation(dto.DateLayout, date, s.location)
+		if err != nil {
+			return nil, apperrors.Validation("date must follow format YYYY-MM-DD")
+		}
+		day = parsed
+	}
+	_, from, to := s.dayBounds(day)
+	rows, err := s.repo.CounterSalesByMovie(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.CounterMovieResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, dto.CounterMovieResponse{
+			MovieID: r.MovieID, Title: r.Title, Tickets: r.Tickets, Revenue: r.Revenue,
+		})
+	}
+	return out, nil
 }
 
 // AdminOverview: one-call dashboard (live today, last 7 closed days, remaining shows,
@@ -342,6 +374,7 @@ func (s *reportService) StaffOverview(ctx context.Context, date string) (*dto.St
 	return &dto.StaffOverviewResponse{
 		Date: board.Date, Showtimes: board.Showtimes,
 		CounterSalesCount: boxOffice.Count, CounterSalesTotal: boxOffice.Total,
+		ComboSalesCount: boxOffice.ComboCount, ComboSalesTotal: boxOffice.ComboTotal,
 		AwaitingCheckin: awaiting,
 	}, nil
 }

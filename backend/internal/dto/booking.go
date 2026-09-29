@@ -86,6 +86,7 @@ type OrderStatusResponse struct {
 	CreatedAt      time.Time       `json:"created_at"`
 	ExpiresAt      *time.Time      `json:"expires_at,omitempty"`
 	PaidAt         *time.Time      `json:"paid_at,omitempty"`
+	CollectedAt    *time.Time      `json:"collected_at,omitempty"`
 	Payment        *PaymentSummary `json:"payment,omitempty"`
 	Showtime       *OrderShowtime  `json:"showtime,omitempty"`
 }

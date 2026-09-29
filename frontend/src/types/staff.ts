@@ -24,6 +24,15 @@ export interface BoxOfficeDay {
   date: string;
   count: number;
   total: number;
+  combo_count: number;
+  combo_total: number;
+}
+
+export interface CounterMovie {
+  movie_id: string;
+  title: string;
+  tickets: number;
+  revenue: number;
 }
 
 export interface StaffOverview {
@@ -31,6 +40,8 @@ export interface StaffOverview {
   showtimes: StaffShowtime[];
   counter_sales_count: number;
   counter_sales_total: number;
+  combo_sales_count: number;
+  combo_sales_total: number;
   awaiting_checkin: number;
 }
 

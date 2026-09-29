@@ -1,14 +1,27 @@
 import { useState } from 'react';
-import { Alert, Card, Col, DatePicker, Row, Statistic, Table, Tabs, Tag } from 'antd';
+import {
+  Alert,
+  Card,
+  Col,
+  DatePicker,
+  Empty,
+  Row,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import type dayjs from 'dayjs';
 import TableCard from '@/components/TableCard';
 import CounterSellPanel from './components/CounterSellPanel';
+import CounterComboPanel from './components/CounterComboPanel';
+import ComboPickupPanel from './components/ComboPickupPanel';
 import OrderLookupPanel from './components/OrderLookupPanel';
-import ShowtimeTicketsPanel from './components/ShowtimeTicketsPanel';
-import { useStaffOverview } from './hooks/useBoxOffice';
-import type { ShowtimeStatus, StaffShowtime } from '@/types';
+import { useCounterMovies, useStaffOverview } from './hooks/useBoxOffice';
+import type { CounterMovie, ShowtimeStatus, StaffShowtime } from '@/types';
 import { errorMessage } from '@/utils/error';
 import { API_DATE_FORMAT, DATE_FORMAT, formatDateTime, formatVND } from '@/utils/format';
 
@@ -32,6 +45,27 @@ const DashboardTab = () => {
   const [date, setDate] = useState<dayjs.Dayjs | null>(null);
 
   const { data, isFetching, error } = useStaffOverview(date?.format(API_DATE_FORMAT));
+  const movies = useCounterMovies(date?.format(API_DATE_FORMAT));
+
+  const movieColumns: ColumnsType<CounterMovie> = [
+    { title: t('report.movie'), dataIndex: 'title', key: 'title', ellipsis: true },
+    {
+      title: t('report.tickets'),
+      dataIndex: 'tickets',
+      key: 'tickets',
+      width: 110,
+      align: 'right',
+      render: (value: number) => <span className="tabular-nums">{value}</span>,
+    },
+    {
+      title: t('report.revenue'),
+      dataIndex: 'revenue',
+      key: 'revenue',
+      width: 150,
+      align: 'right',
+      render: (value: number) => <span className="tabular-nums">{formatVND(value)}</span>,
+    },
+  ];
 
   const columns: ColumnsType<StaffShowtime> = [
     { title: t('showtime.movie'), dataIndex: 'movie_title', key: 'movie_title', ellipsis: true },
@@ -100,7 +134,7 @@ const DashboardTab = () => {
       ) : null}
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={8}>
+        <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
               title={t('boxOffice.counterSalesCount')}
@@ -109,7 +143,7 @@ const DashboardTab = () => {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
               title={t('boxOffice.counterSalesTotal')}
@@ -118,7 +152,16 @@ const DashboardTab = () => {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title={t('boxOffice.comboSalesTotal')}
+              value={data ? formatVND(data.combo_sales_total) : undefined}
+              loading={isFetching}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
               title={t('boxOffice.awaitingCheckin')}
@@ -139,6 +182,21 @@ const DashboardTab = () => {
           pagination={false}
         />
       </TableCard>
+
+      <TableCard title={t('boxOffice.counterMoviesTitle')} style={{ marginTop: 16 }}>
+        <Table<CounterMovie>
+          rowKey="movie_id"
+          columns={movieColumns}
+          dataSource={movies.data ?? []}
+          loading={movies.isFetching}
+          pagination={false}
+          scroll={{ x: 500 }}
+          locale={{ emptyText: <Empty description={t('common.noData')} /> }}
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {t('boxOffice.counterMoviesHint')}
+        </Typography.Text>
+      </TableCard>
     </>
   );
 };
@@ -153,8 +211,13 @@ export const BoxOfficePage = () => {
         items={[
           { key: 'dashboard', label: t('boxOffice.tabDashboard'), children: <DashboardTab /> },
           { key: 'sell', label: t('boxOffice.tabSell'), children: <CounterSellPanel /> },
+          { key: 'pickup', label: t('boxOffice.tabPickup'), children: <ComboPickupPanel /> },
+          {
+            key: 'concession',
+            label: t('boxOffice.tabConcession'),
+            children: <CounterComboPanel />,
+          },
           { key: 'lookup', label: t('boxOffice.tabLookup'), children: <OrderLookupPanel /> },
-          { key: 'checkin', label: t('boxOffice.tabCheckin'), children: <ShowtimeTicketsPanel /> },
         ]}
       />
     </>

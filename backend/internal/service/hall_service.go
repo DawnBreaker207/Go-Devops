@@ -26,6 +26,7 @@ type HallService interface {
 	UpdateHall(ctx context.Context, hallID string, req dto.UpdateHallRequest) (*dto.HallResponse, error)
 	RegenerateLayout(ctx context.Context, hallID string, req dto.HallRequest) (*dto.HallResponse, error)
 	AddRow(ctx context.Context, hallID string) ([]dto.SeatResponse, error)
+	AddSeat(ctx context.Context, hallID string, req dto.AddSeatRequest) (*dto.SeatResponse, error)
 	DeleteRow(ctx context.Context, hallID, rowLabel string) ([]dto.SeatResponse, error)
 	AddColumn(ctx context.Context, hallID string) ([]dto.SeatResponse, error)
 	MergeSeats(ctx context.Context, hallID string, req dto.MergeSeatsRequest) (*dto.SeatResponse, error)
@@ -69,7 +70,18 @@ func (s *hallService) SeatsByHall(ctx context.Context, hallID string) ([]models.
 	if _, err := s.GetByID(ctx, hallID); err != nil {
 		return nil, err
 	}
-	return s.hallRepo.SeatsByHall(ctx, hallID)
+	seats, err := s.hallRepo.SeatsByHall(ctx, hallID)
+	if err != nil {
+		return nil, err
+	}
+	booked, err := s.hallRepo.BookedSeatIDs(ctx, hallID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range seats {
+		seats[i].HasBookingHistory = booked[seats[i].ID]
+	}
+	return seats, nil
 }
 
 // hallTemplate: built-in starting layout picked instead of typing rows/types/gaps by hand.
@@ -203,6 +215,13 @@ func (s *hallService) Create(ctx context.Context, req dto.HallRequest) (*dto.Hal
 				return apperrors.ErrHallNameExists
 			}
 			return err
+		}
+		// GORM skips false on default:true columns: force-write or new halls silently go live.
+		if !active {
+			if err := tx.Model(&models.Hall{}).Where("id = ?", hall.ID).UpdateColumn("active", false).Error; err != nil {
+				return err
+			}
+			hall.Active = false
 		}
 		for i := range seats {
 			seats[i].HallID = hall.ID
@@ -784,6 +803,85 @@ func (s *hallService) AddColumn(ctx context.Context, hallID string) ([]dto.SeatR
 		return nil, err
 	}
 	return dto.NewSeatResponses(newSeats), nil
+}
+
+// AddSeat appends one seat at a single row end (same booking gate as other writes).
+func (s *hallService) AddSeat(ctx context.Context, hallID string, req dto.AddSeatRequest) (*dto.SeatResponse, error) {
+	var created models.Seat
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.hallRepo.LockSchedule(tx, hallID); err != nil {
+			return err
+		}
+		hall, err := s.hallRepo.FindByID(ctx, hallID)
+		if err != nil {
+			return err
+		}
+		if hall == nil {
+			return apperrors.ErrHallNotFound
+		}
+		rowLabel := strings.ToUpper(strings.TrimSpace(req.RowLabel))
+		rowIndex := dto.RowNumber(rowLabel)
+		if rowIndex < 1 || rowIndex > hall.Rows {
+			return apperrors.ErrSeatNotFound
+		}
+		hasBookings, err := s.hallRepo.HallHasBookings(tx, hallID)
+		if err != nil {
+			return err
+		}
+		if hasBookings {
+			return apperrors.ErrHallHasBookings
+		}
+
+		maxCol, err := s.hallRepo.MaxColInRow(tx, hallID, rowLabel)
+		if err != nil {
+			return err
+		}
+		nextCol := maxCol + 1
+		if nextCol > maxHallSeatsPerRow {
+			return apperrors.ErrHallColumnLimitReached
+		}
+		seatType := strings.TrimSpace(req.SeatType)
+		if seatType == "" {
+			seatType = models.SeatStandard
+		}
+		newRow := []models.Seat{{
+			HallID:    hallID,
+			RowIndex:  rowIndex,
+			RowLabel:  rowLabel,
+			ColNumber: nextCol,
+			SeatType:  seatType,
+			IsGap:     false,
+			ColSpan:   1,
+		}}
+		if err := s.hallRepo.CreateSeats(tx, newRow); err != nil {
+			if apperrors.IsUniqueViolation(err) {
+				return apperrors.ErrHallColumnLimitReached.WithDetails(map[string]string{"row": rowLabel})
+			}
+			return err
+		}
+		created = newRow[0]
+		if err := s.hallRepo.CreateShowtimeSeatsForSeats(tx, hallID, []string{created.ID}); err != nil {
+			return err
+		}
+
+		if nextCol > hall.SeatsPerRow {
+			hall.SeatsPerRow = nextCol
+			if err := s.hallRepo.UpdateHallLayout(tx, hall); err != nil {
+				return err
+			}
+		}
+		if rec, ok := audit.FromContext(ctx); ok {
+			rec.ResourceID = hallID
+			rec.After = map[string]any{"row_label": rowLabel, "col_number": nextCol, "seat_type": seatType}
+			return audit.In(ctx, tx, rec)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := dto.NewSeatResponse(&created)
+	return &result, nil
 }
 
 // DeleteRow drops one row then shifts later rows down (ids unchanged, FK-safe).

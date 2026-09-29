@@ -167,6 +167,7 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			catalog.DELETE("/halls/:id", middleware.Audit(db, "admin.delete_hall", "hall"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteHall)
 			catalog.PATCH("/halls/:id/seats", middleware.Audit(db, "admin.bulk_update_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.BulkUpdateSeats)
 			catalog.POST("/halls/:id/seats/rows", middleware.Audit(db, "admin.add_hall_row", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.AddRow)
+			catalog.POST("/halls/:id/seats", middleware.Audit(db, "admin.add_hall_seat", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.AddSeat)
 			catalog.DELETE("/halls/:id/seats/rows/:rowLabel", middleware.Audit(db, "admin.delete_hall_row", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.DeleteRow)
 			catalog.POST("/halls/:id/seats/columns", middleware.Audit(db, "admin.add_hall_column", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.AddColumn)
 			catalog.POST("/halls/:id/seats/merge", middleware.Audit(db, "admin.merge_hall_seats", "seat"), middleware.RequireRoles(models.RoleAdmin, models.RoleStaff), h.Hall.MergeSeats)
@@ -240,9 +241,15 @@ func New(cfg *config.Config, db *gorm.DB, jwtManager *jwt.Manager, accounts midd
 			staff.GET("/dashboard", h.Staff.Dashboard)
 			staff.GET("/overview", h.Staff.Overview)
 			staff.GET("/boxoffice/day", h.Staff.BoxOfficeDay)
+			staff.GET("/boxoffice/movies", h.Staff.CounterMovies)
 			// Same action as the service's in-transaction success row, so filtering shows both outcomes.
 			staff.POST("/orders", middleware.Audit(db, "orders.counter_sell", "booking"), h.Staff.CounterSell)
+			staff.POST("/combo-orders", middleware.Audit(db, "combo_orders.counter_sell", "combo_order"), h.Combo.CounterSell)
+			staff.GET("/combo-orders/pending", h.Combo.PendingPickups)
+			staff.POST("/combo-orders/:id/collect", middleware.Audit(db, "combo_orders.collect", "combo_order"), h.Combo.CollectOrder)
 			staff.GET("/orders/:id", h.Staff.OrderDetail)
+			staff.POST("/orders/:id/collect", middleware.Audit(db, "orders.collect", "booking"), h.Staff.CollectTickets)
+			staff.GET("/tickets/:code/order", h.Staff.OrderByTicket)
 			staff.GET("/showtimes/:id/tickets", h.Staff.Tickets)
 			// Read-only customer lookup; staff/admin accounts via /admin/users.
 			staff.GET("/customers", h.Staff.SearchCustomers)

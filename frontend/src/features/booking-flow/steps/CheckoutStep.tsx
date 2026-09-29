@@ -65,6 +65,12 @@ export const CheckoutStep = ({ bookingId, paySignal = 0 }: CheckoutStepProps) =>
         bookingId,
         payload: activeProvider ? { provider: activeProvider } : {},
       });
+      // Staging misconfig (wrong PAYMENT_PUBLIC_BASE_URL) yields an empty/unreachable
+      // checkout URL: never navigate blindly, or the order strands in pending with no QR.
+      if (!result.redirect_url) {
+        setActionError(t('customer.payNoRedirect'));
+        return;
+      }
       // Same-tab redirect so the gateway returns the browser to /payment-result.
       window.location.href = result.redirect_url;
     } catch (error) {

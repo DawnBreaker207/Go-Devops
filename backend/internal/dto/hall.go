@@ -80,6 +80,13 @@ type SplitSeatRequest struct {
 	Label string `json:"label" binding:"required,max=8" example:"D3"`
 }
 
+// One seat appended at the end of a single row (the row-end "+" in the
+// editor). Couple seats come only from merging, never from direct creation.
+type AddSeatRequest struct {
+	RowLabel string `json:"row_label" binding:"required,max=8" example:"B"`
+	SeatType string `json:"seat_type" binding:"omitempty,oneof=standard vip recliner" example:"standard"`
+}
+
 type HallResponse struct {
 	ID             string    `json:"id"`
 	Name           string    `json:"name"`
@@ -123,6 +130,8 @@ type SeatResponse struct {
 	SeatType string `json:"seat_type"`
 	IsGap    bool   `json:"is_gap"`
 	ColSpan  int    `json:"col_span"`
+	// True when the seat ever appeared in a booking: merge/split refuse it.
+	HasBookingHistory bool `json:"has_booking_history"`
 }
 
 func SeatLabel(rowLabel string, col int) string {
@@ -139,6 +148,7 @@ func NewSeatResponse(seat *models.Seat) SeatResponse {
 		SeatType: seat.SeatType,
 		IsGap:    seat.IsGap,
 		ColSpan:  seat.ColSpan,
+		HasBookingHistory: seat.HasBookingHistory,
 	}
 }
 

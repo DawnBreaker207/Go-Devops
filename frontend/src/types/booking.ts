@@ -67,6 +67,7 @@ export interface OrderStatus {
   created_at: string;
   expires_at?: string;
   paid_at?: string;
+  collected_at?: string;
   /** The attempt currently holding money. Absent for unpaid holds (normal). */
   payment?: PaymentSummary;
   showtime?: OrderShowtime;

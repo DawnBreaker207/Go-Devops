@@ -43,6 +43,9 @@ WORKDIR /app
 # dev secrets never ship.
 COPY --from=builder /out/backend-cp /app/backend-cp
 
+# migrations travel with the image (extracted by deploy pipelines).
+COPY --from=builder /src/migrations/schema /migrations/schema
+
 ENV MAIL_OUTBOX_DIR=/app/data/mail \
     STORAGE_LOCAL_DIR=/app/data/uploads
 

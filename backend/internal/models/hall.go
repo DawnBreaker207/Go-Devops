@@ -54,6 +54,8 @@ type Seat struct {
 	ColSpan   int       `gorm:"type:smallint;not null;default:1" json:"col_span"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Transient: set by SeatsByHall for the admin editor; never persisted.
+	HasBookingHistory bool `gorm:"-" json:"has_booking_history"`
 }
 
 func (Seat) TableName() string { return "seats" }

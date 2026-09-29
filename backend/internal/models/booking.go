@@ -52,6 +52,7 @@ type Booking struct {
 	// PaymentID is the attempt whose collected money this booking carries.
 	PaymentID         *string    `gorm:"type:uuid" json:"payment_id,omitempty"`
 	PaidAt            *time.Time `json:"paid_at,omitempty"`
+	CollectedAt       *time.Time `json:"collected_at,omitempty"`
 	FinalizeAttempts  int        `gorm:"not null;default:0" json:"-"`
 	NextFinalizeAt    *time.Time `json:"-"`
 	EmailSentAt       *time.Time `json:"email_sent_at,omitempty"`

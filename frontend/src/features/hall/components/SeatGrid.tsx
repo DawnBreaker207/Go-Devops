@@ -9,7 +9,8 @@ import {
   SEAT_SIZE,
   buildGridLayout,
   groupSeatsByRow,
-  renderedSeatsPerRow,
+  isVirtualGapSeatId,
+  widestColumn,
 } from '../seatGrid';
 import './SeatGrid.css';
 
@@ -27,7 +28,7 @@ interface SeatGridProps {
   onFillGap: (seat: Seat) => void;
   onAddRow?: () => void;
   onDeleteRow?: (rowLabel: string) => void;
-  onAddColumn?: () => void;
+  onAddSeat?: (rowLabel: string) => void;
   aisleAfterColsOverride?: number[];
 }
 
@@ -45,15 +46,15 @@ export const SeatGrid = ({
   onFillGap,
   onAddRow,
   onDeleteRow,
-  onAddColumn,
+  onAddSeat,
   aisleAfterColsOverride,
 }: SeatGridProps) => {
   const { t } = useTranslation();
   const { token } = antdTheme.useToken();
 
   const rows = useMemo(() => groupSeatsByRow(seats), [seats]);
-  // Derive column count from data: it can drift from hall.seats_per_row.
-  const seatsPerRow = useMemo(() => renderedSeatsPerRow(hall, seats), [hall, seats]);
+  // Rendered seats decide the width; declared seats_per_row goes stale after trim.
+  const seatsPerRow = useMemo(() => widestColumn(seats), [seats]);
   const isAislePreview = aisleAfterColsOverride !== undefined;
   const aisleAfterCols = aisleAfterColsOverride ?? hall.aisle_after_cols;
   const layout = useMemo(
@@ -61,7 +62,11 @@ export const SeatGrid = ({
     [seatsPerRow, aisleAfterCols]
   );
 
-  const seatIds = useMemo(() => seats.map((s) => s.id), [seats]);
+  // Virtual slots are display-only: never part of bulk selection.
+  const seatIds = useMemo(
+    () => seats.filter((s) => !isVirtualGapSeatId(s.id)).map((s) => s.id),
+    [seats]
+  );
   const allSelected = seatIds.length > 0 && seatIds.every((id) => selected.has(id));
   const someSelected = seatIds.some((id) => selected.has(id));
 
@@ -153,6 +158,8 @@ export const SeatGrid = ({
                     aria-hidden
                     style={{
                       gridColumn: `${layout.lineOf(col) + 1} / span 1`,
+                      // Pinned: sparse auto-flow must never decide the row.
+                      gridRow: 1,
                       alignSelf: 'stretch',
                       justifySelf: 'center',
                       width: 0,
@@ -177,6 +184,7 @@ export const SeatGrid = ({
                           onClick={readOnly ? undefined : () => onFillGap(seat)}
                           style={{
                             gridColumn,
+                            gridRow: 1,
                             height: SEAT_SIZE,
                             minWidth: 0,
                             padding: 0,
@@ -240,7 +248,12 @@ export const SeatGrid = ({
                     <span
                       key={seat.id}
                       className="seat-cell"
-                      style={{ gridColumn, position: 'relative', display: 'inline-block' }}
+                      style={{
+                        gridColumn,
+                        gridRow: 1,
+                        position: 'relative',
+                        display: 'inline-block',
+                      }}
                     >
                       {seatButton}
                       {!readOnly ? (
@@ -288,12 +301,12 @@ export const SeatGrid = ({
                 })}
               </div>
 
-              {!readOnly && onAddColumn ? (
-                <Tooltip title={t('hall.addColumnHint')}>
+              {!readOnly && onAddSeat ? (
+                <Tooltip title={t('hall.addSeatHint')}>
                   <button
                     type="button"
-                    onClick={onAddColumn}
-                    aria-label={t('hall.addColumn')}
+                    onClick={() => onAddSeat(row.rowLabel)}
+                    aria-label={t('hall.addSeat', { row: row.rowLabel })}
                     style={{
                       width: SEAT_SIZE,
                       height: SEAT_SIZE,
@@ -366,7 +379,7 @@ export const SeatGrid = ({
                   <PlusOutlined style={{ fontSize: 16 }} />
                 </button>
               </Tooltip>
-              {onAddColumn ? <div style={{ width: SEAT_SIZE }} /> : null}
+              {onAddSeat ? <div style={{ width: SEAT_SIZE }} /> : null}
               {onDeleteRow ? <div style={{ width: 24 }} /> : null}
             </Flex>
           ) : null}

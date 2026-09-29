@@ -26,6 +26,17 @@ type BoxOfficeDayResponse struct {
 	Date  string `json:"date" example:"2026-09-14"`
 	Count int64  `json:"count"`
 	Total int64  `json:"total"`
+	// Combos never attach to a movie: totals only, never the per-movie table.
+	ComboCount int64 `json:"combo_count"`
+	ComboTotal int64 `json:"combo_total"`
+}
+
+// One row of counter ticket sales by movie (combos excluded by design).
+type CounterMovieResponse struct {
+	MovieID string `json:"movie_id"`
+	Title   string `json:"title"`
+	Tickets int64  `json:"tickets"`
+	Revenue int64  `json:"revenue"`
 }
 
 type StaffTicketResponse struct {
@@ -98,6 +109,8 @@ type StaffOverviewResponse struct {
 	Showtimes         []StaffShowtimeResponse `json:"showtimes"`
 	CounterSalesCount int64                   `json:"counter_sales_count"`
 	CounterSalesTotal int64                   `json:"counter_sales_total"`
+	ComboSalesCount   int64                   `json:"combo_sales_count"`
+	ComboSalesTotal   int64                   `json:"combo_sales_total"`
 	AwaitingCheckin   int                     `json:"awaiting_checkin"`
 }
 

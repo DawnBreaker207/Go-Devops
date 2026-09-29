@@ -101,6 +101,25 @@ func (h *StaffHandler) BoxOfficeDay(c *gin.Context) {
 	response.OK(c, day)
 }
 
+// @Summary		Counter ticket sales split by movie for one day
+// @Description	Combos never attach to a movie, so they join day totals only, never this table.
+// @Tags			staff
+// @Produce		json
+// @Security		BearerAuth
+// @Param			date	query		string	false	"Local date YYYY-MM-DD (default today)"
+// @Success		200		{object}	response.Body{data=[]dto.CounterMovieResponse}
+// @Failure		400		{object}	response.Body
+// @Failure		403		{object}	response.Body
+// @Router			/staff/boxoffice/movies [get]
+func (h *StaffHandler) CounterMovies(c *gin.Context) {
+	rows, err := h.reports.CounterMovies(c.Request.Context(), c.Query("date"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, rows)
+}
+
 //	@Summary		Staff dashboard: today's showtime board + counter sales + tickets awaiting check-in, in one call
 //	@Tags			staff
 //	@Produce		json
@@ -214,6 +233,44 @@ func (h *StaffHandler) CustomerOrders(c *gin.Context) {
 //	@Router			/staff/orders/{id} [get]
 func (h *StaffHandler) OrderDetail(c *gin.Context) {
 	order, err := h.bookings.AdminOrder(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, order)
+}
+
+//	@Summary		Mark a booking's tickets handed over at the counter
+//	@Description	Idempotent: repeats return the order with its original timestamp; reprints stay possible.
+//	@Tags			staff
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Booking ID"
+//	@Success		200	{object}	response.Body{data=dto.OrderDetailResponse}
+//	@Failure		401	{object}	response.Body
+//	@Failure		403	{object}	response.Body
+//	@Failure		404	{object}	response.Body
+//	@Router			/staff/orders/{id}/collect [post]
+func (h *StaffHandler) CollectTickets(c *gin.Context) {
+	order, err := h.bookings.CollectTickets(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, order)
+}
+
+//	@Summary		Any order's e-ticket detail, by ticket id or QR code (counter scanner)
+//	@Tags			staff
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			code	path		string	true	"Ticket ID or QR code"
+//	@Success		200		{object}	response.Body{data=dto.OrderDetailResponse}
+//	@Failure		403		{object}	response.Body
+//	@Failure		404		{object}	response.Body
+//	@Router			/staff/tickets/{code}/order [get]
+func (h *StaffHandler) OrderByTicket(c *gin.Context) {
+	order, err := h.bookings.OrderByTicket(c.Request.Context(), c.Param("code"))
 	if err != nil {
 		response.Error(c, err)
 		return

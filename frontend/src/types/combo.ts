@@ -22,6 +22,14 @@ export interface CreateComboOrderPayload {
   items: ComboOrderItemPayload[];
 }
 
+export type ComboPayMethod = 'cash' | 'pos';
+
+export interface CounterComboOrderPayload {
+  items: ComboOrderItemPayload[];
+  pay_method: ComboPayMethod;
+  customer_name?: string;
+}
+
 export interface ComboOrderItem {
   combo_id: string;
   combo_name: string;
@@ -35,8 +43,36 @@ export interface ComboOrder {
   booking_id?: string;
   status: string;
   total: number;
+  sold_channel: string;
+  pay_method?: string;
+  customer_name?: string;
   items: ComboOrderItem[];
   created_at: string;
+}
+
+export interface ComboPickupItem {
+  combo_id: string;
+  combo_name: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+}
+
+export interface ComboPickup {
+  order_id: string;
+  customer_name: string;
+  customer_email: string;
+  booking_id?: string;
+  movie_title?: string;
+  showtime_at?: string;
+  total: number;
+  items: ComboPickupItem[];
+  created_at: string;
+}
+
+export interface PickupQuery {
+  date?: string;
+  search?: string;
 }
 
 export interface AdminComboListQuery extends PageQuery {

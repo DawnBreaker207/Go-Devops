@@ -69,6 +69,7 @@ type BookingService interface {
 	Status(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	Order(ctx context.Context, userID, bookingID string) (*dto.OrderDetailResponse, error)
 	AdminOrder(ctx context.Context, bookingID string) (*dto.OrderDetailResponse, error)
+	OrderByTicket(ctx context.Context, ticketRef string) (*dto.OrderDetailResponse, error)
 	Cancel(ctx context.Context, userID, bookingID string) (*dto.OrderStatusResponse, error)
 	List(ctx context.Context, userID string, q dto.PageQuery) ([]dto.OrderStatusResponse, int64, error)
 	// Transactions: caller's payment-attempt history, not booking/ticket history (see List).
@@ -78,6 +79,7 @@ type BookingService interface {
 	// TicketQR: buyer or staff/admin only; no check-in window (unlike Redeem).
 	TicketQR(ctx context.Context, userID, role, ticketID string) (*dto.TicketQRResponse, error)
 	CounterSell(ctx context.Context, req dto.CounterSellRequest) (*dto.OrderDetailResponse, error)
+	CollectTickets(ctx context.Context, id string) (*dto.OrderDetailResponse, error)
 	SweepExpired(ctx context.Context, limit int) (SweepResult, error)
 	// CancelShowtime refunds paid bookings via the standard MarkRefundPending -> settleRefund pipeline.
 	// Unlike Delete/DELETE, which is refused once a showtime has any booking.
@@ -796,6 +798,25 @@ func (s *bookingService) AdminOrder(ctx context.Context, bookingID string) (*dto
 	return s.orderDetail(ctx, b)
 }
 
+// OrderByTicket resolves the order holding one ticket id or QR code (read-only).
+func (s *bookingService) OrderByTicket(ctx context.Context, ticketRef string) (*dto.OrderDetailResponse, error) {
+	row, err := s.repo.TicketForGate(ctx, ticketRef)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, apperrors.ErrBookingNotFound
+	}
+	b, err := s.repo.FindByID(ctx, row.BookingID)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, apperrors.ErrBookingNotFound
+	}
+	return s.orderDetail(ctx, b)
+}
+
 // ownedBooking reconciles first; other user's booking is 403, not 404.
 func (s *bookingService) ownedBooking(ctx context.Context, userID, bookingID string) (*models.Booking, error) {
 	b, err := s.repo.FindByID(ctx, bookingID)
@@ -1448,6 +1469,33 @@ func (s *bookingService) CounterSell(ctx context.Context, req dto.CounterSellReq
 	return s.orderDetail(ctx, b)
 }
 
+// CollectTickets marks a booking's tickets handed over (idempotent reprints stay possible).
+func (s *bookingService) CollectTickets(ctx context.Context, id string) (*dto.OrderDetailResponse, error) {
+	b, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, apperrors.ErrBookingNotFound
+	}
+	err = s.inTx(ctx, func(tx *gorm.DB) error {
+		if _, err := s.repo.MarkCollected(ctx, tx, id); err != nil {
+			return err
+		}
+		return s.audit(ctx, tx, "orders.collect", "booking", id, id, map[string]any{
+			"collected": true,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	b, err = s.repo.FindByID(context.WithoutCancel(ctx), id)
+	if err != nil {
+		return nil, err
+	}
+	return s.orderDetail(ctx, b)
+}
+
 func orderStatus(b *models.Booking, pay *models.Payment, show *repository.ShowtimeInfoRow) dto.OrderStatusResponse {
 	res := dto.OrderStatusResponse{
 		ID:           b.ID,
@@ -1461,6 +1509,7 @@ func orderStatus(b *models.Booking, pay *models.Payment, show *repository.Showti
 		CreatedAt:      b.CreatedAt,
 		ExpiresAt:      b.ExpiresAt,
 		PaidAt:         b.PaidAt,
+		CollectedAt:    b.CollectedAt,
 	}
 	if show != nil {
 		now := time.Now()

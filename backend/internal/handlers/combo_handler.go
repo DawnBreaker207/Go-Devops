@@ -59,6 +59,73 @@ func (h *ComboHandler) CreateOrder(c *gin.Context) {
 	response.Created(c, order)
 }
 
+// @Summary		Walk-in concession sale at the counter
+// @Description	No account, no booking: cash/POS taken at the till, goods handed over at once (status collected, never queued for pickup).
+// @Tags			combos
+// @Accept			json
+// @Produce		json
+// @Security		BearerAuth
+// @Param			payload	body		dto.CounterComboOrderRequest	true	"Items, takings method, optional walk-in name"
+// @Success		201		{object}	response.Body{data=dto.ComboOrderResponse}
+// @Failure		400		{object}	response.Body
+// @Failure		401		{object}	response.Body
+// @Failure		403		{object}	response.Body
+// @Failure		404		{object}	response.Body
+// @Router			/staff/combo-orders [post]
+func (h *ComboHandler) CounterSell(c *gin.Context) {
+	var req dto.CounterComboOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	order, err := h.comboService.CounterSell(c.Request.Context(), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, order)
+}
+
+// @Summary		Handover board: online pre-orders awaiting pickup
+// @Description	One show date (default today) plus booking-less orders; searchable by order id, ticket code, customer name or email.
+// @Tags			combos
+// @Produce		json
+// @Security		BearerAuth
+// @Param			date	query	string	false	"Show date YYYY-MM-DD, default today"
+// @Param			search	query	string	false	"Order id, ticket code, customer name or email"
+// @Success		200		{object}	response.Body{data=[]dto.ComboPickupResponse}
+// @Failure		401		{object}	response.Body
+// @Failure		403		{object}	response.Body
+// @Router			/staff/combo-orders/pending [get]
+func (h *ComboHandler) PendingPickups(c *gin.Context) {
+	orders, err := h.comboService.PendingPickups(c.Request.Context(), c.Query("date"), c.Query("search"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, orders)
+}
+
+// @Summary		Hand one pre-order over the counter
+// @Description	Idempotent loser path: an already-collected order answers 404 (nothing left to hand over), so two counters converging never double-hand.
+// @Tags			combos
+// @Produce		json
+// @Security		BearerAuth
+// @Param			id	path		string	true	"Combo order id"
+// @Success		200	{object}	response.Body{data=dto.ComboOrderResponse}
+// @Failure		401	{object}	response.Body
+// @Failure		403	{object}	response.Body
+// @Failure		404	{object}	response.Body
+// @Router			/staff/combo-orders/{id}/collect [post]
+func (h *ComboHandler) CollectOrder(c *gin.Context) {
+	order, err := h.comboService.CollectOrder(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.OK(c, order)
+}
+
 // @Summary		List the current user's combo orders
 // @Tags			combos
 // @Produce		json

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
@@ -138,9 +140,28 @@ type ComboOrderRepository interface {
 	// Create inserts the order and its items atomically (its own transaction,
 	// never the caller's).
 	Create(ctx context.Context, order *models.ComboOrder, items []models.ComboOrderItem) error
+	// CreateCounterOrder: walk-in sale with explicit columns (user_id NULL).
+	CreateCounterOrder(ctx context.Context, order *models.ComboOrder, items []models.ComboOrderItem) error
 	ListByUser(ctx context.Context, userID string, page, pageSize int) ([]models.ComboOrder, int64, error)
+	FindOrderByID(ctx context.Context, id string) (*models.ComboOrder, error)
 	// ItemsByOrderIDs batches the item lookup for a page of orders.
 	ItemsByOrderIDs(ctx context.Context, orderIDs []string) (map[string][]models.ComboOrderItem, error)
+	// PendingPickups lists online confirmed orders awaiting handover.
+	PendingPickups(ctx context.Context, from, to time.Time, search string, limit int) ([]PendingPickupRow, error)
+	// CollectCAS flips confirmed -> collected exactly once.
+	CollectCAS(ctx context.Context, id string) (bool, error)
+}
+
+// PendingPickupRow is one line on the counter's handover board.
+type PendingPickupRow struct {
+	OrderID      string
+	CustomerName string
+	CustomerMail string
+	BookingID    *string
+	MovieTitle   *string
+	ShowtimeAt   *time.Time
+	Total        int64
+	CreatedAt    time.Time
 }
 
 type comboOrderRepository struct {
@@ -164,6 +185,75 @@ func (r *comboOrderRepository) Create(ctx context.Context, order *models.ComboOr
 		}
 		return nil
 	})
+}
+
+func (r *comboOrderRepository) CreateCounterOrder(ctx context.Context, order *models.ComboOrder, items []models.ComboOrderItem) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if order.ID == "" {
+			order.ID = uuid.NewString()
+		}
+		if err := tx.Exec(`INSERT INTO combo_orders
+			(id, user_id, booking_id, status, total, sold_channel, pay_method, customer_name, created_at, updated_at)
+			VALUES (?, NULL, NULL, ?, ?, ?, ?, NULLIF(?, ''), NOW(), NOW())`,
+			order.ID, order.Status, order.Total, order.SoldChannel, order.PayMethod, order.CustomerName).Error; err != nil {
+			return fmt.Errorf("create counter combo order: %w", err)
+		}
+		for i := range items {
+			items[i].ComboOrderID = order.ID
+		}
+		if err := tx.Create(&items).Error; err != nil {
+			return fmt.Errorf("create counter combo order items: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *comboOrderRepository) PendingPickups(ctx context.Context, from, to time.Time, search string, limit int) ([]PendingPickupRow, error) {
+	var rows []PendingPickupRow
+	q := r.db.WithContext(ctx).Table("combo_orders o").
+		Select(`o.id AS order_id, COALESCE(u.full_name, '') AS customer_name, COALESCE(u.email, '') AS customer_mail,
+			o.booking_id, m.title AS movie_title, st.start_at AS showtime_at, o.total, o.created_at`).
+		Joins("JOIN users u ON u.id = o.user_id").
+		Joins("LEFT JOIN bookings b ON b.id = o.booking_id").
+		Joins("LEFT JOIN showtimes st ON st.id = b.showtime_id").
+		Joins("LEFT JOIN movies m ON m.id = st.movie_id").
+		Where("o.status = ? AND o.sold_channel = ?", models.ComboOrderConfirmed, models.SoldChannelOnline).
+		Where("(o.booking_id IS NULL OR (st.start_at >= ? AND st.start_at < ?))", from, to).
+		Order("o.created_at")
+	if s := strings.TrimSpace(search); s != "" {
+		like := "%" + s + "%"
+		q = q.Where(`(o.id::text ILIKE ? OR u.full_name ILIKE ? OR u.email ILIKE ? OR EXISTS
+			(SELECT 1 FROM tickets t WHERE t.booking_id = o.booking_id AND t.code ILIKE ?))`,
+			like, like, like, like)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("pending pickups: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *comboOrderRepository) CollectCAS(ctx context.Context, id string) (bool, error) {
+	res := r.db.WithContext(ctx).Table("combo_orders").
+		Where("id = ? AND status = ?", id, models.ComboOrderConfirmed).
+		Update("status", models.ComboOrderCollected)
+	if res.Error != nil {
+		return false, fmt.Errorf("collect combo order: %w", res.Error)
+	}
+	return res.RowsAffected == 1, nil
+}
+
+func (r *comboOrderRepository) FindOrderByID(ctx context.Context, id string) (*models.ComboOrder, error) {
+	var order models.ComboOrder
+	if err := r.db.WithContext(ctx).First(&order, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find combo order: %w", err)
+	}
+	return &order, nil
 }
 
 func (r *comboOrderRepository) ListByUser(ctx context.Context, userID string, page, pageSize int) ([]models.ComboOrder, int64, error) {

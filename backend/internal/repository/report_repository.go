@@ -40,6 +40,8 @@ type ReportRepository interface {
 	ShowtimeBoard(ctx context.Context, from, to time.Time) ([]ShowtimeBoardRow, error)
 	ShowtimeTickets(ctx context.Context, showtimeID, status string) ([]ShowtimeTicketRow, error)
 	CounterSalesDay(ctx context.Context, from, to time.Time) (count, total int64, err error)
+	CounterSalesByMovie(ctx context.Context, from, to time.Time) ([]CounterMovieRow, error)
+	CounterComboDay(ctx context.Context, from, to time.Time) (count, total int64, err error)
 	LiveDayAggregate(ctx context.Context, from, to time.Time) (LiveAggregateRow, error)
 	EntityCounts(ctx context.Context) (EntityCountsRow, error)
 	RevenueBreakdown(ctx context.Context, from, to time.Time) (BreakdownRows, error)
@@ -270,7 +272,8 @@ func (r *reportRepository) CounterSalesDay(ctx context.Context, from, to time.Ti
 		Count int64 `gorm:"column:count"`
 		Total int64 `gorm:"column:total"`
 	}
-	if err := r.db.WithContext(ctx).Raw(`SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total
+	if err := r.db.WithContext(ctx).Raw(`SELECT COUNT(*) AS count,
+COALESCE(SUM(total_amount), 0) AS total
 		FROM bookings
 		WHERE sold_via = ? AND status != 'pending' AND paid_at >= ? AND paid_at < ?`,
 		models.SoldViaCounter, from, to).Scan(&row).Error; err != nil {
@@ -279,6 +282,47 @@ func (r *reportRepository) CounterSalesDay(ctx context.Context, from, to time.Ti
 	return row.Count, row.Total, nil
 }
 
+// CounterSalesByMovie splits counter ticket sales by movie (same filter as CounterSalesDay).
+func (r *reportRepository) CounterSalesByMovie(ctx context.Context, from, to time.Time) ([]CounterMovieRow, error) {
+	var rows []CounterMovieRow
+	if err := r.db.WithContext(ctx).Raw(`SELECT m.id AS movie_id, m.title,
+		COALESCE(SUM((SELECT COUNT(*) FROM tickets t WHERE t.booking_id = b.id)), 0) AS tickets,
+		COALESCE(SUM(b.total_amount), 0) AS revenue
+		FROM bookings b
+		JOIN showtimes st ON st.id = b.showtime_id
+		JOIN movies m ON m.id = st.movie_id
+		WHERE b.sold_via = ? AND b.status != 'pending' AND b.paid_at >= ? AND b.paid_at < ?
+		GROUP BY m.id, m.title ORDER BY revenue DESC`,
+		models.SoldViaCounter, from, to).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("counter sales by movie: %w", err)
+	}
+	return rows, nil
+}
+
+// CounterComboDay counts walk-in concession sales, excluding cancelled ones.
+func (r *reportRepository) CounterComboDay(ctx context.Context, from, to time.Time) (int64, int64, error) {
+	var row struct {
+		Count int64 `gorm:"column:count"`
+		Total int64 `gorm:"column:total"`
+	}
+	if err := r.db.WithContext(ctx).Raw(`SELECT COUNT(*) AS count,
+COALESCE(SUM(total), 0) AS total
+		FROM combo_orders
+		WHERE sold_channel = ? AND status NOT IN ('pending', 'cancelled')
+		AND created_at >= ? AND created_at < ?`,
+		models.SoldChannelCounter, from, to).Scan(&row).Error; err != nil {
+		return 0, 0, fmt.Errorf("counter combo day: %w", err)
+	}
+	return row.Count, row.Total, nil
+}
+
+// CounterMovieRow is one line of counter ticket sales by movie.
+type CounterMovieRow struct {
+	MovieID string
+	Title   string
+	Tickets int64
+	Revenue int64
+}
 // LiveDayAggregate: read-only twin of the upsert computation, so overview needn't wait for closeDay.
 const liveDayAggregateSQL = `
 WITH paid AS (

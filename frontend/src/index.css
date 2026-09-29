@@ -272,3 +272,22 @@ body {
     }
   }
 }
+
+/* PRINT. Last in file (see the motion-test note above): only .cp-print-sheet
+   leaves the page. Slips carry their own black-on-white inline styles so the
+   operator dark theme never leaks onto paper. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .cp-print-sheet,
+  .cp-print-sheet * {
+    visibility: visible;
+  }
+  .cp-print-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

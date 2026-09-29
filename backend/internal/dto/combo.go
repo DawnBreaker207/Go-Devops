@@ -45,6 +45,13 @@ type CreateComboOrderRequest struct {
 	Items     []ComboOrderItemRequest `json:"items" binding:"required,min=1,dive"`
 }
 
+// Walk-in concession sale: no account/booking, handed over at once.
+type CounterComboOrderRequest struct {
+	Items        []ComboOrderItemRequest `json:"items" binding:"required,min=1,dive"`
+	PayMethod    string                  `json:"pay_method" binding:"required,oneof=cash pos"`
+	CustomerName string                  `json:"customer_name" binding:"omitempty,max=255"`
+}
+
 type ComboOrderItemResponse struct {
 	ComboID   string `json:"combo_id"`
 	ComboName string `json:"combo_name"`
@@ -54,24 +61,34 @@ type ComboOrderItemResponse struct {
 }
 
 type ComboOrderResponse struct {
-	ID        string                   `json:"id"`
-	BookingID string                   `json:"booking_id,omitempty"`
-	Status    string                   `json:"status"`
-	Total     int64                    `json:"total"`
-	Items     []ComboOrderItemResponse `json:"items"`
-	CreatedAt time.Time                `json:"created_at"`
+	ID           string                   `json:"id"`
+	BookingID    string                   `json:"booking_id,omitempty"`
+	Status       string                   `json:"status"`
+	Total        int64                    `json:"total"`
+	SoldChannel  string                   `json:"sold_channel"`
+	PayMethod    string                   `json:"pay_method,omitempty"`
+	CustomerName string                   `json:"customer_name,omitempty"`
+	Items        []ComboOrderItemResponse `json:"items"`
+	CreatedAt    time.Time                `json:"created_at"`
 }
 
 func NewComboOrderResponse(o *models.ComboOrder, items []models.ComboOrderItem) ComboOrderResponse {
 	res := ComboOrderResponse{
-		ID:        o.ID,
-		Status:    o.Status,
-		Total:     o.Total,
-		CreatedAt: o.CreatedAt,
-		Items:     make([]ComboOrderItemResponse, 0, len(items)),
+		ID:          o.ID,
+		Status:      o.Status,
+		Total:       o.Total,
+		SoldChannel: o.SoldChannel,
+		CreatedAt:   o.CreatedAt,
+		Items:       make([]ComboOrderItemResponse, 0, len(items)),
 	}
 	if o.BookingID != nil {
 		res.BookingID = *o.BookingID
+	}
+	if o.PayMethod != nil {
+		res.PayMethod = *o.PayMethod
+	}
+	if o.CustomerName != nil {
+		res.CustomerName = *o.CustomerName
 	}
 	for _, item := range items {
 		res.Items = append(res.Items, ComboOrderItemResponse{
@@ -83,6 +100,19 @@ func NewComboOrderResponse(o *models.ComboOrder, items []models.ComboOrderItem) 
 		})
 	}
 	return res
+}
+
+// One line on the counter handover board.
+type ComboPickupResponse struct {
+	OrderID      string                 `json:"order_id"`
+	CustomerName string                 `json:"customer_name"`
+	CustomerMail string                 `json:"customer_email"`
+	BookingID    string                 `json:"booking_id,omitempty"`
+	MovieTitle   string                 `json:"movie_title,omitempty"`
+	ShowtimeAt   *time.Time             `json:"showtime_at,omitempty"`
+	Total        int64                  `json:"total"`
+	Items        []ComboOrderItemResponse `json:"items"`
+	CreatedAt    time.Time              `json:"created_at"`
 }
 
 // Also shows inactive, unlike public GET /combos.

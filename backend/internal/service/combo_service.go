@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -11,12 +12,16 @@ import (
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/models"
 	"github.com/Cinema-Project-Juann/BackEnd-CP/internal/repository"
 	apperrors "github.com/Cinema-Project-Juann/BackEnd-CP/pkg/errors"
+	"github.com/Cinema-Project-Juann/BackEnd-CP/pkg/logger"
 )
 
 // ComboService sells combos independently of ticket booking; neither side shares a transaction.
 type ComboService interface {
 	ListActive(ctx context.Context) ([]dto.ComboResponse, error)
 	CreateOrder(ctx context.Context, userID string, req dto.CreateComboOrderRequest) (*dto.ComboOrderResponse, error)
+	CounterSell(ctx context.Context, req dto.CounterComboOrderRequest) (*dto.ComboOrderResponse, error)
+	PendingPickups(ctx context.Context, date, search string) ([]dto.ComboPickupResponse, error)
+	CollectOrder(ctx context.Context, id string) (*dto.ComboOrderResponse, error)
 	ListMyOrders(ctx context.Context, userID string, q dto.PageQuery) ([]dto.ComboOrderResponse, int64, error)
 
 	// Operator catalogue management (admin AND staff, like halls and showtimes).
@@ -59,9 +64,157 @@ func (s *comboService) CreateOrder(ctx context.Context, userID string, req dto.C
 		}
 	}
 
-	ids := make([]string, 0, len(req.Items))
-	qtyByCombo := make(map[string]int, len(req.Items))
-	for _, item := range req.Items {
+	items, total, err := s.buildOrderItems(ctx, req.Items)
+	if err != nil {
+		return nil, err
+	}
+
+	order := &models.ComboOrder{
+		UserID:      &userID,
+		Status:      models.ComboOrderConfirmed,
+		Total:       total,
+		SoldChannel: models.SoldChannelOnline,
+	}
+	if req.BookingID != "" {
+		order.BookingID = &req.BookingID
+	}
+	if err := s.orders.Create(ctx, order, items); err != nil {
+		return nil, err
+	}
+
+	result := dto.NewComboOrderResponse(order, items)
+	return &result, nil
+}
+
+// CounterSell: walk-in sale, handed over at once (never in the pickup queue).
+func (s *comboService) CounterSell(ctx context.Context, req dto.CounterComboOrderRequest) (*dto.ComboOrderResponse, error) {
+	items, total, err := s.buildOrderItems(ctx, req.Items)
+	if err != nil {
+		return nil, err
+	}
+
+	payMethod := strings.TrimSpace(req.PayMethod)
+	name := strings.TrimSpace(req.CustomerName)
+	order := &models.ComboOrder{
+		Status:      models.ComboOrderCollected,
+		Total:       total,
+		SoldChannel: models.SoldChannelCounter,
+		PayMethod:   &payMethod,
+	}
+	if name != "" {
+		order.CustomerName = &name
+	}
+	if err := s.orders.CreateCounterOrder(ctx, order, items); err != nil {
+		return nil, err
+	}
+	// Best-effort audit: the order row is the source of truth.
+	if rec, ok := audit.FromContext(ctx); ok {
+		rec.ResourceID = order.ID
+		rec.After = map[string]any{
+			"status": models.ComboOrderCollected, "total": total,
+			"sold_channel": models.SoldChannelCounter, "pay_method": payMethod,
+		}
+		if err := audit.In(ctx, s.db, rec); err != nil {
+			logger.Warn("counter combo sale not audited", logger.String("order_id", order.ID), logger.Err(err))
+		}
+	}
+
+	result := dto.NewComboOrderResponse(order, items)
+	return &result, nil
+}
+
+var ictZone = time.FixedZone("ICT", 7*3600)
+
+// PendingPickups is the counter handover board for one show date.
+func (s *comboService) PendingPickups(ctx context.Context, date, search string) ([]dto.ComboPickupResponse, error) {
+	day := time.Now().In(ictZone)
+	if strings.TrimSpace(date) != "" {
+		parsed, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(date), ictZone)
+		if err != nil {
+			return nil, apperrors.Validation("date must follow format YYYY-MM-DD")
+		}
+		day = parsed
+	}
+	from := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, ictZone)
+	to := from.AddDate(0, 0, 1)
+
+	rows, err := s.orders.PendingPickups(ctx, from, to, search, 100)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.OrderID)
+	}
+	itemsByOrder, err := s.orders.ItemsByOrderIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.ComboPickupResponse, 0, len(rows))
+	for _, r := range rows {
+		items := make([]dto.ComboOrderItemResponse, 0)
+		for _, it := range itemsByOrder[r.OrderID] {
+			items = append(items, dto.ComboOrderItemResponse{
+				ComboID: it.ComboID, ComboName: it.ComboName,
+				Quantity: it.Quantity, UnitPrice: it.UnitPrice,
+				Subtotal: it.UnitPrice * int64(it.Quantity),
+			})
+		}
+		row := dto.ComboPickupResponse{
+			OrderID: r.OrderID, CustomerName: r.CustomerName, CustomerMail: r.CustomerMail,
+			Total: r.Total, Items: items,
+		}
+		if r.BookingID != nil {
+			row.BookingID = *r.BookingID
+		}
+		if r.MovieTitle != nil {
+			row.MovieTitle = *r.MovieTitle
+		}
+		row.ShowtimeAt = r.ShowtimeAt
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// CollectOrder hands one pre-order over; repeats read as already handed over.
+func (s *comboService) CollectOrder(ctx context.Context, id string) (*dto.ComboOrderResponse, error) {
+	won, err := s.orders.CollectCAS(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !won {
+		return nil, apperrors.NotFound("combo order already collected or missing")
+	}
+	order, err := s.orders.FindOrderByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if order == nil {
+		return nil, apperrors.NotFound("combo order not found")
+	}
+	itemsByOrder, err := s.orders.ItemsByOrderIDs(ctx, []string{id})
+	if err != nil {
+		return nil, err
+	}
+	if rec, ok := audit.FromContext(ctx); ok {
+		rec.ResourceID = id
+		rec.After = map[string]any{"status": models.ComboOrderCollected}
+		if err := audit.In(ctx, s.db, rec); err != nil {
+			logger.Warn("combo collect not audited", logger.String("order_id", id), logger.Err(err))
+		}
+	}
+	result := dto.NewComboOrderResponse(order, itemsByOrder[id])
+	return &result, nil
+}
+
+// buildOrderItems prices lines from the live catalogue (all-or-nothing).
+func (s *comboService) buildOrderItems(ctx context.Context, reqItems []dto.ComboOrderItemRequest) ([]models.ComboOrderItem, int64, error) {
+	ids := make([]string, 0, len(reqItems))
+	qtyByCombo := make(map[string]int, len(reqItems))
+	for _, item := range reqItems {
+		if item.Quantity <= 0 {
+			return nil, 0, apperrors.ErrComboOrderEmpty
+		}
 		if _, ok := qtyByCombo[item.ComboID]; !ok {
 			ids = append(ids, item.ComboID)
 		}
@@ -70,10 +223,10 @@ func (s *comboService) CreateOrder(ctx context.Context, userID string, req dto.C
 
 	found, err := s.combos.FindActiveByIDs(ctx, ids)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if len(found) != len(ids) {
-		return nil, apperrors.ErrComboInactive
+		return nil, 0, apperrors.ErrComboInactive
 	}
 
 	var total int64
@@ -90,23 +243,9 @@ func (s *comboService) CreateOrder(ctx context.Context, userID string, req dto.C
 		})
 	}
 	if len(items) == 0 {
-		return nil, apperrors.ErrComboOrderEmpty
+		return nil, 0, apperrors.ErrComboOrderEmpty
 	}
-
-	order := &models.ComboOrder{
-		UserID: userID,
-		Status: models.ComboOrderConfirmed,
-		Total:  total,
-	}
-	if req.BookingID != "" {
-		order.BookingID = &req.BookingID
-	}
-	if err := s.orders.Create(ctx, order, items); err != nil {
-		return nil, err
-	}
-
-	result := dto.NewComboOrderResponse(order, items)
-	return &result, nil
+	return items, total, nil
 }
 
 func (s *comboService) ListMyOrders(ctx context.Context, userID string, q dto.PageQuery) ([]dto.ComboOrderResponse, int64, error) {

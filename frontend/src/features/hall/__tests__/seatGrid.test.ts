@@ -28,6 +28,12 @@ import {
   pendingRowIndexOf,
   rowLabelFromIndex,
   sellableCapacity,
+  isPendingSingleSeatId,
+  isVirtualGapSeatId,
+  makePendingSingleSeatId,
+  makeVirtualGapId,
+  trimTrailingGapColumns,
+  virtualTrailingSlots,
 } from '../seatGrid';
 import type { ColSpan, Seat, SeatType } from '@/types';
 
@@ -44,6 +50,7 @@ const seat = (
   seat_type: (extra.seat_type ?? 'standard') as SeatType,
   is_gap: extra.is_gap ?? false,
   col_span: (extra.col_span ?? 1) as ColSpan,
+  has_booking_history: false,
 });
 
 describe('groupSeatsByRow', () => {
@@ -191,7 +198,7 @@ describe('pending row helpers', () => {
 });
 
 describe('pending column helpers', () => {
-  it('buildPendingColumn sinh 1 ghe moi hang, mac dinh la O TRONG (khop AddColumn that su tren backend)', () => {
+  it('buildPendingColumn sinh 1 ghe THUONG moi hang, khong phai o trong', () => {
     const col = buildPendingColumn(0, ['A', 'B', 'C'], 5, 'hall-1');
     expect(col).toHaveLength(3);
     expect(col.map((s) => s.label)).toEqual(['A5', 'B5', 'C5']);
@@ -200,7 +207,7 @@ describe('pending column helpers', () => {
       expect(isUnsavedSeatId(seat.id)).toBe(true);
       expect(pendingColIndexOf(seat.id)).toBe(0);
       expect(seat.seat_type).toBe('standard');
-      expect(seat.is_gap).toBe(true);
+      expect(seat.is_gap).toBe(false);
       expect(seat.col_number).toBe(5);
     });
   });
@@ -216,6 +223,74 @@ describe('pending column helpers', () => {
 
   it('id ghe THAT khong bi coi la unsaved', () => {
     expect(isUnsavedSeatId('a1b2c3')).toBe(false);
+  });
+
+  it('ghe le pending duoc nhan dien la unsaved (luu qua POST /seats)', () => {
+    const id = makePendingSingleSeatId('B', 7);
+    expect(isPendingSingleSeatId(id)).toBe(true);
+    expect(isUnsavedSeatId(id)).toBe(true);
+    expect(isPendingSingleSeatId('pending-col-0-B')).toBe(false);
+  });
+});
+
+describe('virtualTrailingSlots', () => {
+  it('hang thieu cot moi nhat duoc bu o ao co nut + (khong vao draft)', () => {
+    const seats = [
+      ...Array.from({ length: 5 }, (_, i) => seat('A', i + 1)),
+      ...Array.from({ length: 4 }, (_, i) => seat('B', i + 1)),
+    ];
+    const virtuals = virtualTrailingSlots(seats, seats);
+    expect(virtuals.map((s) => s.label)).toEqual(['B5']);
+    expect(virtuals[0]?.is_gap).toBe(true);
+    expect(virtuals[0]?.id).toBe(makeVirtualGapId('B', 5));
+    expect(isVirtualGapSeatId(virtuals[0]?.id ?? '')).toBe(true);
+    expect(isVirtualGapSeatId('pending-single-B-5')).toBe(false);
+  });
+
+  it('khong sinh o ao khi cac hang deu du cot, list rong tra rong', () => {
+    const seats = [seat('A', 1), seat('B', 1)];
+    expect(virtualTrailingSlots(seats, seats)).toEqual([]);
+    expect(virtualTrailingSlots([], [])).toEqual([]);
+  });
+
+  it('o vua bi xoa thi khong hien + lai (baseline van giu lich su that)', () => {
+    const trimmed = [
+      ...Array.from({ length: 8 }, (_, i) => seat('A', i + 1)),
+      { ...buildPendingColumn(0, ['A'], 9, 'hall-1')[0] },
+      ...Array.from({ length: 8 }, (_, i) => seat('B', i + 1)),
+    ];
+    const snapshot = [
+      ...Array.from({ length: 8 }, (_, i) => seat('A', i + 1)),
+      ...Array.from({ length: 10 }, (_, i) => seat('B', i + 1)),
+    ];
+    // B9, B10 vua bi xoa trong session: khong offer lai du A9 pending ton tai.
+    // Draft van giu object gap B9, B10 (chua luu) nen draft-check cung chan.
+    expect(virtualTrailingSlots(trimmed, trimmed, snapshot)).toEqual([]);
+    const withHiddenGaps = [
+      ...trimmed,
+      { ...seat('B', 9), is_gap: true },
+      { ...seat('B', 10), is_gap: true },
+    ];
+    expect(virtualTrailingSlots(trimmed, withHiddenGaps, snapshot)).toEqual([]);
+  });
+
+  it('hang tut sau hon 1 cot thi khong offer (di bang nut + cuoi hang)', () => {
+    const seats = [
+      ...Array.from({ length: 6 }, (_, i) => seat('A', i + 1)),
+      ...Array.from({ length: 4 }, (_, i) => seat('B', i + 1)),
+    ];
+    // B max 4, grid cuoi cot 6: 4+1 != 6 nen khong co o ao nao.
+    expect(virtualTrailingSlots(seats, seats)).toEqual([]);
+  });
+
+  it('cot that su moi thi van offer + (baseline chua tung co)', () => {
+    const trimmed = [
+      ...Array.from({ length: 5 }, (_, i) => seat('A', i + 1)),
+      ...Array.from({ length: 4 }, (_, i) => seat('B', i + 1)),
+    ];
+    const snapshot = trimmed.map((s) => ({ ...s }));
+    const virtuals = virtualTrailingSlots(trimmed, trimmed, snapshot);
+    expect(virtuals.map((s) => s.label)).toEqual(['B5']);
   });
 });
 
@@ -419,5 +494,152 @@ describe('clampZoom', () => {
     expect(clampZoom(0.1)).toBe(ZOOM_MIN);
     expect(clampZoom(5)).toBe(ZOOM_MAX);
     expect(clampZoom(1.2)).toBe(1.2);
+  });
+});
+
+describe('trimTrailingGapColumns', () => {
+  const gap = (row: string, col: number): Seat => ({
+    ...seat(row, col),
+    is_gap: true,
+  });
+
+  it('cot con ghe that thi giu ca o trong cung cot (kem nut + de lap lai)', () => {
+    const seats = [
+      seat('A', 1),
+      seat('A', 2),
+      gap('A', 3),
+      gap('A', 4),
+      seat('B', 1),
+      gap('B', 2),
+      gap('B', 3),
+      gap('B', 4),
+    ];
+    const baseline = seats.map((s) => ({ ...s }));
+    const trimmed = trimTrailingGapColumns(seats, baseline);
+    // Cot 2 con ghe that A2 nen B2 van hien; cot 3-4 la dirt cu nen mat.
+    expect(trimmed.map((s) => s.label).sort()).toEqual(['A1', 'A2', 'B1', 'B2']);
+  });
+
+  it('o vua xoa trong session van hien kem nut + (khong don viec dang lam)', () => {
+    const saved = Array.from({ length: 10 }, (_, i) => seat('A', i + 1));
+    const draft = [...saved.slice(0, 9), { ...saved[9], is_gap: true }];
+    const trimmed = trimTrailingGapColumns(draft, saved);
+    expect(trimmed.map((s) => s.label).sort()).toEqual(
+      Array.from({ length: 10 }, (_, i) => `A${i + 1}`).sort()
+    );
+  });
+
+  it('khong cat gi khi cot cuoi co ghe that', () => {
+    const seats = [seat('A', 1), gap('A', 2), seat('A', 3)];
+    expect(trimTrailingGapColumns(seats)).toHaveLength(3);
+  });
+
+  it('ghe pending that vuot maxReal van giu (ghe vua tach, cot moi them)', () => {
+    const realPending = { ...buildPendingColumn(0, ['A'], 5, 'hall-1')[0] };
+    const seats = [seat('A', 1), realPending, seat('B', 1)];
+    const trimmed = trimTrailingGapColumns(seats);
+    expect(trimmed.some((s) => s.id === realPending.id)).toBe(true);
+  });
+
+  it('duoi persisted don ngay ca khi hang khac co ghe pending moi (maxReal loai pending)', () => {
+    const pendingA9 = { ...buildPendingColumn(0, ['A'], 9, 'hall-1')[0] };
+    const seats = [
+      ...Array.from({ length: 8 }, (_, i) => seat('A', i + 1)),
+      pendingA9,
+      ...Array.from({ length: 8 }, (_, i) => seat('B', i + 1)),
+      { ...seat('B', 9), is_gap: true },
+      { ...seat('B', 10), is_gap: true },
+    ];
+    const baseline = [
+      ...Array.from({ length: 8 }, (_, i) => seat('A', i + 1)),
+      ...Array.from({ length: 8 }, (_, i) => seat('B', i + 1)),
+      { ...seat('B', 9), is_gap: true },
+      { ...seat('B', 10), is_gap: true },
+    ];
+    const trimmed = trimTrailingGapColumns(seats, baseline);
+    expect(trimmed.some((s) => s.id === pendingA9.id)).toBe(true);
+    expect(trimmed.some((s) => s.label === 'B9')).toBe(false);
+    expect(trimmed.some((s) => s.label === 'B10')).toBe(false);
+  });
+
+  it('gap pending vuot maxReal van giu (draft dang dung do, chua luu)', () => {
+    const gapPending = { ...buildPendingColumn(1, ['B'], 5, 'hall-1')[0], is_gap: true };
+    const seats = [seat('A', 1), seat('B', 1), gapPending];
+    const trimmed = trimTrailingGapColumns(seats);
+    expect(trimmed.some((s) => s.id === gapPending.id)).toBe(true);
+  });
+
+  it('hang toan gap thi giu nguyen ca hang (van lap lai duoc)', () => {
+    const seats = [
+      seat('A', 1),
+      { ...seat('B', 1), is_gap: true },
+      { ...seat('B', 2), is_gap: true },
+    ];
+    const trimmed = trimTrailingGapColumns(seats);
+    expect(trimmed.map((s) => s.label).sort()).toEqual(['A1', 'B1', 'B2']);
+  });
+
+  it('luoi rong toan gap thi giu nguyen (khong trim ve rong)', () => {
+    const seats = [gap('A', 1), gap('A', 2)];
+    expect(trimTrailingGapColumns(seats)).toHaveLength(2);
+  });
+
+  it('case 1 - dirt cu o cot 14: bien mat, con 13 cot', () => {
+    const row = Array.from({ length: 14 }, (_, i) => seat('A', i + 1));
+    const draft = [...row.slice(0, 13), { ...row[13], is_gap: true }];
+    const baseline = draft.map((s) => ({ ...s }));
+    const trimmed = trimTrailingGapColumns(draft, baseline);
+    expect(trimmed.map((s) => s.col_number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+  });
+
+  it('case 2a - cot con ghe that thi o trong cung cot giu lai kem nut +', () => {
+    const draft = [
+      ...Array.from({ length: 13 }, (_, i) => seat('A', i + 1)),
+      { ...seat('A', 14), is_gap: true },
+      ...Array.from({ length: 14 }, (_, i) => seat('B', i + 1)),
+    ];
+    const trimmed = trimTrailingGapColumns(draft);
+    // Cot 14 con ghe that B14 nen o trong A14 van hien (de lap lai duoc).
+    expect(trimmed.some((s) => s.label === 'A14')).toBe(true);
+    expect(trimmed.some((s) => s.label === 'B14')).toBe(true);
+    expect(trimmed).toHaveLength(28);
+  });
+
+  it('case 2b - dirt cu o cot 14 ca 2 hang: don sach se cot day', () => {
+    const draft = [
+      ...Array.from({ length: 13 }, (_, i) => seat('A', i + 1)),
+      { ...seat('A', 14), is_gap: true },
+      ...Array.from({ length: 13 }, (_, i) => seat('B', i + 1)),
+      { ...seat('B', 14), is_gap: true },
+    ];
+    const baseline = draft.map((s) => ({ ...s }));
+    const trimmed = trimTrailingGapColumns(draft, baseline);
+    expect(trimmed.some((s) => s.col_number === 14)).toBe(false);
+    expect(trimmed).toHaveLength(26);
+  });
+
+  it('n hang n cot: chi dung o cot dau tien con ghe that', () => {
+    const draft = [
+      seat('A', 1),
+      gap('A', 2),
+      gap('A', 3),
+      gap('A', 4),
+      seat('B', 1),
+      seat('B', 2),
+      gap('B', 3),
+      gap('B', 4),
+      seat('C', 1),
+      gap('C', 2),
+      gap('C', 3),
+      gap('C', 4),
+    ];
+    // Cot 2 con ghe that B2 nen o trong A2, C2 van hien kem nut +;
+    // cot 3-4 la dirt cu nen don sach ca 3 hang.
+    const baseline = draft.map((s) => ({ ...s }));
+    expect(
+      trimTrailingGapColumns(draft, baseline)
+        .map((s) => s.label)
+        .sort()
+    ).toEqual(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
   });
 });

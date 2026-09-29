@@ -298,6 +298,34 @@ func (h *HallHandler) AddColumn(c *gin.Context) {
 	response.Created(c, seats)
 }
 
+// @Summary		Append one seat at the end of a single row
+// @Description	The row-end "+" in the editor: only that row grows, unlike AddColumn which widens every row.
+// @Tags			halls
+// @Accept			json
+// @Produce		json
+// @Security		BearerAuth
+// @Param			id		path		string				true	"Hall ID"
+// @Param			payload	body		dto.AddSeatRequest	true	"Row label (seat type defaults to standard)"
+// @Success		201		{object}	response.Body{data=dto.SeatResponse}
+// @Failure		400	{object}	response.Body
+// @Failure		401	{object}	response.Body
+// @Failure		404	{object}	response.Body
+// @Failure		409	{object}	response.Body
+// @Router			/admin/halls/{id}/seats [post]
+func (h *HallHandler) AddSeat(c *gin.Context) {
+	var req dto.AddSeatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	seat, err := h.hallService.AddSeat(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Created(c, seat)
+}
+
 // @Summary		Remove one row and renumber every row after it
 // @Description	Any row can be removed, not just the last - rows after it shift down by one so numbering stays 1..N with no gap. Refused (409) if any seat in the removed row has booking history.
 // @Tags			halls

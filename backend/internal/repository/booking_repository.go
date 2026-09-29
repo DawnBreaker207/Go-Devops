@@ -165,6 +165,8 @@ type BookingRepository interface {
 	BookingSeats(ctx context.Context, tx *gorm.DB, bookingID string) ([]models.BookingSeat, error)
 
 	ExpireBooking(ctx context.Context, tx *gorm.DB, id, reason string) (int64, error)
+	// MarkCollected stamps the counter handover; first writer wins, repeats are no-ops.
+	MarkCollected(ctx context.Context, tx *gorm.DB, id string) (int64, error)
 	// ExtendBookingExpiry moves a pending unpaid booking's expiry; concurrent changes make it a no-op.
 	ExtendBookingExpiry(ctx context.Context, tx *gorm.DB, id string, expiresAt time.Time) (int64, error)
 // SetDiscount writes (or clears) discount; WHERE pins pending AND paid_at IS NULL,
@@ -356,6 +358,15 @@ func (r *bookingRepository) ExpireBooking(ctx context.Context, tx *gorm.DB, id, 
 		models.BookingExpired, reason, id, models.BookingPending)
 	if res.Error != nil {
 		return 0, fmt.Errorf("expire booking: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
+func (r *bookingRepository) MarkCollected(ctx context.Context, tx *gorm.DB, id string) (int64, error) {
+	res := r.conn(ctx, tx).Exec(`UPDATE bookings SET collected_at = NOW(), updated_at = NOW()
+		WHERE id = ? AND collected_at IS NULL`, id)
+	if res.Error != nil {
+		return 0, fmt.Errorf("mark booking collected: %w", res.Error)
 	}
 	return res.RowsAffected, nil
 }

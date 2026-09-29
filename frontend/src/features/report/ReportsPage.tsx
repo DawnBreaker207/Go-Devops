@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
   Alert,
+  App,
+  Button,
   Card,
   Col,
   DatePicker,
@@ -17,6 +19,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import TableCard from '@/components/TableCard';
+import { batchApi } from '@/api/batch.api';
 import ShowtimeBreakdownTable from './components/ShowtimeBreakdownTable';
 import { useDailyReport } from './hooks/useReports';
 import { type MovieRollupRow, missingDays, occupancyPercent, rollupByMovie } from './reportRollup';
@@ -36,17 +39,34 @@ const DEFAULT_DAYS = 7;
 export const ReportsPage = () => {
   const { t } = useTranslation();
   const { token } = antdTheme.useToken();
+  const { message } = App.useApp();
 
   // Screen-local range, like other tables' filters (useListQuery owns only shared page/page_size/search).
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(() => [
     dayjs().subtract(DEFAULT_DAYS - 1, 'day'),
     dayjs(),
   ]);
+  const [closing, setClosing] = useState(false);
 
-  const { data, isFetching, error } = useDailyReport({
+  const { data, isFetching, error, refetch } = useDailyReport({
     from: range[0].format(API_DATE_FORMAT),
     to: range[1].format(API_DATE_FORMAT),
   });
+
+  // Manual close-out: daily rows only exist after closeDay runs (23:59 cron),
+  // so testing revenue mid-day needs one tap instead of waiting for midnight.
+  const handleCloseDay = async () => {
+    setClosing(true);
+    try {
+      await batchApi.run('closeDay');
+      await refetch();
+      message.success(t('report.closeDaySuccess'));
+    } catch (err) {
+      message.error(errorMessage(err, t('common.somethingWrong')));
+    } finally {
+      setClosing(false);
+    }
+  };
 
   const days = useMemo(() => data?.days ?? [], [data]);
   const movieRows = useMemo(() => rollupByMovie(days), [days]);
@@ -165,6 +185,9 @@ export const ReportsPage = () => {
             if (value?.[0] && value[1]) setRange([value[0], value[1]]);
           }}
         />
+        <Button loading={closing} onClick={() => void handleCloseDay()}>
+          {t('report.closeDay')}
+        </Button>
       </Space>
 
       {error ? (

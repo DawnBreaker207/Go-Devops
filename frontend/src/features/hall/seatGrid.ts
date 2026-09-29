@@ -205,8 +205,19 @@ export const makeSplitSeatId = (leftSeatId: string): string =>
 
 export const isPendingSplitSeatId = (id: string): boolean => id.startsWith(PENDING_SPLIT_PREFIX);
 
+// A single seat appended at one row's end; Save persists it via POST /seats.
+export const PENDING_SINGLE_PREFIX = 'pending-single-';
+
+export const makePendingSingleSeatId = (rowLabel: string, colNumber: number): string =>
+  `${PENDING_SINGLE_PREFIX}${rowLabel}-${colNumber}`;
+
+export const isPendingSingleSeatId = (id: string): boolean => id.startsWith(PENDING_SINGLE_PREFIX);
+
 export const isUnsavedSeatId = (id: string): boolean =>
-  isPendingSeatId(id) || isPendingColSeatId(id) || isPendingSplitSeatId(id);
+  isPendingSeatId(id) ||
+  isPendingColSeatId(id) ||
+  isPendingSplitSeatId(id) ||
+  isPendingSingleSeatId(id);
 
 export const rowLabelFromIndex = (n: number): string => {
   let label = '';
@@ -237,6 +248,8 @@ export const buildPendingRow = (
       seat_type: 'standard' as SeatType,
       is_gap: col > seatsPerRow,
       col_span: 1 as const,
+      // Pending seats exist only in the draft: no booking history by construction.
+      has_booking_history: false,
     };
   });
 
@@ -246,6 +259,7 @@ export const buildPendingColumn = (
   colNumber: number,
   hallId: string
 ): Seat[] =>
+  // New columns arrive as real seats; the save flow patches over server gaps.
   rowLabels.map((rowLabel) => ({
     id: makePendingColSeatId(colIndex, rowLabel),
     hall_id: hallId,
@@ -253,9 +267,82 @@ export const buildPendingColumn = (
     row_label: rowLabel,
     col_number: colNumber,
     seat_type: 'standard' as SeatType,
-    is_gap: true,
+    is_gap: false,
     col_span: 1 as const,
+    has_booking_history: false,
   }));
+
+// Display-only tidy: a column with >= 1 real seat stays whole (gaps keep
+// their fill button). A trailing gap vanishes only when it is old dirt
+// (already a gap in the baseline): seats deleted this session stay visible
+// with their + button so the work never silently disappears. Pending seats
+// never count toward the width: a newly added seat must not freeze the
+// cleanup of deleted tails elsewhere.
+export const trimTrailingGapColumns = (seats: Seat[], baseline: Seat[] = []): Seat[] => {
+  const persistedReal = seats.filter((s) => !s.is_gap && !isUnsavedSeatId(s.id));
+  if (persistedReal.length === 0) return seats;
+  const maxReal = Math.max(...persistedReal.map((s) => s.col_number));
+  const liveRows = new Set(persistedReal.map((s) => s.row_label));
+  const oldDirt = new Set(baseline.filter((s) => s.is_gap).map((s) => s.id));
+  return seats.filter((s) => {
+    if (isUnsavedSeatId(s.id) || s.col_number <= maxReal || !liveRows.has(s.row_label)) return true;
+    return !(s.is_gap && oldDirt.has(s.id));
+  });
+};
+
+// Display-only slots: rows missing the newest column show one virtual gap
+// cell so every row can grow into it. Virtuals never enter draft/save/diff:
+// clicking one mints a real pending seat instead.
+export const VIRTUAL_GAP_PREFIX = 'virtual-gap-';
+
+export const makeVirtualGapId = (rowLabel: string, colNumber: number): string =>
+  `${VIRTUAL_GAP_PREFIX}${rowLabel}-${colNumber}`;
+
+export const isVirtualGapSeatId = (id: string): boolean => id.startsWith(VIRTUAL_GAP_PREFIX);
+
+export const virtualTrailingSlots = (
+  seats: Seat[],
+  draft: Seat[],
+  baseline: Seat[] = []
+): Seat[] => {
+  if (seats.length === 0) return [];
+  const gridMax = Math.max(...seats.map((s) => s.col_number));
+  const rowMax = new Map<string, number>();
+  for (const s of seats) {
+    rowMax.set(s.row_label, Math.max(rowMax.get(s.row_label) ?? 0, s.col_number));
+  }
+  // One slot per lagging row, and only at the grid's last column: rows more
+  // than one behind catch up with the row-end "+" instead. Skipped where the
+  // draft already holds any object (a hidden gap owns that cell), and where
+  // the baseline had a real seat (user-deleted cells stay deleted, no + back).
+  const draftKeys = new Set(draft.map((s) => `${s.row_label}:${s.col_number}`));
+  const baselineReal = new Set(
+    baseline.filter((s) => !s.is_gap).map((s) => `${s.row_label}:${s.col_number}`)
+  );
+  const hallId = seats[0]?.hall_id ?? '';
+  const out: Seat[] = [];
+  for (const [rowLabel, max] of rowMax) {
+    const col = max + 1;
+    if (
+      col === gridMax &&
+      !draftKeys.has(`${rowLabel}:${col}`) &&
+      !baselineReal.has(`${rowLabel}:${col}`)
+    ) {
+      out.push({
+        id: makeVirtualGapId(rowLabel, col),
+        hall_id: hallId,
+        label: `${rowLabel}${col}`,
+        row_label: rowLabel,
+        col_number: col,
+        seat_type: 'standard',
+        is_gap: true,
+        col_span: 1,
+        has_booking_history: false,
+      });
+    }
+  }
+  return out;
+};
 
 export interface SeatPatchGroup {
   labels: string[];

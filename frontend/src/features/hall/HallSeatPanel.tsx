@@ -16,23 +16,26 @@ import { useHall, useHallSeats, useUpdateHall } from './hooks/useHalls';
 import { MAX_ROWS, MAX_SEATS_PER_ROW, SEAT_TYPE_STYLE } from './constants';
 import {
   areAdjacentSeats,
-  buildPendingColumn,
   buildPendingRow,
   buildSeatChangeBatches,
   countSeatsByType,
   declaredGridMismatch,
   diffChangedSeats,
   diffMergeSplitOps,
-  groupSeatsByRow,
   isPendingColSeatId,
   isPendingSeatId,
+  isPendingSingleSeatId,
   isUnsavedSeatId,
+  isVirtualGapSeatId,
+  makePendingSingleSeatId,
   makeSplitSeatId,
   parseAisles,
   pendingColIndexOf,
   pendingRowIndexOf,
   rowLabelFromIndex,
   summarizeGrid,
+  trimTrailingGapColumns,
+  virtualTrailingSlots,
   widestColumn,
 } from './seatGrid';
 import type { Seat, SeatType } from '@/types';
@@ -89,6 +92,8 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
   const [draft, setDraft] = useState<Seat[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<Seat[]>([]);
   const [initialized, setInitialized] = useState(false);
+  // Render-time init (once per mount; the panel is keyed by hallId): a background
+  // refetch must never reset the draft mid-edit, hence the initialized guard.
   if (seatsQuery.data && !initialized) {
     setEditing(seatsQuery.data.length === 0);
     setDraft(seatsQuery.data);
@@ -156,11 +161,18 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const seatById = useMemo(() => new Map(draft.map((s) => [s.id, s])), [draft]);
-  const summary = hall.data ? summarizeGrid(hall.data, draft) : null;
+  // Selection, counts and summary follow the visible (trimmed) grid: hidden
+  // trailing gaps are inert until discarding, never counted nor bulk-edited.
+  // Baseline passed so fresh deletions stay visible with their + button.
+  const trimmedBase = useMemo(
+    () => trimTrailingGapColumns(draft, savedSnapshot),
+    [draft, savedSnapshot]
+  );
+  const seatById = useMemo(() => new Map(trimmedBase.map((s) => [s.id, s])), [trimmedBase]);
+  const summary = hall.data ? summarizeGrid(hall.data, trimmedBase) : null;
   /** Compared against savedSnapshot: pending rows intentionally overshoot rows. */
   const mismatch = hall.data ? declaredGridMismatch(hall.data, savedSnapshot) : null;
-  const typeCounts = useMemo(() => countSeatsByType(draft), [draft]);
+  const typeCounts = useMemo(() => countSeatsByType(trimmedBase), [trimmedBase]);
 
   // Selection exists only while editing, so no stale state survives HMR or races.
   const selectedSeats: Seat[] = useMemo(
@@ -172,7 +184,7 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
   );
   const toggleRow = (rowLabel: string) =>
     setSelected((current) => {
-      const rowSeats = draft.filter((s) => s.row_label === rowLabel);
+      const rowSeats = trimmedBase.filter((s) => s.row_label === rowLabel);
       const allSelected = rowSeats.every((s) => current.has(s.id));
       const next = new Set(current);
       rowSeats.forEach((s) => (allSelected ? next.delete(s.id) : next.add(s.id)));
@@ -180,7 +192,7 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     });
 
   const handleToggleSelectAll = (selectAll: boolean) =>
-    setSelected(selectAll ? new Set(draft.map((s) => s.id)) : new Set());
+    setSelected(selectAll ? new Set(trimmedBase.map((s) => s.id)) : new Set());
 
   const applyPatchToSelection = (patch: Partial<Pick<Seat, 'seat_type' | 'is_gap'>>) => {
     if (selectedSeats.length === 0) return;
@@ -190,6 +202,11 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
   };
 
   const fillGap = (seat: Seat) => {
+    // Virtual slots are display-only: filling one mints a real pending seat.
+    if (isVirtualGapSeatId(seat.id)) {
+      handleAddSingleSeat(seat.row_label);
+      return;
+    }
     setDraft((current) =>
       current.map((s) => (s.id === seat.id ? { ...s, is_gap: false, seat_type: 'standard' } : s))
     );
@@ -200,6 +217,11 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     if (pendingMergeSeatId) {
       const pending = seatById.get(pendingMergeSeatId);
       setPendingMergeSeatId(null);
+      // Refuse here, not after a wasted Save (server 409s seats with history).
+      if (pending?.has_booking_history || seat.has_booking_history) {
+        message.info(t('hall.seatHasBookingHistory'));
+        return;
+      }
       if (pending && pending.id !== seat.id && areAdjacentSeats(pending, seat)) {
         handleMergeCouple(pending, seat);
         return;
@@ -208,6 +230,10 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       return;
     }
     if (seat.col_span === 2) {
+      if (seat.has_booking_history) {
+        message.info(t('hall.seatHasBookingHistory'));
+        return;
+      }
       handleSplitCouple(seat);
       return;
     }
@@ -231,6 +257,10 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
 
   /** Undo the cycle that two click events caused before pending-merge; never marks dirty. */
   const handleSeatDoubleClick = (seat: Seat) => {
+    if (seat.has_booking_history) {
+      message.info(t('hall.seatHasBookingHistory'));
+      return;
+    }
     if (cycleRevertRef.current?.seatId === seat.id) {
       const { originalType } = cycleRevertRef.current;
       clearCycleRevert();
@@ -263,13 +293,30 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     setDraft((current) => [...current, ...newRow]);
   };
 
-  /** Adding a column stays draft until Save, like AddRow but along the other axis. */
-  const handleAddColumn = () => {
-    if (!hall.data) return;
-    const rowLabels = groupSeatsByRow(draft).map((row) => row.rowLabel);
-    const nextCol = Math.max(widestColumn(draft), hall.data.seats_per_row) + 1;
-    const newCol = buildPendingColumn(pendingColCount, rowLabels, nextCol, hallId);
-    setDraft((current) => [...current, ...newCol]);
+  /** Row-end "+": one standard seat appended to exactly this row, draft until Save. */
+  const handleAddSingleSeat = (rowLabel: string) => {
+    const rowSeats = draft.filter((s) => s.row_label === rowLabel);
+    if (rowSeats.length === 0) return;
+    const nextCol = Math.max(...rowSeats.map((s) => s.col_number)) + 1;
+    if (nextCol > MAX_SEATS_PER_ROW) {
+      message.info(t('hall.columnLimitReached'));
+      return;
+    }
+    const single: Seat = {
+      id: makePendingSingleSeatId(rowLabel, nextCol),
+      hall_id: hallId,
+      label: `${rowLabel}${nextCol}`,
+      row_label: rowLabel,
+      col_number: nextCol,
+      seat_type: 'standard',
+      is_gap: false,
+      col_span: 1,
+      has_booking_history: false,
+    };
+    // Deterministic id: a rapid double-click must not fork duplicates.
+    setDraft((current) =>
+      current.some((s) => s.id === single.id) ? current : [...current, single]
+    );
   };
 
   const discardDraft = () => {
@@ -291,6 +338,7 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
   };
 
   const handleToggleEditing = () => {
+    if (locked) return;
     if (editing && dirty) {
       confirmDiscard(() => {
         discardDraft();
@@ -310,6 +358,10 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
     clearCycleRevert();
     setSaving(true);
     try {
+      // Fresh hall first: row labels derive from hall.rows, stale cache mislabels new rows.
+      const hallResult = await hall.refetch();
+      const freshHall = hallResult.data ?? hall.data;
+      if (!freshHall) return;
       let working = draft;
       // Creation sources disagree on defaults, so each seat needs its own baseline.
       let newSeatDefaults: Seat[] = [];
@@ -343,7 +395,7 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
           ...merged,
         ];
         newSeatDefaults = [...newSeatDefaults, ...created];
-        setDraft(working);
+        // No setDraft mid-save: mixed pending/real ids flicker the grid.
       }
 
       const pendingColIndexes = [
@@ -374,7 +426,13 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
           ...merged,
         ];
         newSeatDefaults = [...newSeatDefaults, ...created];
-        setDraft(working);
+      }
+
+      // Persist row-end singles first so later merges resolve against real rows.
+      for (const single of working.filter((s) => isPendingSingleSeatId(s.id))) {
+        const created = await hallApi.addSeat(hallId, { row_label: single.row_label });
+        working = working.map((s) => (s.id === single.id ? created : s));
+        newSeatDefaults = [...newSeatDefaults, created];
       }
 
       // Session merges/splits are draft-only, so reconcile against the server by label here.
@@ -392,7 +450,6 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
           ...working.filter((s) => s.label !== mergeOp.leftLabel && s.label !== mergeOp.rightLabel),
           updatedLeft,
         ];
-        setDraft(working);
       }
 
       for (const splitOp of splits) {
@@ -400,7 +457,6 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
         updated.forEach((s) => mergeSplitSeatIds.add(s.id));
         const updatedLabels = new Set(updated.map((s) => s.label));
         working = [...working.filter((s) => !updatedLabels.has(s.label)), ...updated];
-        setDraft(working);
       }
 
       const patchGroups = diffChangedSeats(
@@ -420,9 +476,25 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       setPendingMergeSeatId(null);
       message.success(t('hall.saveSuccess'));
     } catch (error) {
-      // The common failure is 409 on halls with bookings; keep the draft to retry without re-adding rows.
       message.error(errorMessage(error, t('common.somethingWrong')));
+      // Steps commit separately: a late 409 can follow committed steps, and the
+      // stale draft would then derive phantom ops. Rebase when the server moved.
+      const seatsResult = await seatsQuery.refetch();
+      const fresh = seatsResult.data;
       void hall.refetch();
+      if (fresh) {
+        const sig = (list: Seat[]) =>
+          JSON.stringify(
+            list.map((s) => [s.id, s.seat_type, s.is_gap, s.col_span, s.row_label, s.col_number])
+          );
+        if (sig(fresh) !== sig(savedSnapshot)) {
+          setDraft(fresh);
+          setSavedSnapshot(fresh);
+          setSelected(new Set());
+          setPendingMergeSeatId(null);
+          message.info(t('hall.savePartialReload'));
+        }
+      }
     } finally {
       setSaving(false);
     }
@@ -489,6 +561,14 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
           s.id === left.id ? { ...s, col_span: 2 as const, seat_type: 'couple' as SeatType } : s
         )
     );
+    // The right seat is gone: drop it from selection.
+    setSelected((current) => {
+      if (!current.has(right.id) && pendingMergeSeatId === null) return current;
+      const next = new Set(current);
+      next.delete(right.id);
+      return next;
+    });
+    setPendingMergeSeatId(null);
     message.success(t('hall.mergeCoupleSuccess'));
   };
 
@@ -500,29 +580,60 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       okText: t('common.confirm'),
       okButtonProps: { danger: true },
       cancelText: t('common.cancel'),
-      mask: false,
       width: 360,
       onOk: () => {
+        // Restore the pre-merge type, not standard (avoids silent VIP downgrade).
+        const before = savedSnapshot.find((s) => s.id === seat.id);
+        const restoreType =
+          before && before.col_span === 1 ? before.seat_type : ('standard' as SeatType);
         const rightSeat: Seat = {
           id: makeSplitSeatId(seat.id),
           hall_id: hallId,
           label: `${seat.row_label}${seat.col_number + 1}`,
           row_label: seat.row_label,
           col_number: seat.col_number + 1,
-          seat_type: 'standard',
-          is_gap: false,
+          seat_type: restoreType,
+          is_gap: before?.is_gap ?? false,
           col_span: 1,
+          has_booking_history: seat.has_booking_history,
         };
+        // Guard double-confirm: one split per seat (duplicate keys otherwise).
+        const left = seatById.get(seat.id);
+        const labelTaken = draft.some((s) => s.label === rightSeat.label);
+        if (!left || left.col_span !== 2 || labelTaken) {
+          message.info(t('hall.splitCoupleAlreadySplit'));
+          return;
+        }
         setDraft((current) => [
           ...current.map((s) =>
-            s.id === seat.id ? { ...s, col_span: 1 as const, seat_type: 'standard' as SeatType } : s
+            s.id === seat.id ? { ...s, col_span: 1 as const, seat_type: restoreType } : s
           ),
           rightSeat,
         ]);
+        // A split ends any pending merge pick (stale pick hijacks the next click).
+        setPendingMergeSeatId(null);
         message.success(t('hall.splitCoupleSuccess'));
       },
     });
   };
+
+  // Active halls are view-only (deactivate first to edit); memos need the flag unconditionally.
+  const locked = hall.data?.active ?? false;
+  // Drop the draft if the hall goes active mid-edit: saving would 409 anyway.
+  if (locked && editing) {
+    setEditing(false);
+    setDraft(savedSnapshot);
+    setSelected(new Set());
+    setPendingMergeSeatId(null);
+  }
+
+  // Rendered grid: trimmed base plus virtuals (which skip cells the draft
+  // already owns and cells deleted this session). Diff and save keep the draft.
+  const displaySeats = useMemo(() => {
+    const virtuals =
+      editing && !locked ? virtualTrailingSlots(trimmedBase, draft, savedSnapshot) : [];
+    return editing && !locked ? [...trimmedBase, ...virtuals] : trimmedBase;
+  }, [editing, locked, trimmedBase, draft, savedSnapshot]);
 
   /** Hall metadata saves straight through PUT, independent of the seat draft session. */
   const handleRename = (name: string) => {
@@ -605,10 +716,11 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
                 {t('hall.saveChanges')}
               </Button>
             </>
-          ) : (
+          ) : locked ? null : (
             <Button
               icon={editing ? <EyeOutlined /> : <EditOutlined />}
               onClick={handleToggleEditing}
+              disabled={saving}
             >
               {t(editing ? 'hall.viewMode' : 'hall.editMode')}
             </Button>
@@ -712,25 +824,24 @@ export const HallSeatPanel = ({ hallId, onDirtyChange }: HallSeatPanelProps) => 
       <Spin spinning={saving}>
         <SeatGrid
           hall={hall.data}
-          seats={draft}
+          // Trimmed cells come back via discarding unsaved changes.
+          seats={displaySeats}
           selected={selected}
           onToggleRow={toggleRow}
           onToggleSelectAll={handleToggleSelectAll}
-          readOnly={!editing}
+          readOnly={!editing || locked}
           onSeatClick={handleSeatClick}
           onSeatDoubleClick={handleSeatDoubleClick}
           pendingMergeSeatId={pendingMergeSeatId}
           onQuickGap={handleQuickGap}
           onFillGap={fillGap}
           onAddRow={
-            editing && hall.data.rows + pendingRowCount < MAX_ROWS ? handleAddRow : undefined
-          }
-          onDeleteRow={editing && draft.length > 0 ? handleDeleteRow : undefined}
-          onAddColumn={
-            editing && Math.max(widestColumn(draft), hall.data.seats_per_row) < MAX_SEATS_PER_ROW
-              ? handleAddColumn
+            editing && !locked && hall.data.rows + pendingRowCount < MAX_ROWS
+              ? handleAddRow
               : undefined
           }
+          onDeleteRow={editing && !locked && draft.length > 0 ? handleDeleteRow : undefined}
+          onAddSeat={editing && !locked ? handleAddSingleSeat : undefined}
           aisleAfterColsOverride={aislesEditing ? parseAisles(aislesDraft) : undefined}
         />
       </Spin>

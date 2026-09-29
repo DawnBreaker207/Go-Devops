@@ -1,5 +1,6 @@
 import { apiClient, unwrap } from './client';
 import type {
+  AddSeatPayload,
   ApiResponse,
   BulkSeatUpdatePayload,
   CloneHallPayload,
@@ -51,6 +52,9 @@ export const hallApi = {
 
   addRow: (id: string) =>
     apiClient.post<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats/rows`).then(unwrap),
+
+  addSeat: (id: string, payload: AddSeatPayload) =>
+    apiClient.post<ApiResponse<Seat>>(`/admin/halls/${id}/seats`, payload).then(unwrap),
 
   addColumn: (id: string) =>
     apiClient.post<ApiResponse<Seat[]>>(`/admin/halls/${id}/seats/columns`).then(unwrap),

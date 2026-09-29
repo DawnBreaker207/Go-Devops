@@ -58,6 +58,14 @@ func (r *HallRepository) SeatsByHall(ctx context.Context, hallID string) ([]mode
 	return seats, err
 }
 
+// MaxColInRow: rightmost used column of one row (0 when the row has no seats).
+func (r *HallRepository) MaxColInRow(tx *gorm.DB, hallID, rowLabel string) (int, error) {
+	var maxCol int
+	err := tx.Raw(`SELECT COALESCE(MAX(col_number), 0) FROM seats WHERE hall_id = ? AND row_label = ?`,
+		hallID, rowLabel).Scan(&maxCol).Error
+	return maxCol, err
+}
+
 func (r *HallRepository) FindSeat(ctx context.Context, hallID, seatID string) (*models.Seat, error) {
 	var seat models.Seat
 	if err := r.db.WithContext(ctx).
@@ -124,6 +132,26 @@ func (r *HallRepository) SeatEverHadBooking(tx *gorm.DB, seatID string) (bool, e
 		WHERE ss.seat_id = ? LIMIT 1`, seatID, seatID).
 		Scan(&count).Error
 	return count > 0, err
+}
+
+// BookedSeatIDs: every seat of a hall with booking history, in ONE query, so the
+// admin editor can mark (and refuse to merge/split) them before the user saves.
+func (r *HallRepository) BookedSeatIDs(ctx context.Context, hallID string) (map[string]bool, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).Raw(`SELECT DISTINCT s.id FROM seats s
+		JOIN showtime_seats ss ON ss.seat_id = s.id
+		LEFT JOIN booking_seats bks ON bks.showtime_seat_id = ss.id
+		LEFT JOIN tickets t ON t.showtime_seat_id = ss.id
+		WHERE s.hall_id = ? AND (bks.showtime_seat_id IS NOT NULL OR t.showtime_seat_id IS NOT NULL)`,
+		hallID).Scan(&ids).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }
 
 // HasOpenUpcomingShowtimes: open showtime still to come; checked before deactivating a hall.

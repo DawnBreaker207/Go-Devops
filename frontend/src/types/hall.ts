@@ -32,6 +32,8 @@ export interface Seat {
   seat_type: SeatType;
   is_gap: boolean;
   col_span: ColSpan;
+  // True when the seat ever appeared in a booking: the server refuses merge/split on it.
+  has_booking_history: boolean;
 }
 
 export interface HallTemplate {
@@ -95,4 +97,9 @@ export interface MergeSeatsPayload {
 
 export interface SplitSeatPayload {
   label: string;
+}
+
+export interface AddSeatPayload {
+  row_label: string;
+  seat_type?: SeatType;
 }

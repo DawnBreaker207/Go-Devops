@@ -35,17 +35,31 @@ const (
 	ComboOrderPending   = "pending"
 	ComboOrderConfirmed = "confirmed"
 	ComboOrderCancelled = "cancelled"
+	ComboOrderCollected = "collected"
 )
 
-// BookingID is an optional correlation only.
+const (
+	SoldChannelOnline  = "online"
+	SoldChannelCounter = "counter"
+)
+
+const (
+	PayMethodCash = "cash"
+	PayMethodPOS  = "pos"
+)
+
+// BookingID is optional correlation; NULL UserID is a walk-in counter sale.
 type ComboOrder struct {
-	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID    string    `gorm:"type:uuid;not null;index" json:"user_id"`
-	BookingID *string   `gorm:"type:uuid" json:"booking_id,omitempty"`
-	Status    string    `gorm:"type:varchar(16);not null;default:confirmed" json:"status"`
-	Total     int64     `gorm:"not null;default:0" json:"total"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `gorm:"type:uuid;primaryKey" json:"id"`
+	UserID       *string   `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	BookingID    *string   `gorm:"type:uuid" json:"booking_id,omitempty"`
+	Status       string    `gorm:"type:varchar(16);not null;default:confirmed" json:"status"`
+	Total        int64     `gorm:"not null;default:0" json:"total"`
+	SoldChannel  string    `gorm:"type:varchar(16);not null;default:online" json:"sold_channel"`
+	PayMethod    *string   `gorm:"type:varchar(16)" json:"pay_method,omitempty"`
+	CustomerName *string   `gorm:"type:varchar(255)" json:"customer_name,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (ComboOrder) TableName() string { return "combo_orders" }

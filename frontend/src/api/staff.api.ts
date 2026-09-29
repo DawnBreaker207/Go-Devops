@@ -2,6 +2,7 @@ import { apiClient, unwrap } from './client';
 import type {
   ApiResponse,
   BoxOfficeDay,
+  CounterMovie,
   CounterSellPayload,
   OrderDetail,
   OrderStatus,
@@ -32,6 +33,13 @@ export const staffApi = {
       })
       .then(unwrap),
 
+  counterMovies: (date?: string) =>
+    apiClient
+      .get<ApiResponse<CounterMovie[]>>('/staff/boxoffice/movies', {
+        params: date ? { date } : undefined,
+      })
+      .then(unwrap),
+
   // status: issued | redeemed; empty means both.
   tickets: (showtimeId: string, status?: StaffTicketStatus) =>
     apiClient
@@ -47,6 +55,14 @@ export const staffApi = {
   // Any order, reconciled with the gateway.
   orderDetail: (id: string) =>
     apiClient.get<ApiResponse<OrderDetail>>(`/staff/orders/${id}`).then(unwrap),
+
+  // Resolve an order from a scanned ticket id/QR code (counter scanner).
+  orderByTicket: (code: string) =>
+    apiClient.get<ApiResponse<OrderDetail>>(`/staff/tickets/${code}/order`).then(unwrap),
+
+  // Mark a booking's tickets handed over at the counter (idempotent).
+  orderCollect: (id: string) =>
+    apiClient.post<ApiResponse<OrderDetail>>(`/staff/orders/${id}/collect`).then(unwrap),
 
   customers: (query: PageQuery) =>
     apiClient.get<ApiResponse<PagedData<User>>>('/staff/customers', { params: query }).then(unwrap),
